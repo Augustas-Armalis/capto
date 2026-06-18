@@ -9,15 +9,47 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 
-const STEPS = ["Welcome", "Connect your AI", "You're set"] as const;
-
-export function OnboardingClient({ firstName }: { firstName: string }) {
+export function OnboardingClient({
+  firstName,
+  needsPassword = false,
+}: {
+  firstName: string;
+  needsPassword?: boolean;
+}) {
   const router = useRouter();
+  const STEPS = [needsPassword ? "Set password" : "Welcome", "Connect your AI", "You're set"] as const;
   const [step, setStep] = React.useState(0);
   const [groqKey, setGroqKey] = React.useState("");
   const [skip, setSkip] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Pay-first password setup (replaces the Welcome step when needsPassword).
+  const [password, setPassword] = React.useState("");
+  const [password2, setPassword2] = React.useState("");
+  const [pwdSaving, setPwdSaving] = React.useState(false);
+  const [pwdErr, setPwdErr] = React.useState<string | null>(null);
+
+  async function savePassword() {
+    setPwdErr(null);
+    if (password.length < 8) return setPwdErr("Use at least 8 characters.");
+    if (password !== password2) return setPwdErr("Passwords don't match.");
+    setPwdSaving(true);
+    try {
+      const res = await fetch("/api/account/finish-setup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Could not set your password.");
+      setStep(1);
+    } catch (err) {
+      setPwdErr(err instanceof Error ? err.message : "Could not set your password.");
+    } finally {
+      setPwdSaving(false);
+    }
+  }
 
   async function saveAndFinish() {
     setSaving(true);
@@ -80,7 +112,63 @@ export function OnboardingClient({ firstName }: { firstName: string }) {
         </div>
 
         <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-8 sm:p-10">
-          {step === 0 && (
+          {step === 0 && needsPassword && (
+            <div className="fade-up">
+              <Badge variant="brand">
+                <Sparkles className="size-3" />
+                Payment confirmed
+              </Badge>
+              <h1 className="heading mt-4 text-4xl">Welcome to Pro, {firstName}.</h1>
+              <p className="mt-3 leading-relaxed text-[var(--color-fg-muted)]">
+                Your plan is active and your email is verified. Set a password so you can sign back
+                in any time.
+              </p>
+
+              <div className="mt-7 space-y-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="pwd" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">
+                    Password
+                  </label>
+                  <Input
+                    id="pwd"
+                    type="password"
+                    placeholder="At least 8 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="pwd2" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">
+                    Confirm password
+                  </label>
+                  <Input
+                    id="pwd2"
+                    type="password"
+                    placeholder="Repeat it"
+                    value={password2}
+                    onChange={(e) => setPassword2(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+              </div>
+
+              {pwdErr && (
+                <div className="mt-4 rounded-xl border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2.5 text-sm text-[var(--color-danger)]">
+                  {pwdErr}
+                </div>
+              )}
+
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                <Button onClick={savePassword} loading={pwdSaving} size="lg" disabled={password.length < 8}>
+                  Set password &amp; continue
+                  <ArrowRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === 0 && !needsPassword && (
             <div className="fade-up">
               <Badge variant="brand">
                 <Sparkles className="size-3" />
@@ -186,9 +274,11 @@ export function OnboardingClient({ firstName }: { firstName: string }) {
                 >
                   Save &amp; continue
                 </Button>
-                <Button onClick={() => setStep(0)} variant="ghost" size="lg">
-                  Back
-                </Button>
+                {!needsPassword && (
+                  <Button onClick={() => setStep(0)} variant="ghost" size="lg">
+                    Back
+                  </Button>
+                )}
               </div>
             </div>
           )}

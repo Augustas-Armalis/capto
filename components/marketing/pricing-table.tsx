@@ -33,13 +33,41 @@ function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) 
 
 export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
   const [annual, setAnnual] = React.useState(true);
+  const [loadingPlan, setLoadingPlan] = React.useState<string | null>(null);
+
+  // Pay-first: go straight to Stripe Checkout (collects email + card), then
+  // /welcome creates and signs into the account. Falls back to signup if
+  // payments aren't reachable so the visitor is never stuck.
+  async function startCheckout(planId: string) {
+    setLoadingPlan(planId);
+    const interval = annual ? "annual" : "monthly";
+    try {
+      const currency =
+        typeof document !== "undefined" && document.documentElement.dataset.cur === "usd"
+          ? "usd"
+          : "eur";
+      const res = await fetch("/api/checkout/guest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ plan: planId, interval, currency }),
+      });
+      const d = (await res.json().catch(() => ({}))) as { url?: string };
+      if (d.url) {
+        window.location.href = d.url;
+        return;
+      }
+      window.location.href = `/signup?plan=${planId}&interval=${interval}`;
+    } catch {
+      window.location.href = `/signup?plan=${planId}&interval=${interval}`;
+    }
+  }
 
   const grid = (
     <div className="grid items-stretch gap-5 lg:grid-cols-3">
       {PLANS.map((plan) => {
         const eur = annual ? plan.priceAnnualMonthly : plan.priceMonthly;
         const usd = annual ? plan.priceAnnualMonthlyUsd : plan.priceMonthlyUsd;
-        const href = plan.id === "free" ? "/signup" : `/signup?plan=${plan.id}&interval=${annual ? "annual" : "monthly"}`;
+        const isFree = plan.id === "free";
         const isPro = plan.id === "pro";
         const isUltra = plan.id === "ultra";
         return (
@@ -86,9 +114,21 @@ export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
               )}
             </p>
 
-            <Button href={href} variant={isUltra ? "magic" : "primary"} size="lg" className="mt-6 w-full">
-              {plan.cta}
-            </Button>
+            {isFree ? (
+              <Button href="/signup" variant="primary" size="lg" className="mt-6 w-full">
+                {plan.cta}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => startCheckout(plan.id)}
+                loading={loadingPlan === plan.id}
+                variant={isUltra ? "magic" : "primary"}
+                size="lg"
+                className="mt-6 w-full"
+              >
+                {plan.cta}
+              </Button>
+            )}
 
             <ul className="mt-7 flex-1 space-y-2.5">
               {plan.features.map((f) => (

@@ -34,11 +34,25 @@ export async function POST(req: Request) {
 
   const db = getDb();
 
+  // Guest (pay-first) checkouts have no userId in metadata until /welcome runs;
+  // fall back to matching the Stripe customer to a user we already stored.
+  const userByCustomer = async (customerId: string | null | undefined): Promise<string | null> => {
+    if (!customerId) return null;
+    const [row] = await db
+      .select({ id: userTable.id })
+      .from(userTable)
+      .where(eq(userTable.stripeCustomerId, customerId))
+      .limit(1);
+    return row?.id ?? null;
+  };
+  const custId = (c: string | { id: string } | null | undefined) =>
+    typeof c === "string" ? c : c?.id ?? null;
+
   switch (event.type) {
     case "checkout.session.completed": {
       const cs = event.data.object as Stripe.Checkout.Session;
-      const userId = cs.metadata?.userId;
       const plan = isPlan(cs.metadata?.plan) ? (cs.metadata!.plan as PlanId) : "pro";
+      const userId = cs.metadata?.userId || (await userByCustomer(custId(cs.customer)));
       if (userId && cs.mode === "subscription" && typeof cs.subscription === "string") {
         await db
           .update(userTable)
@@ -50,7 +64,7 @@ export async function POST(req: Request) {
     case "customer.subscription.created":
     case "customer.subscription.updated": {
       const sub = event.data.object as Stripe.Subscription;
-      const userId = sub.metadata?.userId;
+      const userId = sub.metadata?.userId || (await userByCustomer(custId(sub.customer)));
       if (userId) {
         const active = sub.status === "active" || sub.status === "trialing";
         // Authoritative plan from the subscribed price; fall back to metadata.
@@ -67,7 +81,7 @@ export async function POST(req: Request) {
     }
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
-      const userId = sub.metadata?.userId;
+      const userId = sub.metadata?.userId || (await userByCustomer(custId(sub.customer)));
       if (userId) {
         await db
           .update(userTable)
