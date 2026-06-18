@@ -59,11 +59,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
-        {/* Pick currency from the visitor's timezone before paint (no flash). */}
+        {/* Pick currency from the visitor's TIMEZONE only (not language —
+            plenty of EU users run en-US). Americas + US Pacific = USD, else EUR. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';var l=(navigator.language||'');var usd=/^America\\//.test(tz)||/^(Pacific\\/(Honolulu|Pago_Pago|Midway|Guam))/.test(tz)||/-US$/.test(l);document.documentElement.setAttribute('data-cur',usd?'usd':'eur');}catch(e){document.documentElement.setAttribute('data-cur','eur');}})();",
+              "(function(){try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';var usd=/^America\\//.test(tz)||/^Pacific\\/(Honolulu|Pago_Pago|Midway|Guam|Saipan)/.test(tz);document.documentElement.setAttribute('data-cur',usd?'usd':'eur');}catch(e){document.documentElement.setAttribute('data-cur','eur');}})();",
           }}
         />
       </head>

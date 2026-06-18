@@ -6,7 +6,7 @@
 
 name = "capto-web"
 main = ".open-next/worker.js"
-compatibility_date = "2025-03-01"
+compatibility_date = "2025-09-23"
 # nodejs_compat unlocks node:crypto (used by lib/crypto.ts for AES-GCM)
 # and the polyfills @opennextjs/cloudflare ships for the Next runtime.
 compatibility_flags = ["nodejs_compat"]
