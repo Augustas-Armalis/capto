@@ -1,4 +1,4 @@
-export type CompareRow = { feature: string; subby: string | boolean; them: string | boolean };
+export type CompareRow = { feature: string; capto: string | boolean; them: string | boolean };
 
 export type Compare = {
   slug: string;
@@ -8,24 +8,24 @@ export type Compare = {
   tagline: string;
   intro: string[];
   rows: CompareRow[];
-  subbyWins: string[];
+  captoWins: string[];
   themWins: string[];
   verdict: string;
 };
 
 const baseRows = (entry: string, watermark: string | boolean, seats: string | boolean, clipping: string | boolean): CompareRow[] => [
-  { feature: "Entry paid price / mo", subby: "€6.99", them: entry },
-  { feature: "No watermark on paid", subby: true, them: watermark },
-  { feature: "Flat team seats", subby: "5 on Ultra", them: seats },
-  { feature: "AI clipping included", subby: "Ultra", them: clipping },
-  { feature: "Real word-level timeline", subby: true, them: false },
-  { feature: "Bring your own API key", subby: true, them: false },
-  { feature: "Minutes, not credits", subby: true, them: false },
+  { feature: "Entry paid price / mo", capto: "€6.99", them: entry },
+  { feature: "No watermark on paid", capto: true, them: watermark },
+  { feature: "Flat team seats", capto: "5 on Ultra", them: seats },
+  { feature: "AI clipping included", capto: "Ultra", them: clipping },
+  { feature: "Real word-level timeline", capto: true, them: false },
+  { feature: "Bring your own API key", capto: true, them: false },
+  { feature: "Minutes, not credits", capto: true, them: false },
 ];
 
 export const COMPARES: Compare[] = [
   {
-    slug: "subby-vs-submagic",
+    slug: "capto-vs-submagic",
     competitor: "Submagic",
     title: "Capto vs Submagic",
     description:
@@ -36,7 +36,7 @@ export const COMPARES: Compare[] = [
       "Capto keeps it flat: €6.99 for unlimited watermark-free captioning, and Magic Clips bundled into the €17.99 Ultra tier with 5 seats included.",
     ],
     rows: baseRows("$19 + $19 clips", true, "Per member", "+$19/mo add-on"),
-    subbyWins: [
+    captoWins: [
       "A third of the entry price, with no clipping add-on.",
       "Flat 5-seat Ultra vs per-member pricing, far cheaper for teams.",
       "A real word-level timeline, not just template application.",
@@ -50,7 +50,7 @@ export const COMPARES: Compare[] = [
       "If you're a solo creator or small team who wants clipping and clean exports without the add-on tax and per-seat math, Capto wins on price and control. Submagic still has the bigger template gallery.",
   },
   {
-    slug: "subby-vs-captions-ai",
+    slug: "capto-vs-captions-ai",
     competitor: "Captions.ai",
     title: "Capto vs Captions.ai",
     description:
@@ -61,7 +61,7 @@ export const COMPARES: Compare[] = [
       "Capto meters on minutes of source video and lets you re-edit and re-export endlessly, for €6.99. No credits, no two-names confusion.",
     ],
     rows: baseRows("$24.99", true, false, true),
-    subbyWins: [
+    captoWins: [
       "About a quarter of the price for unlimited captioning.",
       "Minutes with unlimited re-edits instead of draining credits.",
       "One clear brand and promise, not a confusing rebrand.",
@@ -75,7 +75,7 @@ export const COMPARES: Compare[] = [
       "For captioning and editing without credit anxiety, Capto is dramatically cheaper and calmer. Captions/Mirage is the pick if you specifically need its AI-presenter and dubbing toys.",
   },
   {
-    slug: "subby-vs-veed",
+    slug: "capto-vs-veed",
     competitor: "VEED",
     title: "Capto vs VEED",
     description:
@@ -86,7 +86,7 @@ export const COMPARES: Compare[] = [
       "Capto does one job extremely well: captions. €6.99, no watermark on paid, a real caption timeline, and bring-your-own-key pricing.",
     ],
     rows: baseRows("$24", "Cheaper tiers stamped", false, false),
-    subbyWins: [
+    captoWins: [
       "A third of the price for the caption workflow specifically.",
       "No watermark on any paid tier, VEED stamps cheaper plans.",
       "Word-level caption control without editor bloat.",
@@ -100,7 +100,7 @@ export const COMPARES: Compare[] = [
       "Need an all-purpose editor? VEED. Need the best captions for the least money, without the watermark tax? Capto.",
   },
   {
-    slug: "subby-vs-opusclip",
+    slug: "capto-vs-opusclip",
     competitor: "OpusClip",
     title: "Capto vs OpusClip",
     description:
@@ -111,7 +111,7 @@ export const COMPARES: Compare[] = [
       "Capto leads with captions and a real editing timeline at €6.99, and bundles Magic Clips with a Hook Score into Ultra at €17.99, no separate clip-only subscription.",
     ],
     rows: baseRows("$29", true, false, "Core product"),
-    subbyWins: [
+    captoWins: [
       "Far cheaper entry for captioning.",
       "Clipping + captions in one tool, not two subscriptions.",
       "Word-level caption styling OpusClip doesn't focus on.",
@@ -125,7 +125,7 @@ export const COMPARES: Compare[] = [
       "If clipping is your whole workflow, OpusClip is purpose-built. If you want great captions plus clipping when you need it, Capto covers both for less.",
   },
   {
-    slug: "subby-vs-zubtitle",
+    slug: "capto-vs-zubtitle",
     competitor: "Zubtitle",
     title: "Capto vs Zubtitle",
     description:
@@ -136,7 +136,7 @@ export const COMPARES: Compare[] = [
       "Capto's Pro is effectively unlimited for normal use at €6.99, with a real timeline and no watermark.",
     ],
     rows: baseRows("$19 (10 videos)", true, false, false),
-    subbyWins: [
+    captoWins: [
       "Effectively unlimited exports vs hard monthly video caps.",
       "Cheaper entry with more control.",
       "Word-level timeline editing Zubtitle lacks.",
@@ -147,7 +147,7 @@ export const COMPARES: Compare[] = [
       "If you post more than ten videos a month, Zubtitle's caps will frustrate you fast. Capto gives you room to actually work.",
   },
   {
-    slug: "subby-vs-vizard",
+    slug: "capto-vs-vizard",
     competitor: "Vizard",
     title: "Capto vs Vizard",
     description:
@@ -158,7 +158,7 @@ export const COMPARES: Compare[] = [
       "Capto's Magic Clips (Ultra) rate each clip with a Hook Score, and the captioning is the strongest part of the product, at €6.99 to start.",
     ],
     rows: baseRows("$29.99", true, false, "Core product"),
-    subbyWins: [
+    captoWins: [
       "Caption quality and word-level control are first-class.",
       "Hook Score surfaces the genuinely strong clips.",
       "Cheaper entry with bring-your-own-key economics.",

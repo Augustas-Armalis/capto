@@ -63,7 +63,7 @@ export default function PrivacyPage() {
               <p className="mt-2">
                 Capto is operated by{" "}
                 <a
-                  href="https://contles.com?ref=subby-privacy"
+                  href="https://contles.com?ref=capto-privacy"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[var(--color-brand)] underline-offset-2 hover:underline"

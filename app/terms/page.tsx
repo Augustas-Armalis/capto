@@ -61,7 +61,7 @@ export default function TermsPage() {
               <p className="mt-2">
                 Capto is operated by{" "}
                 <a
-                  href="https://contles.com?ref=subby-terms"
+                  href="https://contles.com?ref=capto-terms"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[var(--color-brand)] underline-offset-2 hover:underline"

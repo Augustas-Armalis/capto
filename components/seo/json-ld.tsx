@@ -25,7 +25,7 @@ export function organizationLd() {
     name: "Capto",
     url: URL,
     logo: `${URL}/icon-192.png`,
-    sameAs: ["https://contles.com", "https://x.com/subbyapp"],
+    sameAs: ["https://contles.com"],
     description: "AI captions for short-form video. Built and powered by Contles.",
   };
 }

@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return { title: c.title, description: c.description, alternates: { canonical: `/compare/${c.slug}` } };
 }
 
-function Cell({ value }: { value: CompareRow["subby"] }) {
+function Cell({ value }: { value: CompareRow["capto"] }) {
   if (value === true) return <Check className="mx-auto size-4 text-[var(--color-brand)]" strokeWidth={2.25} />;
   if (value === false) return <X className="mx-auto size-4 text-[var(--color-fg-subtle)]" />;
   return <span className="mono text-sm text-[var(--color-fg-muted)] tnum">{value}</span>;
@@ -76,7 +76,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
                     <tr key={row.feature} className="border-b border-[var(--color-border)] last:border-0">
                       <td className="px-5 py-3 font-medium text-[var(--color-fg)]">{row.feature}</td>
                       <td className="bg-[var(--color-brand-soft)]/40 px-5 py-3 text-center">
-                        <Cell value={row.subby} />
+                        <Cell value={row.capto} />
                       </td>
                       <td className="px-5 py-3 text-center">
                         <Cell value={row.them} />
@@ -91,7 +91,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
               <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-6">
                 <h2 className="heading text-lg">Where Capto wins</h2>
                 <ul className="mt-4 space-y-2.5">
-                  {c.subbyWins.map((w) => (
+                  {c.captoWins.map((w) => (
                     <li key={w} className="flex gap-2.5 text-sm text-[var(--color-fg-muted)]">
                       <Check className="mt-0.5 size-4 shrink-0 text-[var(--color-brand)]" />
                       {w}

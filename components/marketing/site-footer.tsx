@@ -25,10 +25,10 @@ const COLS = [
   {
     title: "Compare",
     links: [
-      { href: "/compare/subby-vs-submagic", label: "vs Submagic" },
-      { href: "/compare/subby-vs-captions-ai", label: "vs Captions" },
-      { href: "/compare/subby-vs-veed", label: "vs VEED" },
-      { href: "/compare/subby-vs-opusclip", label: "vs OpusClip" },
+      { href: "/compare/capto-vs-submagic", label: "vs Submagic" },
+      { href: "/compare/capto-vs-captions-ai", label: "vs Captions" },
+      { href: "/compare/capto-vs-veed", label: "vs VEED" },
+      { href: "/compare/capto-vs-opusclip", label: "vs OpusClip" },
     ],
   },
   {
