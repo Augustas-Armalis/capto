@@ -1,0 +1,39 @@
+#:schema node_modules/wrangler/config-schema.json
+# Capto on Cloudflare Workers via @opennextjs/cloudflare adapter.
+# Build:  npx opennextjs-cloudflare build
+# Deploy: npx wrangler deploy
+# Local:  npx opennextjs-cloudflare preview   (or `npm run dev` for plain Next dev)
+
+name = "capto-web"
+main = ".open-next/worker.js"
+compatibility_date = "2025-03-01"
+# nodejs_compat unlocks node:crypto (used by lib/crypto.ts for AES-GCM)
+# and the polyfills @opennextjs/cloudflare ships for the Next runtime.
+compatibility_flags = ["nodejs_compat"]
+
+# Workers Static Assets — Next's static output is served directly from the edge
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Custom domain attached in Cloudflare dashboard → Workers → Settings → Triggers
+# routes = [
+#   { pattern = "capto.video", custom_domain = true },
+#   { pattern = "www.capto.video", custom_domain = true },
+# ]
+
+# Cloudflare R2 binding for user video uploads (wired when the editor backend lands)
+# [[r2_buckets]]
+# binding = "VIDEO_BUCKET"
+# bucket_name = "capto-videos"
+
+# Secrets (set in dashboard or via `wrangler secret put NAME`) — never commit:
+#   DATABASE_URL · BETTER_AUTH_SECRET · ENCRYPTION_KEY
+#   STRIPE_SECRET_KEY · STRIPE_WEBHOOK_SECRET
+#   STRIPE_PRICE_ID_{PRO,ULTRA}_{MONTHLY,ANNUAL}
+# Public (NEXT_PUBLIC_*) go in [vars]:
+
+[vars]
+NEXT_PUBLIC_SITE_URL = "https://capto.video"
+NEXT_PUBLIC_SITE_NAME = "Capto"
+# NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = "pk_live_xxx"   # set in dashboard
