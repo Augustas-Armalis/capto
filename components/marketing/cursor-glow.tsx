@@ -3,8 +3,8 @@
 import * as React from "react";
 
 /**
- * A small soft gradient circle that follows the cursor. Marketing pages only.
- * Pointer-events-none, hidden on touch and for reduced-motion.
+ * A tiny crisp circle that trails the cursor and cycles brand colors.
+ * Marketing pages only. Hidden on touch / reduced-motion.
  */
 export function CursorGlow() {
   const ref = React.useRef<HTMLDivElement>(null);
@@ -26,9 +26,9 @@ export function CursorGlow() {
       el.style.opacity = "1";
     };
     const loop = () => {
-      x += (tx - x) * 0.18;
-      y += (ty - y) * 0.18;
-      el.style.transform = `translate3d(${x - 110}px, ${y - 110}px, 0)`;
+      x += (tx - x) * 0.22;
+      y += (ty - y) * 0.22;
+      el.style.transform = `translate3d(${x - 6}px, ${y - 6}px, 0)`;
       raf = requestAnimationFrame(loop);
     };
     window.addEventListener("mousemove", onMove, { passive: true });
@@ -43,8 +43,7 @@ export function CursorGlow() {
     <div
       ref={ref}
       aria-hidden
-      className="pointer-events-none fixed left-0 top-0 z-[60] size-[220px] rounded-full opacity-0 blur-[60px] transition-opacity duration-500 mix-blend-screen"
-      style={{ background: "radial-gradient(circle, oklch(0.66 0.2 285 / 0.5), transparent 65%)" }}
+      className="cursor-dot pointer-events-none fixed left-0 top-0 z-[60] size-3 rounded-full opacity-0 transition-opacity duration-300"
     />
   );
 }

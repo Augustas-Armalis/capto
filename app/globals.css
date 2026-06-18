@@ -163,8 +163,8 @@ label[for] {
   pointer-events: none;
 }
 .aurora-fade-down {
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 50%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 0%, #000 50%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 16%, transparent 58%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 16%, transparent 58%);
 }
 .aurora-fade-both {
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
@@ -180,9 +180,9 @@ label[for] {
 }
 .mesh-hero {
   background:
-    radial-gradient(38% 48% at 24% 16%, oklch(0.66 0.2 285 / 0.5), transparent 70%),
-    radial-gradient(42% 52% at 70% 10%, oklch(0.74 0.16 250 / 0.45), transparent 70%),
-    radial-gradient(36% 46% at 50% 26%, oklch(0.66 0.24 322 / 0.38), transparent 70%);
+    radial-gradient(46% 56% at 26% 2%, oklch(0.66 0.2 285 / 0.72), transparent 70%),
+    radial-gradient(50% 60% at 74% 0%, oklch(0.74 0.16 250 / 0.6), transparent 70%),
+    radial-gradient(42% 52% at 50% 10%, oklch(0.66 0.24 322 / 0.5), transparent 72%);
 }
 .mesh-cta {
   background:
@@ -209,6 +209,18 @@ label[for] {
   pointer-events: none;
 }
 .spotlight:hover::before { opacity: 1; }
+
+/* Tiny cursor dot that trails the pointer and cycles brand colors */
+.cursor-dot {
+  background-color: oklch(0.74 0.18 268);
+  box-shadow: 0 0 10px 1px oklch(1 0 0 / 0.25);
+  animation: cursor-hue 7s linear infinite;
+}
+@keyframes cursor-hue {
+  0%, 100% { background-color: oklch(0.74 0.18 268); }
+  33% { background-color: oklch(0.82 0.13 224); }
+  66% { background-color: oklch(0.72 0.23 324); }
+}
 
 /* ── Animated trace border (Supabase-style), runs on hover ──────────── */
 .glow-border { position: relative; }

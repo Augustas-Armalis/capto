@@ -23,7 +23,7 @@ function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) 
         >
           {label}
           {label === "Annual" && (
-            <span className={cn("mono text-[10px]", annual ? "text-[var(--color-violet)]" : "text-white/40")}>save 29%</span>
+            <span className={cn("mono text-[10px]", annual ? "text-[var(--color-violet)]" : "text-white/40")}>save 28%</span>
           )}
         </button>
       ))}
@@ -124,7 +124,7 @@ export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
           </div>
           <SectionTitle className="mx-auto">Priced like a tool, not a trap.</SectionTitle>
           <SectionLede className="mx-auto">
-            Pro at <Money eur="4.99" usd="5.99" />/mo annual undercuts every tool that starts at <Money eur="19" usd="19" />.
+            Pro at <Money eur="5.00" usd="5.83" />/mo on annual undercuts every tool that starts at <Money eur="19" usd="19" />.
           </SectionLede>
           <div className="mt-8 flex justify-center">
             <Toggle annual={annual} onChange={setAnnual} />

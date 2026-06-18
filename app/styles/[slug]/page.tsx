@@ -63,6 +63,7 @@ export default async function StylePage({ params }: { params: Promise<{ slug: st
                       wordClass={`${s.wordClass} text-2xl sm:text-3xl`}
                       highlightClass={s.highlightClass}
                       interval={760}
+                      single={s.single}
                     />
                   </div>
                   {/* faux progress bar */}

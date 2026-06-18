@@ -34,6 +34,7 @@ export function StyleRotator() {
             wordClass={`${s.wordClass} text-2xl sm:text-3xl`}
             highlightClass={s.highlightClass}
             interval={700}
+            single={s.single}
           />
         </div>
       </div>

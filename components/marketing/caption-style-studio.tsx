@@ -31,7 +31,7 @@ export function CaptionStyleStudio() {
                   wordClass={`${s.wordClass} text-xl sm:text-2xl`}
                   highlightClass={s.highlightClass}
                   interval={760 + idx * 80}
-                  single={s.slug === "inter-bold"}
+                  single={s.single}
                 />
               </div>
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-white/10 bg-black/40 px-4 py-2.5 backdrop-blur-md">

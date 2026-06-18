@@ -12,6 +12,8 @@ export type CaptionStyle = {
   recipe: string[];
   bestFor: string;
   popular?: boolean;
+  /** show one word at a time in place (no per-word box) */
+  single?: boolean;
 };
 
 export const STYLES: CaptionStyle[] = [
@@ -26,8 +28,9 @@ export const STYLES: CaptionStyle[] = [
     words: ["KEEP", "IT", "SIMPLE"],
     highlight: 2,
     wordClass: "font-bold tracking-tight text-white",
-    highlightClass: "bg-white text-black px-1.5 rounded",
+    highlightClass: "text-white",
     bg: "from-[#16181f] to-[#0b0c11]",
+    single: true,
     recipe: [
       "Bold sans (Inter or DM Sans), tight tracking",
       "Title case or all caps, your call",
@@ -131,9 +134,10 @@ export const STYLES: CaptionStyle[] = [
       "Only the current word shows, snapping in time with speech. The highest pace style, ideal for fast hooks and high energy edits.",
     words: ["EVERY.", "WORD.", "HITS.", "HARD."],
     highlight: 0,
-    wordClass: "font-bold uppercase tracking-tight text-white/35",
-    highlightClass: "text-white scale-110",
+    wordClass: "font-bold uppercase tracking-tight text-white",
+    highlightClass: "text-white",
     bg: "from-[#101319] to-[#0a0c11]",
+    single: true,
     recipe: [
       "Bold sans, all caps, large",
       "One word visible at a time",

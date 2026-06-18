@@ -11,7 +11,7 @@ import { CONTLES_URL } from "@/lib/utils";
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pt-32 pb-20 sm:pt-40">
+    <section className="relative overflow-hidden pt-28 pb-14 sm:pt-32">
       <Aurora preset="hero" />
 
       <Container className="relative">
@@ -25,11 +25,11 @@ export function Hero() {
             href={CONTLES_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="eyebrow group inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] py-1 pl-1.5 pr-3 backdrop-blur-md transition-colors hover:border-white/20 hover:text-[var(--color-fg-muted)]"
+            className="eyebrow group inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] py-1 pl-1 pr-2.5 backdrop-blur-md transition-colors hover:border-white/20 hover:text-[var(--color-fg-muted)]"
           >
-            <Image src="/contles.png" alt="" width={16} height={16} className="rounded-[3px]" />
-            Built &amp; powered by Contles
-            <ArrowUpRight className="size-3 opacity-50 transition-all group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            <Image src="/contles.png" alt="" width={13} height={13} className="rounded-[3px]" />
+            Powered by Contles
+            <ArrowUpRight className="size-2.5 opacity-50 transition-all group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </a>
 
           <h1 className="display mx-auto mt-7 max-w-4xl text-balance text-5xl text-white sm:text-7xl">
@@ -62,7 +62,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-          className="mx-auto mt-16 max-w-4xl"
+          className="mx-auto mt-12 max-w-4xl"
         >
           <EditorMock />
         </motion.div>
