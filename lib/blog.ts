@@ -12,6 +12,435 @@ export type Post = {
 
 export const POSTS: Post[] = [
   {
+    slug: "add-word-by-word-captions-tiktok",
+    title: "How to Add Word by Word Captions to a TikTok",
+    description: "A step by step guide to adding word level karaoke captions to your TikTok videos that hold attention and survive the mute scroll.",
+    date: "2026-02-04",
+    category: "How-to",
+    readingMin: 6,
+    sections: [
+      {
+        heading: "Why Word by Word Beats a Full Sentence Block",
+        paras: [
+          "Most caption tools drop a full sentence on screen and leave it there for four seconds. That works for a documentary. It does not work for a TikTok where the viewer decides in the first second whether to keep watching. A static block of text gives the eye nothing to track, so it reads as noise and gets scrolled past.",
+          "Word by word captions, often called karaoke captions, highlight each word the instant it is spoken. The highlight is a moving target, and a moving target is exactly what the human eye is wired to follow. That tiny bit of motion is the difference between a viewer who watches and a viewer who flicks away.",
+          "Roughly eight in ten feed videos play on mute by default, so the words on screen are doing the real work of communication. Word level timing makes that text feel alive instead of pasted on top."
+        ]
+      },
+      {
+        heading: "Step One: Get a Clean Transcript",
+        paras: [
+          "Everything downstream depends on the transcript, so this is where you spend your accuracy. Capto transcribes with your own Groq API key, which means the cost per video is close to nothing and the speed is genuinely fast. You upload the clip, the audio gets transcribed, and you get a word level timeline back rather than a flat paragraph.",
+          "The word level part matters. A normal transcript gives you sentences. A word level transcript gives you a timestamp for every single word, and those timestamps are what let the highlight land on the exact syllable being spoken. Without them you are guessing, and guessing is why so many auto captions drift out of sync by the end of a clip."
+        ]
+      },
+      {
+        heading: "Step Two: Edit on a Real Timeline",
+        paras: [
+          "Auto transcription gets you to roughly 95 percent. The last 5 percent is names, slang, brand terms, and the way you actually talk. Capto puts the captions on a real editing timeline, so you can click a word, fix the spelling, and nudge its start time by a few frames if it feels early or late.",
+          "This is the step most creators skip and most viewers notice. A caption that lights up half a beat before the word is spoken feels broken even if the viewer cannot say why. Spending two minutes tightening the timing is the cheapest quality upgrade you can make."
+        ],
+        bullets: [
+          "Click any word to correct spelling instantly",
+          "Drag a word earlier or later to match the audio precisely",
+          "Split or merge caption groups so no line is too long to read",
+          "Reposition the whole caption block by dragging it on the video"
+        ]
+      },
+      {
+        heading: "Step Three: Style the Highlight",
+        paras: [
+          "The highlight color is your brand signal. Pick one accent color and use it on every video so viewers start to recognize your captions before they even see your face. A bright pop color on a dark outline reads cleanly on almost any background.",
+          "Keep the font heavy. Thin fonts disappear over busy footage. A bold sans with a thick stroke or a solid background pill stays legible whether the shot behind it is a white wall or a crowded street. Resist the urge to use more than two colors at once, because that is when captions start to look amateur."
+        ]
+      },
+      {
+        heading: "Step Four: Export Without Wrecking the Quality",
+        paras: [
+          "Here is where a lot of tools quietly betray you. They re encode your video at a lower bitrate and slap a watermark in the corner, and your crisp footage comes out soft and branded for someone else. Capto exports at original quality with no watermark on any paid tier, so the file you upload to TikTok looks exactly as sharp as the file you shot.",
+          "Burn the captions directly into the video for TikTok. Burned in text is guaranteed to show, it cannot be turned off by the viewer, and it survives being reposted to other platforms. Upload the finished file, write a short caption in the TikTok app for the algorithm, and you are done."
+        ]
+      },
+      {
+        heading: "The Whole Loop, Honestly",
+        paras: [
+          "Once you have done this two or three times, the entire process takes under five minutes per video. Upload, transcribe, fix a handful of words, confirm your style, export. The first time feels fiddly. By the fifth video it is muscle memory.",
+          "The reason word by word captions are worth this small ritual is simple. They hold attention longer, they communicate on mute, and they make your content look produced rather than dumped. That is a lot of payoff for five focused minutes."
+        ]
+      }
+    ]
+  },
+  {
+    slug: "best-caption-style-for-each-niche",
+    title: "The Best Caption Style for Each Niche",
+    description: "Caption styling is not one size fits all. Here is how to match font, color, and pacing to your niche so the look reinforces the message.",
+    date: "2026-02-19",
+    category: "Strategy",
+    readingMin: 7,
+    sections: [
+      {
+        heading: "Style Is a Signal, Not Decoration",
+        paras: [
+          "Your caption style tells the viewer what kind of video they are about to watch before they hear a word. A finance clip with neon comic captions feels untrustworthy. A comedy clip with thin elegant serif captions feels flat. The style is doing categorization work, and getting it wrong creates friction the viewer feels but cannot name.",
+          "The goal is not to find the one perfect style. It is to match the style to the emotional register of your niche. Below is a practical map you can steal, with the reasoning so you can adapt it instead of copying blindly."
+        ]
+      },
+      {
+        heading: "Education and Finance",
+        paras: [
+          "Credibility is the whole game here, so your captions should feel clean and controlled. Use a heavy but neutral sans serif, white text with a subtle dark outline, and one restrained accent color for the key number or term. The accent draws the eye to the data point that matters, which is usually a figure or a name.",
+          "Keep the pacing calm. Show two or three words at a time and let them sit long enough to read. Frantic one word flashes undercut the authority you are trying to project. The viewer should feel like they are being taught by someone who is sure of themselves."
+        ],
+        bullets: [
+          "Font: heavy neutral sans",
+          "Color: white with one accent for key figures",
+          "Pacing: two to three words, steady"
+        ]
+      },
+      {
+        heading: "Comedy and Entertainment",
+        paras: [
+          "Here you want energy, and the captions can carry a lot of it. Bigger text, punchier color, and tighter timing all work. This is the niche where the Hormozi style of single bold words snapping onto the screen earns its reputation, because the rhythm itself becomes part of the joke.",
+          "Do not be afraid of a little chaos, but keep it readable. The classic mistake is going so big and so fast that the punchline word flies by before anyone can read it. Hold the key word a beat longer than the setup words and let the timing breathe at the joke."
+        ]
+      },
+      {
+        heading: "Beauty, Fashion, and Lifestyle",
+        paras: [
+          "These niches sell aesthetics, so your captions cannot fight the visual. Use a cleaner, lighter font with generous spacing, and lean on color choices pulled from your own palette rather than a default neon. The captions should feel like part of the art direction, not a sticker on top of it.",
+          "Position matters more than usual here. Drag the caption block to a calm corner of the frame so it never covers the product or the face. Capto lets you reposition captions anywhere on the video, which is exactly the control these niches need."
+        ]
+      },
+      {
+        heading: "Fitness, Hustle, and Motivation",
+        paras: [
+          "This is high intensity territory and the captions should match. Thick uppercase fonts, strong outlines, and aggressive color contrast all reinforce the energy. Word by word highlighting with a bright pop color gives the relentless forward drive that this audience responds to.",
+          "Lean into the karaoke effect. When every word lights up in sequence it creates momentum, and momentum is the exact feeling these videos are selling. Just keep the outline thick enough that the text survives over gym footage or busy outdoor shots."
+        ]
+      },
+      {
+        heading: "The One Rule Across Every Niche",
+        paras: [
+          "Whatever style you pick, commit to it across every video. Consistency turns your captions into a brand asset. After a few weeks viewers recognize your exact font and accent color in the half second before they register who posted it, and that recognition buys you attention you would otherwise have to earn from scratch each time.",
+          "A brand kit makes this trivial. Save your font, your colors, and your positioning once, then apply them with one click on every clip. That is the difference between captions that look like a habit and captions that look like a brand."
+        ]
+      }
+    ]
+  },
+  {
+    slug: "why-captions-get-less-reach",
+    title: "Why Your Captions Get Less Reach Than They Should",
+    description: "Captions can quietly cost you reach through sync drift, watermarks, re encoding, and bad readability. Here is how to find and fix the leaks.",
+    date: "2026-03-05",
+    category: "Strategy",
+    readingMin: 7,
+    sections: [
+      {
+        heading: "Reach Leaks Before the Algorithm Ever Sees You",
+        paras: [
+          "Most creators blame the algorithm for low reach. Often the real culprit is earlier in the chain. Captions that are slightly off, slightly soft, or branded for another company quietly lower your watch time and retention, and those are the signals the algorithm actually reads. The platform is not punishing you. Your captions are leaking the watch time that would have earned the push.",
+          "The good news is that these leaks are mechanical and fixable. Once you know what to look for, you can close most of them in the time it takes to export a single video."
+        ]
+      },
+      {
+        heading: "Leak One: Sync Drift",
+        paras: [
+          "Many auto caption tools generate timing from sentence level data, which is accurate at the start of a clip and drifts by the end. By the last few seconds the words are landing a beat late, and the viewer feels something is off even on mute. That subconscious wrongness is enough to make a thumb keep scrolling.",
+          "Word level timing fixes this at the root. When every word carries its own timestamp, the highlight lands on the exact syllable for the entire clip, not just the opening. If your tool only offers sentence captions, this alone is a reason to switch."
+        ]
+      },
+      {
+        heading: "Leak Two: The Watermark Tax",
+        paras: [
+          "A watermark from your editing tool does two things, and both hurt. It tells viewers you used a free template, which lowers perceived quality, and on some platforms a competing logo can dampen distribution. Either way you are advertising someone else's product on your own content.",
+          "Capto puts no watermark on any paid tier. The export carries your brand and nothing else. If you are running a watermarked free tool today, removing that single corner logo is one of the cheapest credibility upgrades available to you."
+        ]
+      },
+      {
+        heading: "Leak Three: Quality Loss on Export",
+        paras: [
+          "Sharp footage gets attention. Soft footage gets scrolled. A lot of caption tools re encode your video at a lower bitrate when they burn in the text, so the file you upload is visibly worse than the file you shot. The viewer reads that softness as low effort.",
+          "Lossless export keeps your original quality intact. Capto burns the captions in without crushing the bitrate, so a 4K clip stays a 4K clip. When you are competing against thousands of other videos, looking crisp is not vanity, it is retention."
+        ]
+      },
+      {
+        heading: "Leak Four: Captions Nobody Can Read",
+        paras: [
+          "Thin fonts, low contrast, captions buried behind the platform UI, and lines too long to read in time all cost you. If a viewer has to work to read your text, they stop, and stopping means leaving. Readability is a retention feature, not an aesthetic preference.",
+          "Fixing this is mostly discipline. Use a heavy font, a strong outline, two or three words per beat, and drag the caption block clear of the platform buttons that sit along the bottom and right edges."
+        ],
+        bullets: [
+          "Heavy font with a thick outline or background pill",
+          "High contrast against your typical footage",
+          "Short groups so each line reads in one glance",
+          "Positioned clear of platform UI and the bottom safe zone"
+        ]
+      },
+      {
+        heading: "Close the Leaks, Then Judge the Algorithm",
+        paras: [
+          "None of this is about gaming distribution. It is about not sabotaging it. When your captions are perfectly synced, watermark free, sharp, and instantly readable, you have removed the mechanical reasons a viewer would leave early.",
+          "Fix these four leaks first. Then, if reach is still low, you have a content problem worth investigating, not a captioning problem masquerading as one."
+        ]
+      }
+    ]
+  },
+  {
+    slug: "burned-in-captions-vs-srt-files",
+    title: "Burned In Captions vs SRT Files: When to Use Each",
+    description: "Burned in captions and SRT files solve different problems. Here is a clear decision guide for which to use on each platform and why.",
+    date: "2026-03-20",
+    category: "How-to",
+    readingMin: 6,
+    sections: [
+      {
+        heading: "Two Tools, Two Jobs",
+        paras: [
+          "Burned in captions are baked into the video pixels. They are part of the picture and cannot be turned off. SRT files are separate text files that ride alongside the video, and the platform draws them on top, which means the viewer or the platform can toggle and restyle them.",
+          "Neither is better in the abstract. They solve different problems, and the right answer depends on where the video is going and what you want control over. The mistake is treating one as the default for everything."
+        ]
+      },
+      {
+        heading: "When to Burn Them In",
+        paras: [
+          "Burn captions in for short form social video. On TikTok, Reels, and Shorts you want total control over the look, you want the captions to play on mute automatically, and you want them to survive being downloaded and reposted. Burned in text guarantees all three.",
+          "This is also the only way to get a real designed style. Karaoke highlighting, your brand color, your exact font, captions positioned over a specific part of the frame, none of that survives as an SRT. If the styling is the point, and on short form it usually is, you burn them in."
+        ],
+        bullets: [
+          "TikTok, Instagram Reels, YouTube Shorts",
+          "Any video where you want a designed, branded caption look",
+          "Clips that will be reposted across multiple platforms",
+          "Anything that must read perfectly on mute"
+        ]
+      },
+      {
+        heading: "When to Use an SRT File",
+        paras: [
+          "Use an SRT for long form YouTube, for accessibility compliance, and anywhere search and translation matter. Platforms index SRT text, so it can help discovery, and viewers who need captions can turn them on without text cluttering the frame for everyone else.",
+          "SRT also lets the platform auto translate your captions into other languages, which widens your audience without extra work. For a long form talking head video on YouTube, an SRT is often the smarter choice than permanently stamped text."
+        ]
+      },
+      {
+        heading: "The Case for Doing Both",
+        paras: [
+          "These are not mutually exclusive. A common professional setup is burned in karaoke captions for the short form cut and a clean SRT for the long form upload, both generated from the same transcript. You do the transcription once and use it twice.",
+          "Because Capto works from a word level transcript, you can style and burn captions for the vertical cut and still export the underlying text for an SRT workflow. One source of truth, two outputs, no duplicated effort."
+        ]
+      },
+      {
+        heading: "A Quick Decision Rule",
+        paras: [
+          "If the video is short, vertical, and brand driven, burn it in. If the video is long, horizontal, and discovery or accessibility driven, lean on an SRT. When in doubt about short form, burn it in, because the mute autoplay world rewards captions that are guaranteed to show.",
+          "The deeper point is that captions are part of your production decision, not an afterthought. Choosing the format on purpose, per platform, is what separates content that looks considered from content that looks copied across channels."
+        ]
+      }
+    ]
+  },
+  {
+    slug: "captioning-50-languages-without-losing-accents",
+    title: "Captioning in 50+ Languages Without Losing Accents",
+    description: "Multilingual captions break when accents and special characters get mangled. Here is how to caption in 50+ languages and keep every character intact.",
+    date: "2026-04-03",
+    category: "How-to",
+    readingMin: 6,
+    sections: [
+      {
+        heading: "The Accent Problem Nobody Warns You About",
+        paras: [
+          "Plenty of tools claim to support dozens of languages, then quietly drop or mangle accented characters on export. Your French becomes a soup of missing diacritics, your Spanish loses its tildes, and your Vietnamese, which leans heavily on stacked accents, becomes unreadable. To a native speaker this reads as careless, and careless content does not get shared.",
+          "The root cause is usually font and encoding. The transcription might be perfect, but if the caption font does not include the glyphs for a language, or the export pipeline does not handle the character encoding properly, the accents vanish at the last step. The text was right until the moment it became pixels."
+        ]
+      },
+      {
+        heading: "Start With Transcription That Actually Knows the Language",
+        paras: [
+          "Accurate multilingual captions begin with multilingual transcription. Capto supports more than 50 languages through Groq powered transcription, and crucially it transcribes in the spoken language rather than forcing everything through English first. Translating on the way in is where meaning and accents both get lost.",
+          "Because the transcript is word level, the timing stays tight in every language, including ones with very different rhythm and word length than English. A language that packs more syllables per second still gets accurate per word highlighting."
+        ]
+      },
+      {
+        heading: "Pick a Font With the Glyphs",
+        paras: [
+          "This is the step that quietly determines success. A font that looks great in English may simply not contain the characters for Polish, Turkish, or Greek, and when a glyph is missing it gets dropped or replaced with a box. Before you commit to a caption style, confirm the font covers your language.",
+          "For broad multilingual work, choose a font with wide language coverage and stick with it. Then verify on screen, with a native speaker if you can, that every accent renders. Two minutes of checking saves you from publishing text that insults the audience you are trying to reach."
+        ],
+        bullets: [
+          "Confirm the font includes your language's accented characters",
+          "Watch for boxes or blanks where accents should be",
+          "Have a native speaker spot check when possible",
+          "Standardize on one wide coverage font for multilingual output"
+        ]
+      },
+      {
+        heading: "Export Without Crushing the Characters",
+        paras: [
+          "Because Capto burns the captions in at original quality, what you see in the editor is exactly what ships. The accents are rendered into the actual pixels of the video, so there is no separate caption file that a platform might re render with the wrong font and break your diacritics.",
+          "This is one of the underrated advantages of burned in captions for international content. You control the rendering completely. The viewer's device cannot substitute a font that lacks your glyphs, because the text is already part of the picture."
+        ]
+      },
+      {
+        heading: "Why This Unlocks Real Audience Growth",
+        paras: [
+          "Captioning your content in the languages your viewers actually speak, with the accents intact, signals respect. It tells a Brazilian or a Polish or a Korean viewer that the content was made for them, not machine dumped at them. That respect is what turns a one off view into a follow.",
+          "The mechanics are not glamorous, transcription, font coverage, clean export, but they are what separate genuine multilingual reach from the embarrassing half measure of garbled accents. Get the three steps right and 50 plus languages becomes a real distribution advantage instead of a checkbox."
+        ]
+      }
+    ]
+  },
+  {
+    slug: "what-lossless-export-means-for-reels",
+    title: "What Lossless Export Actually Means for Your Reels",
+    description: "Lossless export sounds technical, but it directly affects how sharp your Reels look and how they perform. Here is what it really means in practice.",
+    date: "2026-04-22",
+    category: "Strategy",
+    readingMin: 6,
+    sections: [
+      {
+        heading: "What the Word Lossless Is Promising",
+        paras: [
+          "Every time a video gets re encoded, it gets compressed, and compression throws away detail to shrink the file. Most caption tools re encode your clip when they burn in the text, and they often do it at a low bitrate to save server cost. The result is a video that is visibly softer than what you shot.",
+          "Lossless export, in the practical sense creators care about, means keeping your original quality through the captioning step. Capto burns in your captions without crushing the underlying footage, so the resolution, bitrate, and detail you started with are the resolution, bitrate, and detail you upload."
+        ]
+      },
+      {
+        heading: "Why It Matters More Than It Sounds",
+        paras: [
+          "Here is the part that catches people off guard. The platform is going to compress your video again when you upload it. Instagram, TikTok, and YouTube all re encode everything. So if your tool already softened the file, the platform compresses an already degraded version, and the losses stack.",
+          "Starting from a clean, high quality file means the platform's unavoidable compression has more detail to work with, and the final result that viewers see is sharper. You cannot stop the platform from compressing. You can stop yourself from handing it a degraded file to begin with."
+        ]
+      },
+      {
+        heading: "The Visible Symptoms of Lossy Tools",
+        paras: [
+          "You can usually spot a lossy caption tool without any technical knowledge. The footage looks a touch muddy, fast motion smears into blocky artifacts, and fine detail like hair or text in the background turns mushy. Side by side with the original, the difference is obvious.",
+          "Captions themselves are a giveaway too. Heavily compressed video makes crisp text edges look fuzzy and haloed. If your beautiful bold captions come out with soft fringes around the letters, your export pipeline is compressing too hard."
+        ],
+        bullets: [
+          "Muddy or soft overall image",
+          "Blocky artifacts during fast motion",
+          "Mushy fine detail in hair, fabric, or backgrounds",
+          "Fuzzy halos around caption letters"
+        ]
+      },
+      {
+        heading: "Resolution and Frame Rate Headroom",
+        paras: [
+          "Lossless export pairs with high ceilings on resolution and frame rate. Capto's Ultra plan handles 4K at 60 frames per second, which matters if you shoot crisp footage or smooth slow motion and do not want it knocked down to 1080p at export.",
+          "Even if you mostly post at 1080p today, having the headroom means your captioning step is never the bottleneck. You can shoot for the highest quality your phone or camera allows and trust that the tool will not be the thing that throws it away."
+        ]
+      },
+      {
+        heading: "The Bottom Line for Creators",
+        paras: [
+          "Lossless export is not a vanity spec. It is the difference between content that looks professionally produced and content that looks a generation behind, and that difference shows up in the feed where viewers compare you against everyone else in a single scroll.",
+          "Treat your export setting as a quality decision, not a default you ignore. If a tool is silently compressing your work and stamping a watermark on it, you are paying a quality tax on every single video. The fix is choosing a tool that respects the file you give it."
+        ]
+      }
+    ]
+  },
+  {
+    slug: "hormozi-style-captions-how-to-get-the-look",
+    title: "Hormozi Style Captions: How to Get the Look",
+    description: "The bold, punchy, word by word caption style that powers high retention clips. Here is exactly how to recreate the Hormozi look on your own videos.",
+    date: "2026-05-12",
+    category: "How-to",
+    readingMin: 6,
+    sections: [
+      {
+        heading: "What Actually Makes the Look Work",
+        paras: [
+          "The style everyone calls Hormozi captions is not really about one font. It is a system of choices that all push the same direction, maximum readability and maximum energy. Big bold text, one or two words at a time, a hard outline, and a bright accent color that snaps onto the key word as it is spoken.",
+          "The reason it spread everywhere is that it works on mute. The constant motion of words appearing and highlighting gives the eye something to lock onto, and the punchy single words make the pacing feel fast even when the speaker is calm. It is retention engineering disguised as a font choice."
+        ]
+      },
+      {
+        heading: "The Five Ingredients",
+        paras: [
+          "You can recreate the look with five deliberate choices. None of them is exotic, but they have to work together. Miss one and it reads as a cheap imitation rather than the real thing.",
+          "Get these right and the style is unmistakable. The trick is restraint on color and discipline on timing, which is where most copies fall apart."
+        ],
+        bullets: [
+          "A heavy, bold, uppercase or near uppercase sans serif",
+          "One to three words on screen at a time, never a full sentence",
+          "A thick black outline or shadow so text survives any background",
+          "A single bright accent color that highlights the active word",
+          "Tight word level timing so the highlight lands on the exact beat"
+        ]
+      },
+      {
+        heading: "Why Word Level Timing Is Non Negotiable",
+        paras: [
+          "The whole effect depends on the highlight landing precisely as each word is spoken. If the timing is loose, the snap feels wrong and the energy collapses. This is why you cannot fake the look with sentence level captions that just sit there.",
+          "Capto generates word level timing from the transcript, so each word carries its own timestamp. On the timeline you can nudge any word a few frames earlier or later until the highlight hits exactly on the beat. That micro adjustment is the polish that separates a pro clip from an obvious template."
+        ]
+      },
+      {
+        heading: "The Color Discipline Most People Miss",
+        paras: [
+          "The classic mistake is using too many colors. People see the style and assume the magic is rainbow highlighting, so they cycle through five colors and it turns into a mess. The real version usually uses white text with one accent, often a bright yellow or green, on the emphasized words only.",
+          "Pick one accent and make it yours. Used consistently, that single color becomes a recognizable part of your brand, and viewers start to clock your captions before they even register who posted. One color, used with intent, beats five used at random every time."
+        ]
+      },
+      {
+        heading: "Make It Yours, Then Make It Repeatable",
+        paras: [
+          "Once you have dialed in your font, outline, and accent, save it as a preset or brand kit so you are not rebuilding it every video. The look only pays off when it is consistent across dozens of clips, and rebuilding from scratch each time is how people quietly abandon a style.",
+          "The honest truth is that the Hormozi look is less a secret and more a set of disciplines, bold font, short groups, hard outline, one accent, tight timing. Apply all five every time and your clips will carry that same high energy, high retention feel without you thinking about it."
+        ]
+      }
+    ]
+  },
+  {
+    slug: "realistic-monthly-cost-captioning-30-videos",
+    title: "A Realistic Monthly Cost of Captioning 30 Videos",
+    description: "What does it actually cost to caption 30 short videos a month? A clear breakdown of subscription plus transcription, with no hidden fees.",
+    date: "2026-06-09",
+    category: "Pricing",
+    readingMin: 7,
+    sections: [
+      {
+        heading: "The Honest Math, Not the Marketing Math",
+        paras: [
+          "Captioning 30 videos a month is a realistic pace for a creator posting roughly one short a day. The question is what that actually costs, all in, with nothing hidden. Most pricing pages give you a monthly subscription number and stay quiet about the per video processing cost, so let us put both on the table.",
+          "There are two parts to the bill. The software subscription you pay for the editor and its features, and the transcription cost for turning audio into a word level transcript. Capto separates these on purpose, and once you see why, the total comes out lower than the all in one tools that bundle everything into a higher flat fee."
+        ]
+      },
+      {
+        heading: "Part One: The Subscription",
+        paras: [
+          "Capto Pro is 6.99 EUR per month, or 59.99 EUR per year if you pay annually, which works out to roughly 5 EUR per month and about 28 percent off the monthly rate. For 30 videos a month, Pro is the plan that fits a serious solo creator who wants no watermark, lossless export, and full timeline editing.",
+          "If you need 4K at 60 frames per second, Magic Clips, a brand kit, API access, or team seats, Ultra is 17.99 EUR per month or 179.99 EUR per year and includes five flat team seats. For a single creator captioning 30 videos, though, Pro is almost always the right tier."
+        ],
+        bullets: [
+          "Free: watermarked, good for trying it out",
+          "Pro: 6.99 EUR per month or 59.99 EUR per year, no watermark, lossless export",
+          "Ultra: 17.99 EUR per month or 179.99 EUR per year, 4K and 60fps, brand kit, API, five seats"
+        ]
+      },
+      {
+        heading: "Part Two: Transcription, Where the Savings Hide",
+        paras: [
+          "This is the part the all in one tools bury inside their price. Capto lets you bring your own Groq API key, and Groq transcription is genuinely cheap, fractions of a cent per minute of audio. Thirty short videos, most of them under a minute, add up to a transcription bill that is close to a rounding error.",
+          "If you do not want to manage an API key, there is a managed option instead. But for cost conscious creators, the bring your own key route means your real monthly transcription spend for 30 short videos is often under the price of a coffee. You are paying near raw cost rather than a marked up bundle."
+        ]
+      },
+      {
+        heading: "Adding It Up",
+        paras: [
+          "On annual Pro, your software is about 5 EUR per month. Your transcription with your own Groq key for 30 short videos lands somewhere in the low single digit range, often well under 1 EUR depending on length. Your realistic all in monthly cost is therefore roughly 5 to 7 EUR.",
+          "Compare that to an all in one editor that charges a flat 20 to 30 dollars or more per month and still watermarks or compresses unless you are on a higher tier. For the narrow job of captioning short video well, the focused tool is dramatically cheaper because you are not subsidizing fifty features you never open."
+        ]
+      },
+      {
+        heading: "What You Are Not Paying For",
+        paras: [
+          "The other half of the value is the costs that are not on the bill. No watermark means you are not paying a credibility tax on every video. Lossless export means you are not paying a quality tax. Bring your own key means you are not paying a markup on transcription you could buy at cost.",
+          "Captioning 30 videos a month should cost you a few euros, not a few dozen. The reason it usually costs more is bundling, and the reason Capto can be cheaper is focus. You pay for captions done well, and you stop paying for everything else you were never going to use."
+        ]
+      }
+    ]
+  },
+  {
     "slug": "focused-caption-tool-vs-all-in-one",
     "title": "Why a Focused Caption Tool Beats the All-in-One Editors",
     "description": "All-in-one editors do captions as a checkbox feature. A focused caption tool does them properly: word-level timing, lossless export, no watermark, and €6.99 pricing.",

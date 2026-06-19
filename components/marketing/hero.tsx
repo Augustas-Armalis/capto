@@ -10,7 +10,7 @@ import { CONTLES_URL } from "@/lib/utils";
 // JS and hydrates without an animation glitch.
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pt-28 pb-14 sm:pt-32">
+    <section className="relative overflow-hidden pb-16 pt-28 sm:pt-40 lg:pt-48">
       <Aurora preset="hero" />
 
       <Container className="relative">
@@ -26,13 +26,14 @@ export function Hero() {
             <ArrowUpRight className="size-2.5 opacity-50 transition-all group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </a>
 
-          <h1 className="display mx-auto mt-7 max-w-3xl text-balance text-5xl text-white sm:text-7xl">
-            We Only Make <span className="text-magic">Captions.</span>
+          <h1 className="display mx-auto mt-7 max-w-4xl text-balance text-5xl text-white sm:text-7xl">
+            Captions That <span className="text-magic">Keep Them Watching.</span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-xl text-lg text-[var(--color-fg-muted)]">
-            Drop a clip and get captions timed to the word, ready to post in seconds. Full quality,
-            no watermark, no bloated editor.
+            Upload a clip and Capto times every word to the audio, styles it to your brand, and
+            exports in full quality with no watermark. Captions are all we make, so they come out
+            better.
           </p>
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">

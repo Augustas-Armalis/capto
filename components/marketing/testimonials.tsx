@@ -1,5 +1,6 @@
 import { Container } from "@/components/ui/container";
 import { SectionEyebrow, SectionTitle } from "@/components/ui/section";
+import { Marquee } from "./marquee";
 
 type Quote = { body: string; author: string; role: string; initial: string };
 
@@ -28,7 +29,6 @@ function QuoteCard({ q }: { q: Quote }) {
 }
 
 export function Testimonials() {
-  const loop = [...QUOTES, ...QUOTES];
   return (
     <section className="py-24 sm:py-32">
       <Container>
@@ -38,13 +38,15 @@ export function Testimonials() {
         </div>
       </Container>
 
-      <div className="marquee-paused mt-12 overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_6%,#000_94%,transparent)]">
-        <div className="marquee-track flex w-max gap-5" style={{ animationDuration: "60s" }}>
-          {loop.map((q, i) => (
-            <QuoteCard key={`${q.author}-${i}`} q={q} />
-          ))}
-        </div>
-      </div>
+      <Marquee
+        items={QUOTES.map((q) => <QuoteCard q={q} />)}
+        durationSec={70}
+        gapPx={20}
+        repeat={2}
+        pauseOnHover
+        className="mt-12"
+        maskClass="[mask-image:linear-gradient(90deg,transparent,#000_6%,#000_94%,transparent)]"
+      />
     </section>
   );
 }

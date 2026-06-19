@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SiteNav } from "@/components/marketing/site-nav";
+import { Aurora } from "@/components/marketing/aurora";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { PricingTable } from "@/components/marketing/pricing-table";
 import { Comparison } from "@/components/marketing/comparison";
@@ -18,7 +19,8 @@ export default function PricingPage() {
   return (
     <>
       <SiteNav />
-      <main className="pt-32">
+      <main className="relative pt-32">
+      <Aurora preset="hero" className="-z-10" />
         <PricingTable />
         <Comparison />
         <FaqAccordion faqs={DEFAULT_FAQS.slice(0, 6)} />

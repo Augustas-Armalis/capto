@@ -1,5 +1,6 @@
 import { Container } from "@/components/ui/container";
 import { SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
+import { Marquee } from "./marquee";
 
 // Placeholder reel cards until real creator clips land.
 // When you have MP4s: replace the inner block with
@@ -30,7 +31,6 @@ function Reel({ tag, line, hot, bg, accent }: (typeof REELS)[number]) {
 }
 
 export function MadeWithCapto() {
-  const loop = [...REELS, ...REELS];
   return (
     <section className="py-24 sm:py-32">
       <Container>
@@ -41,13 +41,15 @@ export function MadeWithCapto() {
         </div>
       </Container>
 
-      <div className="marquee-paused mt-12 overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_5%,#000_95%,transparent)]">
-        <div className="marquee-track flex w-max gap-4" style={{ animationDuration: "70s" }}>
-          {loop.map((r, i) => (
-            <Reel key={`${r.tag}-${i}`} {...r} />
-          ))}
-        </div>
-      </div>
+      <Marquee
+        items={REELS.map((r) => <Reel {...r} />)}
+        durationSec={80}
+        gapPx={16}
+        repeat={3}
+        pauseOnHover
+        className="mt-12"
+        maskClass="[mask-image:linear-gradient(90deg,transparent,#000_5%,#000_95%,transparent)]"
+      />
     </section>
   );
 }

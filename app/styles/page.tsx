@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { PageHero } from "@/components/marketing/page-hero";
@@ -54,6 +54,25 @@ export default function StylesIndex() {
                   </div>
                 </Link>
               ))}
+
+              {/* Create your own, every style is fully customizable in the editor */}
+              <Link
+                href="/signup"
+                className="group relative flex aspect-[5/4] flex-col items-center justify-center gap-3 overflow-hidden rounded-[var(--radius-xl)] border border-dashed border-white/15 bg-white/[0.02] p-6 text-center transition-colors hover:border-[var(--color-brand)]/50 hover:bg-white/[0.04]"
+              >
+                <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)] transition-transform group-hover:scale-105">
+                  <Plus className="size-6" />
+                </span>
+                <span className="heading text-lg text-white">Create your own</span>
+                <span className="max-w-[14rem] text-sm text-[var(--color-fg-muted)]">
+                  Every preset is a starting point. Tune the font, weight, color, highlight and
+                  position, then save it as yours.
+                </span>
+                <span className="mono mt-1 inline-flex items-center gap-1 text-xs text-[var(--color-brand)]">
+                  Open the editor
+                  <ArrowUpRight className="size-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </span>
+              </Link>
             </div>
           </Container>
         </section>

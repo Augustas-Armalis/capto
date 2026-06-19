@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowRight, Building2, Layers, Shield, Workflow } from "lucide-react";
 import { SiteNav } from "@/components/marketing/site-nav";
+import { Aurora } from "@/components/marketing/aurora";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 import { Container } from "@/components/ui/container";
@@ -42,7 +43,8 @@ export default function ForBrandsPage() {
   return (
     <>
       <SiteNav />
-      <main>
+      <main className="relative">
+      <Aurora preset="hero" className="-z-10" />
         <section className="relative pt-40 pb-16 overflow-hidden">
           <div className="absolute inset-0 blueprint blueprint-fade" />
           <Container className="relative">

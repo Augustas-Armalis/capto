@@ -209,6 +209,114 @@ export const STYLES: CaptionStyle[] = [
     ],
     bestFor: "Lifestyle, beauty, food, friendly creator brands.",
   },
+  {
+    slug: "outline",
+    name: "Outline",
+    title: "Outline Captions, Hollow Stroke Type",
+    description:
+      "Bold hollow letters with a clean stroke that fill in on the active word. A modern, design-forward caption look. One click in Capto.",
+    blurb:
+      "Hollow stroked letters that read as pure shape, then fill solid on the word being spoken. Sits over any footage without a heavy box, and looks unmistakably designed.",
+    words: ["BIG", "BOLD", "OUTLINE"],
+    highlight: 1,
+    wordClass:
+      "font-extrabold uppercase tracking-tight text-transparent [-webkit-text-stroke:1.5px_rgba(255,255,255,0.92)]",
+    highlightClass: "text-white [-webkit-text-stroke:0px_transparent]",
+    bg: "from-[#0e1320] to-[#06080d]",
+    recipe: [
+      "Heavy sans with a thin to medium stroke, no fill",
+      "Active word fills solid white or your accent",
+      "All caps, tight tracking",
+      "Centered, two to three words per line",
+    ],
+    bestFor: "Design-led brands, streetwear, music, anything that wants a modern edge.",
+  },
+  {
+    slug: "gradient",
+    name: "Gradient",
+    title: "Gradient Captions, Color Wash Type",
+    description:
+      "Letters washed in a smooth color gradient with a soft glow on the active word. Electric and premium. One click in Capto.",
+    blurb:
+      "A smooth cyan to violet to fuchsia wash across the text, with the active word lifting in a soft glow. Modern, vivid, and still readable on dark footage.",
+    words: ["MAKE", "IT", "POP"],
+    highlight: 2,
+    wordClass:
+      "font-extrabold uppercase tracking-tight bg-gradient-to-r from-[var(--color-cyan)] via-[var(--color-violet)] to-[var(--color-fuchsia)] bg-clip-text text-transparent",
+    highlightClass: "drop-shadow-[0_0_16px_oklch(0.7_0.2_300_/_0.8)]",
+    bg: "from-[#0a0e1a] to-[#05060c]",
+    recipe: [
+      "Bold sans, all caps",
+      "Apply a two or three stop gradient across the text",
+      "Soft glow on the active word",
+      "Centered, dark cool background",
+    ],
+    bestFor: "Music, tech, gaming, product launches, nightlife.",
+  },
+  {
+    slug: "highlighter",
+    name: "Highlighter",
+    title: "Highlighter Captions, Marker Sweep Style",
+    description:
+      "A marker style highlight sweeps behind the key word, like a pen on paper. Friendly and high contrast. One click in Capto.",
+    blurb:
+      "White text with a soft marker block that lands behind the active word, tilted a touch like a real highlighter pen. Warm, human, and very easy to read.",
+    words: ["READ", "THIS", "PART"],
+    highlight: 1,
+    wordClass: "font-bold tracking-tight text-white",
+    highlightClass: "bg-[var(--color-violet)]/70 box-decoration-clone rounded-sm px-1.5 -rotate-1",
+    bg: "from-[#16122a] to-[#0a0814]",
+    recipe: [
+      "Bold sans, title or sentence case",
+      "Marker block behind the key word, slight tilt",
+      "Pick one accent and keep it consistent",
+      "Lower third, two to three words per line",
+    ],
+    bestFor: "Education, tutorials, explainer content, friendly brands.",
+  },
+  {
+    slug: "bubble",
+    name: "Bubble",
+    title: "Bubble Captions, Rounded Pill Style",
+    description:
+      "Soft rounded pills pop behind one word at a time, clean and playful without looking cheap. One click in Capto.",
+    blurb:
+      "A full white pill snaps behind the active word in crisp black text. High contrast, friendly, and instantly legible on any background.",
+    words: ["SO", "CLEAN", "RIGHT"],
+    highlight: 1,
+    wordClass: "font-bold tracking-tight text-white",
+    highlightClass: "bg-white text-black rounded-full px-2.5",
+    bg: "from-[#101418] to-[#070a0d]",
+    recipe: [
+      "Bold rounded sans, title case",
+      "White pill behind the active word, black text",
+      "High contrast, lots of breathing room",
+      "Centered, playful spacing",
+    ],
+    bestFor: "Lifestyle, vlogs, friendly creators, product demos.",
+  },
+  {
+    slug: "typewriter",
+    name: "Typewriter",
+    title: "Typewriter Captions, Mono One Word Style",
+    description:
+      "Clean monospaced letters, one word at a time, with the active word in your accent. Minimal and technical. One click in Capto.",
+    blurb:
+      "Monospaced type swapping one word at a time, the active word tinted in your accent. A quiet, technical look that suits founders and builders.",
+    words: ["TYPE", "EVERY", "WORD"],
+    highlight: 0,
+    wordClass: "mono font-medium tracking-tight text-white",
+    highlightClass: "text-[var(--color-cyan)]",
+    bg: "from-[#0c1410] to-[#050806]",
+    single: true,
+    recipe: [
+      "Monospaced font, medium weight",
+      "One word on screen at a time",
+      "Active word tinted in a single accent",
+      "Dead center, generous spacing",
+    ],
+    bestFor: "Founders, dev and tech content, documentation, minimal brands.",
+  },
 ];
 
 export const getStyle = (slug: string) => STYLES.find((s) => s.slug === slug);

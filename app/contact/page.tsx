@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Mail, ArrowUpRight } from "lucide-react";
 import { SiteNav } from "@/components/marketing/site-nav";
+import { Aurora } from "@/components/marketing/aurora";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { Container } from "@/components/ui/container";
 
@@ -14,7 +15,8 @@ export default function ContactPage() {
   return (
     <>
       <SiteNav />
-      <main className="pt-32 pb-24">
+      <main className="relative pt-32 pb-24">
+      <Aurora preset="hero" className="-z-10" />
         <Container size="narrow">
           <h1 className="display text-5xl text-white">Say hi.</h1>
           <p className="mt-4 text-lg text-[var(--color-fg-muted)]">

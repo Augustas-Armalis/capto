@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowRight, Clock, TrendingUp, Heart, Zap } from "lucide-react";
 import { SiteNav } from "@/components/marketing/site-nav";
+import { Aurora } from "@/components/marketing/aurora";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { CaptionStyleStudio } from "@/components/marketing/caption-style-studio";
 import { CtaBanner } from "@/components/marketing/cta-banner";
@@ -47,7 +48,8 @@ export default function ForCreatorsPage() {
   return (
     <>
       <SiteNav />
-      <main>
+      <main className="relative">
+      <Aurora preset="hero" className="-z-10" />
         <section className="relative pt-40 pb-16 overflow-hidden">
           <div className="absolute inset-0 blueprint blueprint-fade" />
           <Container className="relative">

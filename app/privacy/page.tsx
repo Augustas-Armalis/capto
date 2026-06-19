@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SiteNav } from "@/components/marketing/site-nav";
+import { Aurora } from "@/components/marketing/aurora";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { Container } from "@/components/ui/container";
 
@@ -13,7 +14,8 @@ export default function PrivacyPage() {
   return (
     <>
       <SiteNav />
-      <main className="pt-32 pb-20">
+      <main className="relative pt-32 pb-20">
+      <Aurora preset="hero" className="-z-10" />
         <Container size="narrow">
           <h1 className="display text-5xl ">Privacy</h1>
           <p className="mt-4 text-sm text-[var(--color-fg-subtle)]">Last updated: June 2026</p>

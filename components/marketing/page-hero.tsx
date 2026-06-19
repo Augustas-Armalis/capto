@@ -2,6 +2,7 @@ import * as React from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Container } from "@/components/ui/container";
+import { Aurora } from "./aurora";
 
 export function PageHero({
   eyebrow,
@@ -17,8 +18,8 @@ export function PageHero({
   children?: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-hidden border-b border-white/[0.06] pt-32 pb-14">
-      <div className="hero-veil left-1/2 top-0 h-[300px] w-[680px] -translate-x-1/2" />
+    <section className="relative overflow-hidden border-b border-white/[0.06] pb-14 pt-32 sm:pt-36">
+      <Aurora preset="hero" />
       <Container className="relative">
         {crumbs && (
           <nav className="mb-5 flex items-center gap-1.5 text-xs text-[var(--color-fg-subtle)]">

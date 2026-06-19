@@ -11,28 +11,43 @@ import { cn } from "@/lib/utils";
 
 function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] p-1 backdrop-blur-md">
-      {([["Monthly", false], ["Annual", true]] as const).map(([label, val]) => (
-        <button
-          key={label}
-          onClick={() => onChange(val)}
-          className={cn(
-            "inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-1.5 text-sm font-medium transition-colors",
-            annual === val ? "bg-white text-black" : "text-[var(--color-fg-muted)]",
-          )}
-        >
-          {label}
-          {label === "Annual" && (
-            <span className={cn("mono text-[10px]", annual ? "text-[var(--color-violet)]" : "text-white/40")}>save up to 28%</span>
-          )}
-        </button>
-      ))}
+    <div className="inline-flex items-center gap-2.5">
+      <div className="relative inline-flex rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] p-1 backdrop-blur-md">
+        {/* sliding indicator */}
+        <span
+          aria-hidden
+          className="absolute inset-y-1 left-1 w-[88px] rounded-[var(--radius-pill)] bg-white transition-transform duration-300 ease-[var(--ease-out)]"
+          style={{ transform: annual ? "translateX(100%)" : "translateX(0)" }}
+        />
+        {([["Monthly", false], ["Annual", true]] as const).map(([label, val]) => (
+          <button
+            key={label}
+            onClick={() => onChange(val)}
+            className={cn(
+              "relative z-10 w-[88px] rounded-[var(--radius-pill)] py-1.5 text-center text-sm font-medium transition-colors duration-300",
+              annual === val ? "text-black" : "text-[var(--color-fg-muted)] hover:text-white",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <span
+        className={cn(
+          "rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold transition-all",
+          annual
+            ? "bg-[var(--color-success)]/15 text-[var(--color-success)]"
+            : "bg-[var(--color-success)]/10 text-[var(--color-success)]/80",
+        )}
+      >
+        Save up to 28%
+      </span>
     </div>
   );
 }
 
 export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
-  const [annual, setAnnual] = React.useState(true);
+  const [annual, setAnnual] = React.useState(false);
   const [loadingPlan, setLoadingPlan] = React.useState<string | null>(null);
 
   // Pay-first: go straight to Stripe Checkout (collects email + card), then

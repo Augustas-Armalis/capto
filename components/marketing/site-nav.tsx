@@ -32,7 +32,7 @@ export function SiteNav() {
       <div className="mx-auto w-full max-w-6xl px-4">
         <nav
           className={cn(
-            "flex items-center justify-between gap-4 rounded-[var(--radius-lg)] px-3 py-2 transition-all duration-[var(--dur-base)]",
+            "relative flex items-center justify-between gap-4 rounded-[var(--radius-lg)] py-2 pl-3 pr-2 transition-all duration-[var(--dur-base)]",
             scrolled ? "glass-strong" : "border border-transparent",
           )}
         >
@@ -40,7 +40,8 @@ export function SiteNav() {
             <Image src="/wordmark.png" alt="Capto" width={108} height={32} priority className="h-7 w-auto" />
           </Link>
 
-          <div className="hidden items-center gap-0.5 md:flex">
+          {/* Links centered independently of the logo / actions */}
+          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 md:flex">
             {NAV_LINKS.map((l) => (
               <Link
                 key={l.href}
