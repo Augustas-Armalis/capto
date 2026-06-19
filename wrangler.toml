@@ -11,12 +11,14 @@ compatibility_date = "2025-09-23"
 # and the polyfills @opennextjs/cloudflare ships for the Next runtime.
 compatibility_flags = ["nodejs_compat"]
 
-# Live on workers.dev now. The capto.video apex has a pre-existing externally
-# managed DNS record, so attaching the custom domain is a one-click dashboard
-# step (Workers → capto-web → Settings → Domains & Routes → Add custom domain
-# → capto.video; choose "replace existing record"). Then flip workers_dev off.
-workers_dev = true
-# routes = [{ pattern = "capto.video", custom_domain = true }]
+# capto.video is now the public origin (attached via the Workers API on
+# 2026-06-19). workers.dev fallback URL turned off so the app has a single
+# canonical hostname.
+workers_dev = false
+routes = [
+  { pattern = "capto.video", custom_domain = true },
+  { pattern = "www.capto.video", custom_domain = true },
+]
 
 # Workers Static Assets — Next's static output is served directly from the edge
 [assets]
