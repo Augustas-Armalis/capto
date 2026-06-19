@@ -5,7 +5,7 @@
 
 import type { CaptionPreset } from "./caption-presets";
 import { activeCueIndex, type Cue } from "./cues";
-import { drawCaption, drawWatermark, type Pos } from "./caption-render";
+import { drawCaption, drawWatermark, type Pos, type CaptionAnim } from "./caption-render";
 
 export type ExportOpts = {
   src: string; // object URL of the local file
@@ -13,8 +13,11 @@ export type ExportOpts = {
   preset: CaptionPreset;
   pos: Pos;
   watermark: boolean;
+  anim?: CaptionAnim;
   /** cap on the long edge in px (perf). 1920 by default. */
   maxEdge?: number;
+  /** video bitrate (bits/s). Higher = better quality + bigger file. */
+  videoBitrate?: number;
   onProgress?: (fraction: number) => void;
   signal?: AbortSignal;
 };
@@ -36,8 +39,9 @@ function pickMime(): { mime: string; ext: string } {
 }
 
 export async function exportCaptionedVideo(opts: ExportOpts): Promise<ExportResult> {
-  const { src, cues, preset, pos, watermark, onProgress, signal } = opts;
+  const { src, cues, preset, pos, watermark, anim = "none", onProgress, signal } = opts;
   const maxEdge = opts.maxEdge ?? 1920;
+  const videoBitrate = opts.videoBitrate ?? 12_000_000;
 
   // Dedicated offscreen element so the preview element's audio is untouched.
   const video = document.createElement("video");
@@ -98,7 +102,7 @@ export async function exportCaptionedVideo(opts: ExportOpts): Promise<ExportResu
   const { mime, ext } = pickMime();
   const recorder = new MediaRecorder(mixed, {
     mimeType: mime,
-    videoBitsPerSecond: 12_000_000,
+    videoBitsPerSecond: videoBitrate,
     audioBitsPerSecond: 192_000,
   });
   const chunks: BlobPart[] = [];
@@ -153,7 +157,7 @@ export async function exportCaptionedVideo(opts: ExportOpts): Promise<ExportResu
       ctx.fillRect(0, 0, w, h);
       ctx.drawImage(video, 0, 0, w, h);
       const idx = activeCueIndex(cues, t);
-      drawCaption({ ctx, cue: idx >= 0 ? cues[idx] : null, t, preset, width: w, height: h, pos });
+      drawCaption({ ctx, cue: idx >= 0 ? cues[idx] : null, t, preset, width: w, height: h, pos, anim });
       if (watermark) drawWatermark(ctx, w, h);
       onProgress?.(Math.min(1, t / duration));
 

@@ -7,6 +7,55 @@ import { activeWordIndex, type Cue } from "./cues";
 
 export type Pos = { x: number; y: number }; // 0..1, center anchor
 
+// Entrance animation applied to the active word as it appears. Deterministic in
+// `t`, so the live preview and the exported frames animate identically.
+export type CaptionAnim = "none" | "pop" | "fade" | "slide" | "bounce";
+
+export const CAPTION_ANIMS: { id: CaptionAnim; name: string }[] = [
+  { id: "none", name: "None" },
+  { id: "pop", name: "Pop" },
+  { id: "fade", name: "Fade" },
+  { id: "slide", name: "Slide up" },
+  { id: "bounce", name: "Bounce" },
+];
+
+const ANIM_DUR = 0.22; // seconds for the entrance to settle
+
+function easeOutBack(p: number) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
+}
+function easeOutCubic(p: number) {
+  return 1 - Math.pow(1 - p, 3);
+}
+
+/** Transform for the active word given its age (seconds since its onset). */
+function animTransform(
+  kind: CaptionAnim,
+  age: number,
+  px: number,
+): { scale: number; alpha: number; dy: number } {
+  if (kind === "none" || age < 0) return { scale: 1, alpha: 1, dy: 0 };
+  const p = Math.min(1, age / ANIM_DUR);
+  if (p >= 1) return { scale: 1, alpha: 1, dy: 0 };
+  switch (kind) {
+    case "pop":
+      return { scale: 0.7 + easeOutBack(p) * 0.3, alpha: Math.min(1, p * 2), dy: 0 };
+    case "fade":
+      return { scale: 0.96 + easeOutCubic(p) * 0.04, alpha: easeOutCubic(p), dy: 0 };
+    case "slide":
+      return { scale: 1, alpha: easeOutCubic(p), dy: (1 - easeOutCubic(p)) * px * 0.35 };
+    case "bounce": {
+      // Settle from below with a slight overshoot above the baseline.
+      const e = easeOutBack(p);
+      return { scale: 1, alpha: Math.min(1, p * 2.5), dy: (1 - e) * px * 0.4 };
+    }
+    default:
+      return { scale: 1, alpha: 1, dy: 0 };
+  }
+}
+
 type DrawArgs = {
   ctx: CanvasRenderingContext2D;
   cue: Cue | null;
@@ -15,6 +64,7 @@ type DrawArgs = {
   width: number;
   height: number;
   pos: Pos;
+  anim?: CaptionAnim;
 };
 
 function setFont(ctx: CanvasRenderingContext2D, preset: CaptionPreset, px: number) {
@@ -48,7 +98,7 @@ function roundRect(
 }
 
 /** Paint the active caption (if any) onto ctx. Clears nothing; draw frame first. */
-export function drawCaption({ ctx, cue, t, preset, width, height, pos }: DrawArgs) {
+export function drawCaption({ ctx, cue, t, preset, width, height, pos, anim = "none" }: DrawArgs) {
   if (!cue) return;
 
   const px = Math.round(Math.min(width, height) * preset.sizeRatio);
@@ -57,12 +107,35 @@ export function drawCaption({ ctx, cue, t, preset, width, height, pos }: DrawArg
   const wi = activeWordIndex(cue, t);
   const cx = pos.x * width;
   const cy = pos.y * height;
+  const activeStart = cue.words[wi]?.start ?? cue.start;
+  const at = animTransform(anim, t - activeStart, px);
+
+  // Run drawWord through the active-word entrance transform (scale about the
+  // word's own anchor, plus vertical offset + alpha).
+  const animated = (
+    fn: () => void,
+    ax: number,
+    ay: number,
+    on: boolean,
+  ) => {
+    if (!on || (at.scale === 1 && at.alpha === 1 && at.dy === 0)) {
+      fn();
+      return;
+    }
+    ctx.save();
+    ctx.globalAlpha = at.alpha;
+    ctx.translate(ax, ay + at.dy);
+    ctx.scale(at.scale, at.scale);
+    ctx.translate(-ax, -ay);
+    fn();
+    ctx.restore();
+  };
 
   // ── single-word styles: just the active word, swapped in place ──────────
   if (preset.single) {
     const raw = cue.words[wi]?.word ?? cue.text.split(" ")[0] ?? "";
     const word = applyCase(raw, preset.caseMode);
-    drawWord(ctx, word, cx, cy, px, preset, true, width);
+    animated(() => drawWord(ctx, word, cx, cy, px, preset, true, width), cx, cy, true);
     return;
   }
 
@@ -99,7 +172,14 @@ export function drawCaption({ ctx, cue, t, preset, width, height, pos }: DrawArg
     let x = cx - ln.w / 2;
     for (const wd of ln.items) {
       const wx = x + wd.w / 2;
-      drawWord(ctx, wd.text, wx, y, px, preset, wd.i === wi, width);
+      const isActive = wd.i === wi;
+      const wy = y;
+      animated(
+        () => drawWord(ctx, wd.text, wx, wy, px, preset, isActive, width),
+        wx,
+        wy,
+        isActive,
+      );
       x += wd.w + spaceW;
     }
     y += lineH;

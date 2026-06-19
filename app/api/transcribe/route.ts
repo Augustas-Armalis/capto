@@ -68,6 +68,16 @@ export async function POST(req: Request) {
   groqForm.append("model", "whisper-large-v3");
   groqForm.append("response_format", "verbose_json");
   groqForm.append("timestamp_granularities[]", "word");
+  groqForm.append("timestamp_granularities[]", "segment");
+  // Deterministic decoding (no sampling) gives the most accurate, repeatable
+  // transcript — important since captions are edited by hand afterwards.
+  groqForm.append("temperature", "0");
+  // A light style prompt nudges Whisper toward clean punctuation/casing, which
+  // makes our sentence-aware chunking land cleaner.
+  groqForm.append(
+    "prompt",
+    "Transcribe accurately with correct spelling, punctuation, and capitalization.",
+  );
   if (language && language !== "auto") groqForm.append("language", language);
 
   const res = await fetch(GROQ_URL, {

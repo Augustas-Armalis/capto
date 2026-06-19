@@ -23,6 +23,34 @@ export function BillingClient({
   const [interval, setInterval] = React.useState<Interval>(autoInterval);
   const [loading, setLoading] = React.useState<PlanId | "portal" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [showCancel, setShowCancel] = React.useState(false);
+  const [retLoading, setRetLoading] = React.useState<"claim" | "cancel" | null>(null);
+  const [retDone, setRetDone] = React.useState<null | "stayed" | "cancelled">(null);
+
+  async function claimOffer() {
+    setRetLoading("claim");
+    try {
+      const r = await fetch("/api/stripe/retention", { method: "POST" });
+      if (!r.ok) throw new Error();
+      setRetDone("stayed");
+    } catch {
+      setError("Could not apply the offer. Try the billing portal.");
+    } finally {
+      setRetLoading(null);
+    }
+  }
+  async function cancelPlan() {
+    setRetLoading("cancel");
+    try {
+      const r = await fetch("/api/stripe/cancel", { method: "POST" });
+      if (!r.ok) throw new Error();
+      setRetDone("cancelled");
+    } catch {
+      setError("Could not cancel. Try the billing portal.");
+    } finally {
+      setRetLoading(null);
+    }
+  }
 
   const startCheckout = React.useCallback(
     async (target: PlanId, iv: Interval) => {
@@ -104,13 +132,54 @@ export function BillingClient({
         )}
 
         {isPaid && (
-          <div className="mt-7">
+          <div className="mt-7 flex flex-wrap gap-3">
             <Button onClick={openPortal} loading={loading === "portal"} variant="secondary" size="lg">
               Manage subscription
+            </Button>
+            <Button onClick={() => { setShowCancel(true); setRetDone(null); }} variant="ghost" size="lg">
+              Cancel plan
             </Button>
           </div>
         )}
       </div>
+
+      {/* Retention modal */}
+      {showCancel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => !retLoading && setShowCancel(false)}>
+          <div className="w-full max-w-md rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7" onClick={(e) => e.stopPropagation()}>
+            {retDone === "stayed" ? (
+              <div className="text-center">
+                <div className="mx-auto inline-flex size-12 items-center justify-center rounded-2xl bg-[var(--color-success)]/15 text-[var(--color-success)]"><Check className="size-6" /></div>
+                <h3 className="heading mt-4 text-xl text-white">Nice, you stayed.</h3>
+                <p className="mt-2 text-sm text-[var(--color-fg-muted)]">Your next month is 50% off. Nothing else changes.</p>
+                <Button onClick={() => setShowCancel(false)} size="lg" className="mt-6 w-full">Back to billing</Button>
+              </div>
+            ) : retDone === "cancelled" ? (
+              <div className="text-center">
+                <h3 className="heading mt-2 text-xl text-white">Cancellation scheduled.</h3>
+                <p className="mt-2 text-sm text-[var(--color-fg-muted)]">You keep full access until the end of your current period. You can resubscribe any time.</p>
+                <Button onClick={() => setShowCancel(false)} size="lg" variant="secondary" className="mt-6 w-full">Close</Button>
+              </div>
+            ) : (
+              <>
+                <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]"><Sparkles className="size-5" /></div>
+                <h3 className="heading mt-4 text-2xl text-white">Wait — 50% off next month?</h3>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--color-fg-muted)]">
+                  Before you cancel: stay on {current.name} and your next month is half price, applied instantly. No commitment, cancel later if it&rsquo;s still not for you.
+                </p>
+                <div className="mt-6 space-y-2.5">
+                  <Button onClick={claimOffer} loading={retLoading === "claim"} size="lg" className="w-full">
+                    Claim 50% off and stay
+                  </Button>
+                  <Button onClick={cancelPlan} loading={retLoading === "cancel"} variant="ghost" size="lg" className="w-full">
+                    No thanks, cancel my plan
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* upgrade options */}
       {plan !== "ultra" && (

@@ -23,6 +23,7 @@ export async function GET() {
       durationSec: project.durationSec,
       updatedAt: project.updatedAt,
       state: project.state,
+      thumbnailUrl: project.thumbnailUrl,
     })
     .from(project)
     .where(eq(project.userId, session.user.id))
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as
-    | { name?: string; durationSec?: number; state?: unknown }
+    | { name?: string; durationSec?: number; state?: unknown; thumbnail?: string }
     | null;
   if (!body) return NextResponse.json({ error: "Invalid body." }, { status: 400 });
 
@@ -48,8 +49,13 @@ export async function POST(req: Request) {
   const name = (body.name || "Untitled project").slice(0, 120);
   const state = body.state ? JSON.stringify(body.state) : null;
   const durationSec = typeof body.durationSec === "number" ? Math.round(body.durationSec) : null;
+  // Small data-URL thumbnail; cap size so a giant string can't be stored.
+  const thumbnailUrl =
+    typeof body.thumbnail === "string" && body.thumbnail.startsWith("data:image") && body.thumbnail.length < 200_000
+      ? body.thumbnail
+      : null;
 
-  await db.insert(project).values({ id, userId: session.user.id, name, durationSec, state });
+  await db.insert(project).values({ id, userId: session.user.id, name, durationSec, state, thumbnailUrl });
 
   return NextResponse.json({ id, name });
 }

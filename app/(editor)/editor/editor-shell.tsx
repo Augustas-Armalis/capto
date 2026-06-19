@@ -4,8 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Monitor,
-  Smartphone,
   Upload,
   Play,
   Pause,
@@ -13,18 +11,28 @@ import {
   Download,
   Save,
   Trash2,
-  Loader2,
   Type,
   ListVideo,
   AlertCircle,
   Link2,
   Check,
+  Lock,
+  Sparkles,
+  Crown,
+  Gem,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 import { PRESETS, getPreset } from "@/lib/caption-presets";
-import { drawCaption, drawWatermark, type Pos } from "@/lib/caption-render";
+import {
+  drawCaption,
+  drawWatermark,
+  CAPTION_ANIMS,
+  type Pos,
+  type CaptionAnim,
+} from "@/lib/caption-render";
 import {
   wordsToCues,
   activeCueIndex,
@@ -36,6 +44,7 @@ import { exportCaptionedVideo, downloadBlob } from "@/lib/export-video";
 import { cn } from "@/lib/utils";
 
 type Plan = "free" | "pro" | "ultra";
+type ExportQuality = "lossless" | "high" | "friend";
 
 export type InitialProject = {
   id: string;
@@ -47,6 +56,7 @@ export type InitialProject = {
     pos?: Pos;
     language?: string;
     cues?: Cue[];
+    anim?: CaptionAnim;
   } | null;
 };
 
@@ -71,7 +81,6 @@ export function EditorShell({
   initialProject?: InitialProject | null;
 }) {
   const [isNarrow, setIsNarrow] = React.useState(false);
-  const [proceedMobile, setProceedMobile] = React.useState(false);
 
   React.useEffect(() => {
     const check = () => setIsNarrow(window.innerWidth < 1024);
@@ -80,40 +89,18 @@ export function EditorShell({
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  if (isNarrow && !proceedMobile) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-5 py-12">
-        <div className="w-full max-w-md rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7 text-center">
-          <div className="mx-auto inline-flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
-            <Monitor className="size-7" />
-          </div>
-          <h1 className="heading mt-5 text-2xl">Best on desktop.</h1>
-          <p className="mt-3 text-sm text-[var(--color-fg-muted)] leading-relaxed">
-            The Capto editor uses a real timeline with word-level precision. It works on a
-            phone, but you will have a much better time on a laptop or desktop.
-          </p>
-          <div className="mt-7 space-y-2">
-            <Button onClick={() => setProceedMobile(true)} variant="secondary" size="md" className="w-full">
-              <Smartphone className="size-4" />
-              Continue on mobile anyway
-            </Button>
-            <Button href="/dashboard" variant="ghost" size="md" className="w-full">
-              <ArrowLeft className="size-4" />
-              Back to dashboard
-            </Button>
-          </div>
-          <div className="mt-5 flex items-center justify-center">
-            <PoweredByContles variant="chip" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return <Editor plan={plan} initialProject={initialProject} />;
+  return <Editor plan={plan} initialProject={initialProject} isNarrow={isNarrow} />;
 }
 
-function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialProject | null }) {
+function Editor({
+  plan,
+  initialProject,
+  isNarrow,
+}: {
+  plan: Plan;
+  initialProject: InitialProject | null;
+  isNarrow: boolean;
+}) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const wrapRef = React.useRef<HTMLDivElement | null>(null);
@@ -126,6 +113,7 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
   const [cues, setCues] = React.useState<Cue[]>(initialProject?.state?.cues ?? []);
   const [presetId, setPresetId] = React.useState(initialProject?.state?.presetId ?? "inter-bold");
   const [pos, setPos] = React.useState<Pos>(initialProject?.state?.pos ?? { x: 0.5, y: 0.82 });
+  const [anim, setAnim] = React.useState<CaptionAnim>(initialProject?.state?.anim ?? "pop");
   const [language, setLanguage] = React.useState(initialProject?.state?.language ?? "auto");
 
   const [projectId, setProjectId] = React.useState<string | null>(initialProject?.id ?? null);
@@ -134,6 +122,8 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
   const [playing, setPlaying] = React.useState(false);
   const [time, setTime] = React.useState(0);
   const [tab, setTab] = React.useState<"captions" | "style">("captions");
+  const [mobileTab, setMobileTab] = React.useState<"style" | "captions" | "export">("captions");
+  const [friendMB, setFriendMB] = React.useState(8);
 
   const [transcribing, setTranscribing] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
@@ -142,8 +132,27 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [capReached, setCapReached] = React.useState(false);
+  const [upgradeOpen, setUpgradeOpen] = React.useState(false);
 
+  const isFree = plan === "free";
+  const FREE_STYLE_LIMIT = 4;
   const preset = getPreset(presetId);
+
+  // Re-chunk the current cues into one word per cue (popular punchy look). Pure
+  // client transform — no re-transcription needed.
+  const wordByWord = () => {
+    setCues((prev) =>
+      prev.flatMap((c, ci) =>
+        c.words.map((w, wi) => ({
+          id: `c${ci}w${wi}`,
+          start: w.start,
+          end: w.end,
+          text: w.word,
+          words: [w],
+        })),
+      ),
+    );
+  };
   const needsRelink = !!initialProject && !src;
   const expectedName = initialProject?.state?.videoName;
 
@@ -224,9 +233,9 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
     ctx.clearRect(0, 0, W, H);
     const t = v.currentTime;
     const idx = activeCueIndex(cues, t);
-    drawCaption({ ctx, cue: idx >= 0 ? cues[idx] : null, t, preset, width: W, height: H, pos });
+    drawCaption({ ctx, cue: idx >= 0 ? cues[idx] : null, t, preset, width: W, height: H, pos, anim });
     if (plan === "free") drawWatermark(ctx, W, H);
-  }, [cues, preset, pos, plan]);
+  }, [cues, preset, pos, anim, plan]);
 
   React.useEffect(() => {
     let raf = 0;
@@ -322,9 +331,30 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
     durationSec: meta?.dur,
     presetId,
     pos,
+    anim,
     language,
     cues,
   });
+
+  // Grab the current frame as a small JPEG for the dashboard thumbnail. The
+  // source is a local blob URL (not cross-origin), so the canvas isn't tainted.
+  const captureThumbnail = (): string | null => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return null;
+    try {
+      const w = 320;
+      const h = Math.max(1, Math.round((w * v.videoHeight) / v.videoWidth));
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(v, 0, 0, w, h);
+      return c.toDataURL("image/jpeg", 0.6);
+    } catch {
+      return null;
+    }
+  };
 
   const saveProject = async () => {
     setSaving(true);
@@ -334,6 +364,7 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
       const payload = {
         name: projectName,
         durationSec: meta?.dur,
+        thumbnail: captureThumbnail(),
         state: buildState(),
       };
       if (projectId) {
@@ -363,8 +394,18 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
   };
 
   // ── export ────────────────────────────────────────────────────────────────
-  const runExport = async () => {
+  // Quality tiers. "lossless" (Pro/Ultra) keeps native resolution at a very high
+  // bitrate; "high" is the balanced default; "friend" targets a small file size
+  // (custom MB) so a clip can be shared over chat without compression upload.
+  const runExport = async (quality: ExportQuality = isFree ? "high" : "lossless", targetMB = 12) => {
     if (!src || !cues.length) return;
+
+    // Lossless is a paid feature — nudge free users to upgrade instead.
+    if (quality === "lossless" && isFree) {
+      setUpgradeOpen(true);
+      return;
+    }
+
     setErr(null);
     setCapReached(false);
 
@@ -382,6 +423,21 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
       /* offline / no account: still let them export with watermark */
     }
 
+    // Resolve resolution cap + bitrate from the chosen quality.
+    const duration = meta?.dur ?? 0;
+    let maxEdge = 1920;
+    let videoBitrate = 12_000_000;
+    if (quality === "lossless") {
+      maxEdge = plan === "ultra" ? 3840 : 2560;
+      videoBitrate = 40_000_000;
+    } else if (quality === "friend") {
+      maxEdge = 1080;
+      // bits = MB → bytes → bits, minus the ~192kbps audio track, spread over time.
+      const bits = targetMB * 1024 * 1024 * 8;
+      const audio = 192_000 * Math.max(1, duration);
+      videoBitrate = Math.max(500_000, Math.round((bits - audio) / Math.max(1, duration)));
+    }
+
     const v = videoRef.current;
     if (v && !v.paused) v.pause();
     setExporting(true);
@@ -392,8 +448,10 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
         cues,
         preset,
         pos,
+        anim,
         watermark,
-        maxEdge: plan === "ultra" ? 3840 : 1920,
+        maxEdge,
+        videoBitrate,
         onProgress: (f) => setExportPct(Math.round(f * 100)),
       });
       const base = (projectName || "capto").replace(/[^\w-]+/g, "-").toLowerCase();
@@ -410,6 +468,188 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
   const activeIdx = activeCueIndex(cues, time);
   const dur = meta?.dur ?? 0;
   const aspect = meta ? `${meta.w} / ${meta.h}` : "9 / 16";
+
+  // ── mobile layout ─────────────────────────────────────────────────────────
+  // A purpose-built phone editor: video on top, a tabbed sheet (Style /
+  // Captions / Export) below. No timeline — seeking is a scrubber. Same engine,
+  // same state, different shell.
+  if (isNarrow) {
+    return (
+      <div className="flex h-[100dvh] flex-col bg-[var(--color-bg)]">
+        {/* top bar: back · name · export */}
+        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)]/85 px-3 py-2 backdrop-blur-xl">
+          <Link
+            href="/dashboard"
+            aria-label="Back to dashboard"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-[var(--color-fg-muted)] hover:bg-white/5 hover:text-white"
+          >
+            <ArrowLeft className="size-5" />
+          </Link>
+          <input
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            className="min-w-0 flex-1 truncate rounded-md bg-transparent px-2 py-1 text-center text-sm font-medium text-white outline-none focus:bg-white/[0.06]"
+            spellCheck={false}
+            aria-label="Project name"
+          />
+          {src && (
+            <button
+              onClick={saveProject}
+              aria-label="Save"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-[var(--color-fg-muted)] hover:bg-white/5 hover:text-white"
+            >
+              {saved ? <Check className="size-5 text-[var(--color-success)]" /> : <Save className="size-5" />}
+            </button>
+          )}
+          <Button
+            onClick={() => setMobileTab("export")}
+            variant="primary"
+            size="sm"
+            disabled={!cues.length}
+            className="shrink-0"
+          >
+            <Download className="size-4" />
+            {exporting ? `${exportPct}%` : "Export"}
+          </Button>
+        </header>
+
+        {/* video stage */}
+        <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3">
+          {!src ? (
+            <Dropzone
+              onClick={() => fileInputRef.current?.click()}
+              onDrop={onDrop}
+              relink={needsRelink}
+              expectedName={expectedName}
+            />
+          ) : (
+            <div
+              className="relative overflow-hidden rounded-[var(--radius-lg)] border border-white/10 bg-black shadow-[var(--shadow-pop)]"
+              style={{ aspectRatio: aspect, maxHeight: "100%", height: "min(100%, 52vh)" }}
+            >
+              <video
+                ref={videoRef}
+                src={src}
+                className="absolute inset-0 size-full object-contain"
+                playsInline
+                onClick={togglePlay}
+              />
+              <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 size-full" />
+              {!playing && (
+                <button
+                  onClick={togglePlay}
+                  aria-label="Play"
+                  className="absolute inset-0 flex items-center justify-center"
+                >
+                  <span className="inline-flex size-16 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm">
+                    <Play className="size-7 translate-x-0.5" />
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* transport (scrubber, no timeline on mobile) */}
+        {src && (
+          <div className="flex shrink-0 items-center gap-3 border-t border-[var(--color-border)] px-4 py-2.5">
+            <button
+              onClick={togglePlay}
+              aria-label={playing ? "Pause" : "Play"}
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-black active:scale-95"
+            >
+              {playing ? <Pause className="size-4" /> : <Play className="size-4 translate-x-px" />}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={dur || 0}
+              step={0.01}
+              value={Math.min(time, dur || 0)}
+              onChange={(e) => seek(parseFloat(e.target.value))}
+              aria-label="Seek"
+              className="flex-1 accent-[var(--color-brand)]"
+            />
+            <span className="mono shrink-0 text-[11px] text-[var(--color-fg-muted)] tnum">
+              {fmtTime(time)} / {fmtTime(dur)}
+            </span>
+          </div>
+        )}
+
+        {/* tabbed sheet */}
+        <div className="flex shrink-0 flex-col border-t border-[var(--color-border)] bg-[var(--color-bg-elev)]/70">
+          <div className="grid grid-cols-3 gap-1 p-2">
+            <TabBtn active={mobileTab === "style"} onClick={() => setMobileTab("style")} icon={<Type className="size-4" />}>
+              Style
+            </TabBtn>
+            <TabBtn active={mobileTab === "captions"} onClick={() => setMobileTab("captions")} icon={<ListVideo className="size-4" />}>
+              Captions
+            </TabBtn>
+            <TabBtn active={mobileTab === "export"} onClick={() => setMobileTab("export")} icon={<Download className="size-4" />}>
+              Export
+            </TabBtn>
+          </div>
+          <div className="max-h-[44vh] min-h-[180px] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-1">
+            {err && (
+              <div className="mb-4 flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-xs text-[var(--color-danger)]">
+                <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                <span>{err}</span>
+              </div>
+            )}
+            {capReached && (
+              <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] p-4 text-sm">
+                <p className="font-medium text-white">You have used your 3 free exports this month.</p>
+                <Button href="/billing" variant="primary" size="sm" className="mt-3 w-full">
+                  Upgrade to Pro
+                </Button>
+              </div>
+            )}
+            {mobileTab === "captions" && (
+              <CaptionsPanel
+                cues={cues}
+                activeIdx={activeIdx}
+                hasVideo={!!src}
+                transcribing={transcribing}
+                language={language}
+                onLanguage={setLanguage}
+                onTranscribe={transcribe}
+                onSeek={seek}
+                onEdit={editCueText}
+                onDelete={deleteCue}
+                onWordByWord={wordByWord}
+              />
+            )}
+            {mobileTab === "style" && (
+              <StylePanel
+                presetId={presetId}
+                onPreset={setPresetId}
+                pos={pos}
+                onPos={setPos}
+                anim={anim}
+                onAnim={setAnim}
+                freeLimit={isFree ? FREE_STYLE_LIMIT : null}
+                onLocked={() => setUpgradeOpen(true)}
+              />
+            )}
+            {mobileTab === "export" && (
+              <MobileExportPanel
+                isFree={isFree}
+                hasCues={cues.length > 0}
+                exporting={exporting}
+                exportPct={exportPct}
+                friendMB={friendMB}
+                onFriendMB={setFriendMB}
+                onExport={(q) => runExport(q, friendMB)}
+              />
+            )}
+          </div>
+        </div>
+
+        <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={onPick} />
+        {upgradeOpen && <UpgradeModal onClose={() => setUpgradeOpen(false)} />}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-0px)] flex-col">
@@ -439,7 +679,7 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
             </Button>
           )}
           <Button
-            onClick={runExport}
+            onClick={() => runExport()}
             variant="primary"
             size="sm"
             disabled={!cues.length || exporting}
@@ -561,9 +801,19 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
                 onSeek={seek}
                 onEdit={editCueText}
                 onDelete={deleteCue}
+                onWordByWord={wordByWord}
               />
             ) : (
-              <StylePanel presetId={presetId} onPreset={setPresetId} pos={pos} onPos={setPos} />
+              <StylePanel
+                presetId={presetId}
+                onPreset={setPresetId}
+                pos={pos}
+                onPos={setPos}
+                anim={anim}
+                onAnim={setAnim}
+                freeLimit={isFree ? FREE_STYLE_LIMIT : null}
+                onLocked={() => setUpgradeOpen(true)}
+              />
             )}
           </div>
 
@@ -576,6 +826,8 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
       </div>
 
       <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={onPick} />
+
+      {upgradeOpen && <UpgradeModal onClose={() => setUpgradeOpen(false)} />}
     </div>
   );
 }
@@ -707,6 +959,7 @@ function CaptionsPanel({
   onSeek,
   onEdit,
   onDelete,
+  onWordByWord,
 }: {
   cues: Cue[];
   activeIdx: number;
@@ -718,6 +971,7 @@ function CaptionsPanel({
   onSeek: (t: number) => void;
   onEdit: (id: string, text: string) => void;
   onDelete: (id: string) => void;
+  onWordByWord: () => void;
 }) {
   if (!hasVideo) {
     return (
@@ -763,6 +1017,23 @@ function CaptionsPanel({
 
   return (
     <div className="space-y-1.5">
+      {/* Quick caption actions */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button
+          onClick={onWordByWord}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
+        >
+          <Wand2 className="size-3.5" />
+          Word by word
+        </button>
+        <button
+          onClick={onTranscribe}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
+        >
+          <ListVideo className="size-3.5" />
+          Regenerate
+        </button>
+      </div>
       {cues.map((c, i) => (
         <div
           key={c.id}
@@ -806,38 +1077,83 @@ function StylePanel({
   onPreset,
   pos,
   onPos,
+  anim,
+  onAnim,
+  freeLimit,
+  onLocked,
 }: {
   presetId: string;
   onPreset: (id: string) => void;
   pos: Pos;
   onPos: (p: Pos) => void;
+  anim: CaptionAnim;
+  onAnim: (a: CaptionAnim) => void;
+  freeLimit: number | null;
+  onLocked: () => void;
 }) {
   return (
     <div>
       <label className="eyebrow mb-2 block">Caption style</label>
       <div className="grid grid-cols-2 gap-2">
-        {PRESETS.map((p) => (
+        {PRESETS.map((p, idx) => {
+          const locked = freeLimit !== null && idx >= freeLimit;
+          return (
+            <button
+              key={p.id}
+              onClick={() => (locked ? onLocked() : onPreset(p.id))}
+              className={cn(
+                "relative flex h-16 items-center justify-center rounded-[var(--radius-md)] border px-2 text-center transition-colors",
+                presetId === p.id
+                  ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)]"
+                  : "border-white/[0.08] bg-white/[0.02] hover:border-white/20",
+                locked && "opacity-60",
+              )}
+            >
+              <span
+                className="text-sm font-bold text-white"
+                style={{ fontWeight: p.fontWeight, textTransform: p.caseMode === "upper" ? "uppercase" : "none" }}
+              >
+                {p.name}
+              </span>
+              {p.popular && !locked && (
+                <span className="absolute -top-1.5 right-1.5 rounded-full bg-white px-1.5 text-[9px] font-semibold text-black">
+                  default
+                </span>
+              )}
+              {locked && (
+                <span className="absolute -top-1.5 right-1.5 inline-flex items-center gap-0.5 rounded-full bg-[var(--color-brand)] px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                  <Lock className="size-2.5" />
+                  Pro
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {freeLimit !== null && (
+        <button
+          onClick={onLocked}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] px-3 py-2 text-xs font-medium text-white transition-colors hover:border-[var(--color-brand)]/60"
+        >
+          <Sparkles className="size-3.5 text-[var(--color-brand)]" />
+          Unlock every style + custom colors with Pro
+        </button>
+      )}
+
+      <label className="eyebrow mb-2 mt-6 block">Animation</label>
+      <div className="flex flex-wrap gap-2">
+        {CAPTION_ANIMS.map((a) => (
           <button
-            key={p.id}
-            onClick={() => onPreset(p.id)}
+            key={a.id}
+            onClick={() => onAnim(a.id)}
             className={cn(
-              "relative flex h-16 items-center justify-center rounded-[var(--radius-md)] border px-2 text-center transition-colors",
-              presetId === p.id
-                ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)]"
-                : "border-white/[0.08] bg-white/[0.02] hover:border-white/20",
+              "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+              anim === a.id
+                ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-white"
+                : "border-white/[0.08] bg-white/[0.02] text-[var(--color-fg-muted)] hover:border-white/20 hover:text-white",
             )}
           >
-            <span
-              className="text-sm font-bold text-white"
-              style={{ fontWeight: p.fontWeight, textTransform: p.caseMode === "upper" ? "uppercase" : "none" }}
-            >
-              {p.name}
-            </span>
-            {p.popular && (
-              <span className="absolute -top-1.5 right-1.5 rounded-full bg-white px-1.5 text-[9px] font-semibold text-black">
-                default
-              </span>
-            )}
+            {a.name}
           </button>
         ))}
       </div>
@@ -857,6 +1173,181 @@ function StylePanel({
       <div className="mt-1 flex justify-between text-[10px] text-[var(--color-fg-subtle)]">
         <span>Higher</span>
         <span>Lower</span>
+      </div>
+    </div>
+  );
+}
+
+function MobileExportPanel({
+  isFree,
+  hasCues,
+  exporting,
+  exportPct,
+  friendMB,
+  onFriendMB,
+  onExport,
+}: {
+  isFree: boolean;
+  hasCues: boolean;
+  exporting: boolean;
+  exportPct: number;
+  friendMB: number;
+  onFriendMB: (n: number) => void;
+  onExport: (q: ExportQuality) => void;
+}) {
+  if (!hasCues) {
+    return (
+      <p className="py-4 text-sm text-[var(--color-fg-muted)]">
+        Generate captions first — then pick how you want to export.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2.5">
+      {/* Lossless (paid) */}
+      <button
+        onClick={() => onExport("lossless")}
+        disabled={exporting}
+        className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-white/[0.08] bg-white/[0.02] p-3.5 text-left transition-colors hover:border-white/20 disabled:opacity-60"
+      >
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+          <Gem className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2 text-sm font-medium text-white">
+            Lossless
+            {isFree && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-brand)] px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                <Lock className="size-2.5" />
+                Pro
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 block text-xs text-[var(--color-fg-muted)]">
+            Native resolution, maximum quality.
+          </span>
+        </span>
+      </button>
+
+      {/* High (default) */}
+      <button
+        onClick={() => onExport("high")}
+        disabled={exporting}
+        className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] p-3.5 text-left transition-colors hover:border-[var(--color-brand)]/60 disabled:opacity-60"
+      >
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white">
+          <Download className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="text-sm font-medium text-white">High — recommended</span>
+          <span className="mt-0.5 block text-xs text-[var(--color-fg-muted)]">
+            1080p, crisp and a sensible file size.
+          </span>
+        </span>
+      </button>
+
+      {/* Send to a friend (custom MB) */}
+      <div className="rounded-[var(--radius-lg)] border border-white/[0.08] bg-white/[0.02] p-3.5">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white">
+            <Send className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-white">Send to a friend</div>
+            <div className="mt-0.5 text-xs text-[var(--color-fg-muted)]">
+              Tiny file that drops straight into a chat.
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between text-xs text-[var(--color-fg-muted)]">
+          <span>Target size</span>
+          <span className="mono text-white tnum">~{friendMB} MB</span>
+        </div>
+        <input
+          type="range"
+          min={2}
+          max={25}
+          step={1}
+          value={friendMB}
+          onChange={(e) => onFriendMB(parseInt(e.target.value, 10))}
+          aria-label="Target file size in megabytes"
+          className="mt-2 w-full accent-[var(--color-brand)]"
+        />
+        <Button
+          onClick={() => onExport("friend")}
+          disabled={exporting}
+          variant="secondary"
+          size="md"
+          className="mt-3 w-full"
+        >
+          Export ~{friendMB} MB
+        </Button>
+      </div>
+
+      {exporting && (
+        <div className="pt-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full rounded-full bg-magic transition-[width] duration-200"
+              style={{ width: `${exportPct}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-center text-xs text-[var(--color-fg-muted)]">Exporting {exportPct}%…</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UpgradeModal({ onClose }: { onClose: () => void }) {
+  const perks = [
+    "Every caption style + custom colors",
+    "Unlimited videos & exports",
+    "Lossless 4K export, no watermark",
+    "Regenerate captions any time",
+  ];
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-[var(--color-brand)]/20 blur-3xl"
+        />
+        <div className="relative">
+          <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+            <Crown className="size-6" />
+          </div>
+          <h3 className="heading mt-4 text-2xl text-white">Unlock the full editor</h3>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--color-fg-muted)]">
+            You&rsquo;re on the free plan. Upgrade to Pro to remove every limit and ship captions
+            without the watermark.
+          </p>
+          <ul className="mt-5 space-y-2.5">
+            {perks.map((perk) => (
+              <li key={perk} className="flex items-start gap-2.5 text-sm text-[var(--color-fg)]">
+                <Sparkles className="mt-0.5 size-4 shrink-0 text-[var(--color-brand)]" />
+                {perk}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-7 space-y-2.5">
+            <Button href="/billing" size="lg" className="w-full">
+              Upgrade to Pro
+              <ArrowLeft className="size-4 rotate-180" />
+            </Button>
+            <Button onClick={onClose} variant="ghost" size="lg" className="w-full">
+              Maybe later
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

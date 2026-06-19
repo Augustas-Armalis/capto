@@ -37,7 +37,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   if (!ctxv) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as
-    | { name?: string; durationSec?: number; state?: unknown }
+    | { name?: string; durationSec?: number; state?: unknown; thumbnail?: string }
     | null;
   if (!body) return NextResponse.json({ error: "Invalid body." }, { status: 400 });
 
@@ -45,6 +45,12 @@ export async function PUT(req: Request, ctx: Ctx) {
   if (typeof body.name === "string") patch.name = body.name.slice(0, 120);
   if (typeof body.durationSec === "number") patch.durationSec = Math.round(body.durationSec);
   if (body.state !== undefined) patch.state = body.state ? JSON.stringify(body.state) : null;
+  if (
+    typeof body.thumbnail === "string" &&
+    body.thumbnail.startsWith("data:image") &&
+    body.thumbnail.length < 200_000
+  )
+    patch.thumbnailUrl = body.thumbnail;
 
   await ctxv.db
     .update(project)
