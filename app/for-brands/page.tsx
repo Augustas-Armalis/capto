@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Section, SectionEyebrow, SectionTitle } from "@/components/ui/section";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/for-brands" },
   title: "For brands & agencies",
   description:
     "Capto for content teams. Brand-consistent caption presets, fast turnaround, per-client workspaces.",

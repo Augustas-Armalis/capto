@@ -16,22 +16,30 @@ const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
  * timing. The video itself is never stored — it lives on the user's device.
  */
 async function resolveGroqKey(): Promise<string | null> {
-  if (env.houseGroqKey) return env.houseGroqKey;
-  if (!isConfigured.db()) return null;
-  const session = await getCurrentSession();
-  if (!session?.user?.id) return null;
-  const db = getDb();
-  const [row] = await db
-    .select({ encryptedKey: userApiKey.encryptedKey })
-    .from(userApiKey)
-    .where(and(eq(userApiKey.userId, session.user.id), eq(userApiKey.provider, "groq")))
-    .limit(1);
-  if (!row) return null;
-  try {
-    return decrypt(row.encryptedKey);
-  } catch {
-    return null;
+  // Prefer the user's own key (bring-your-own-key is the promise). Only fall
+  // back to the house key when the user has none, so paid users never silently
+  // bill the house account.
+  if (isConfigured.db()) {
+    const session = await getCurrentSession();
+    if (session?.user?.id) {
+      const db = getDb();
+      const [row] = await db
+        .select({ encryptedKey: userApiKey.encryptedKey })
+        .from(userApiKey)
+        .where(and(eq(userApiKey.userId, session.user.id), eq(userApiKey.provider, "groq")))
+        .limit(1);
+      if (row) {
+        try {
+          const k = decrypt(row.encryptedKey);
+          if (k) return k;
+        } catch {
+          /* fall through to house key */
+        }
+      }
+    }
   }
+  if (env.houseGroqKey) return env.houseGroqKey;
+  return null;
 }
 
 export async function POST(req: Request) {

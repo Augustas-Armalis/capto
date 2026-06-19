@@ -10,6 +10,7 @@ import { Section, SectionEyebrow, SectionTitle, SectionLede } from "@/components
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/for-creators" },
   title: "For creators",
   description:
     "The fastest way to caption short-form video. Made for creators who post every day and can't afford to spend 30 minutes on a 30-second clip.",

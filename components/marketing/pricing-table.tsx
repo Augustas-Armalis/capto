@@ -23,7 +23,7 @@ function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) 
         >
           {label}
           {label === "Annual" && (
-            <span className={cn("mono text-[10px]", annual ? "text-[var(--color-violet)]" : "text-white/40")}>save 28%</span>
+            <span className={cn("mono text-[10px]", annual ? "text-[var(--color-violet)]" : "text-white/40")}>save up to 28%</span>
           )}
         </button>
       ))}

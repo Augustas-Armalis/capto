@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/marketing/site-footer";
 import { Container } from "@/components/ui/container";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/terms" },
   title: "Terms",
   description: "Terms of service for Capto.",
 };

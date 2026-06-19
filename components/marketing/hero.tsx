@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import Image from "next/image";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,14 @@ import { Aurora } from "./aurora";
 import { CONTLES_URL } from "@/lib/utils";
 
 export function Hero() {
+  const reduce = useReducedMotion();
   return (
     <section className="relative overflow-hidden pt-28 pb-14 sm:pt-32">
       <Aurora preset="hero" />
 
       <Container className="relative">
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
+          initial={reduce ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="mx-auto max-w-4xl text-center"
@@ -27,7 +28,7 @@ export function Hero() {
             rel="noopener noreferrer"
             className="eyebrow group inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] py-1 pl-1 pr-2.5 backdrop-blur-md transition-colors hover:border-white/20 hover:text-[var(--color-fg-muted)]"
           >
-            <Image src="/contles.png" alt="" width={13} height={13} className="rounded-[3px]" />
+            <Image src="/contles.png" alt="" width={12} height={12} className="shrink-0" />
             Powered by Contles
             <ArrowUpRight className="size-2.5 opacity-50 transition-all group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </a>
@@ -59,7 +60,7 @@ export function Hero() {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 28 }}
+          initial={reduce ? false : { opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
           className="mx-auto mt-12 max-w-4xl"

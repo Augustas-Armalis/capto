@@ -14,7 +14,8 @@
 
   --color-fg: oklch(0.99 0 0);
   --color-fg-muted: oklch(0.72 0.01 280);
-  --color-fg-subtle: oklch(0.52 0.012 280);
+  /* 0.62 clears WCAG AA (≈5.7:1 on bg) for small informational text */
+  --color-fg-subtle: oklch(0.62 0.012 280);
 
   --color-border: oklch(0.24 0.012 280);
   --color-border-strong: oklch(0.34 0.014 280);
@@ -86,6 +87,13 @@ button:not(:disabled),
 summary,
 label[for] {
   cursor: pointer;
+}
+
+/* Visible keyboard focus baseline for raw interactive elements on the dark UI */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ── Typography, DM Sans medium, tight negative tracking ─────────────── */
@@ -279,6 +287,10 @@ label[for] {
 @keyframes fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .fade-up { animation: fade-up var(--dur-slow) var(--ease-out) both; }
 
+/* Gentle caption crossfade used by the hero editor mock */
+@keyframes cap-in { from { opacity: 0; transform: translateY(5px); filter: blur(3px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+.cap-in { animation: cap-in 440ms var(--ease-out) both; }
+
 @keyframes marquee-x { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .marquee-track { animation: marquee-x linear infinite; will-change: transform; }
 .marquee-paused:hover .marquee-track { animation-play-state: paused; }
@@ -286,10 +298,29 @@ label[for] {
 @keyframes playhead { 0% { left: 6%; } 100% { left: 90%; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fade-up, .marquee-track, .mesh { animation: none !important; }
+  .fade-up, .marquee-track, .mesh, .cap-in { animation: none !important; }
   .glow-border:hover::before { animation: none; }
 }
 
 .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 4px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Custom scrollbar, themed to the dark UI ─────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(1 0 0 / 0.16) transparent;
+}
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: oklch(1 0 0 / 0.15);
+  border-radius: 999px;
+  border: 3px solid var(--color-bg);
+  background-clip: padding-box;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.74 0.15 268 / 0.7);
+}
+::-webkit-scrollbar-corner { background: transparent; }

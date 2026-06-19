@@ -5,6 +5,7 @@ import { SiteFooter } from "@/components/marketing/site-footer";
 import { Container } from "@/components/ui/container";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/contact" },
   title: "Contact",
   description: "Reach the team behind Capto at hello@capto.video.",
 };

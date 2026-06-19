@@ -43,11 +43,6 @@ export function softwareAppLd() {
       { "@type": "Offer", name: "Pro", price: "6.99", priceCurrency: "EUR" },
       { "@type": "Offer", name: "Ultra", price: "17.99", priceCurrency: "EUR" },
     ],
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "4.9",
-      ratingCount: "212",
-    },
     description:
       "Word-perfect AI captions for short-form video, drag, style and time on a real timeline, export with no watermark.",
   };

@@ -62,12 +62,12 @@ export function SettingsClient({ name, email }: { name: string; email: string })
         <h2 className="text-lg font-semibold">Profile</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">Name</label>
-            <Input defaultValue={name} disabled />
+            <label htmlFor="profile-name" className="text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">Name</label>
+            <Input id="profile-name" defaultValue={name} disabled />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">Email</label>
-            <Input defaultValue={email} disabled />
+            <label htmlFor="profile-email" className="text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">Email</label>
+            <Input id="profile-email" defaultValue={email} disabled />
           </div>
         </div>
         <p className="mt-3 text-xs text-[var(--color-fg-subtle)]">
@@ -105,9 +105,10 @@ export function SettingsClient({ name, email }: { name: string; email: string })
                   </Badge>
                   <button
                     onClick={() => deleteKey("groq")}
+                    aria-label="Delete Groq key"
                     className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-elev)]"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-3.5" aria-hidden />
                   </button>
                 </div>
               )}
@@ -145,9 +146,10 @@ export function SettingsClient({ name, email }: { name: string; email: string })
                   </Badge>
                   <button
                     onClick={() => deleteKey("openai")}
+                    aria-label="Delete OpenAI key"
                     className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-elev)]"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-3.5" aria-hidden />
                   </button>
                 </div>
               )}

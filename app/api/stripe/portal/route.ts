@@ -5,6 +5,8 @@ import { getStripe } from "@/lib/stripe";
 import { getDb, user as userTable } from "@/lib/db";
 import { env, isConfigured } from "@/lib/env";
 
+export const runtime = "nodejs";
+
 export async function POST() {
   if (!isConfigured.stripe()) {
     return NextResponse.json({ error: "Stripe is not configured." }, { status: 503 });

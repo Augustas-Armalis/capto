@@ -175,6 +175,14 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
     if (f && f.type.startsWith("video/")) loadFile(f, needsRelink);
   };
 
+  // Release the active object URL when the editor unmounts or the source changes
+  // (revoking an already-revoked URL is a harmless no-op).
+  React.useEffect(() => {
+    return () => {
+      if (src) URL.revokeObjectURL(src);
+    };
+  }, [src]);
+
   // ── video element wiring ──────────────────────────────────────────────────
   React.useEffect(() => {
     const v = videoRef.current;
@@ -279,14 +287,20 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
         if (c.id !== id) return c;
         const parts = text.split(/\s+/).filter(Boolean);
         const span = Math.max(0.001, c.end - c.start);
-        const words: Word[] =
-          parts.length > 0
-            ? parts.map((w, i) => ({
-                word: w,
-                start: c.start + (span * i) / parts.length,
-                end: c.start + (span * (i + 1)) / parts.length,
-              }))
-            : c.words;
+        let words: Word[];
+        if (parts.length === 0) {
+          words = c.words;
+        } else if (parts.length === c.words.length) {
+          // Same word count (e.g. fixing a typo): keep the real per-word timing.
+          words = parts.map((w, i) => ({ word: w, start: c.words[i].start, end: c.words[i].end }));
+        } else {
+          // Added/removed words: fall back to even spacing across the cue.
+          words = parts.map((w, i) => ({
+            word: w,
+            start: c.start + (span * i) / parts.length,
+            end: c.start + (span * (i + 1)) / parts.length,
+          }));
+        }
         return { ...c, text, words };
       }),
     );
@@ -476,9 +490,10 @@ function Editor({ plan, initialProject }: { plan: Plan; initialProject: InitialP
               <div className="flex items-center gap-3">
                 <button
                   onClick={togglePlay}
+                  aria-label={playing ? "Pause" : "Play"}
                   className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105 active:scale-95"
                 >
-                  {playing ? <Pause className="size-4" /> : <Play className="size-4 translate-x-px" />}
+                  {playing ? <Pause className="size-4" aria-hidden /> : <Play className="size-4 translate-x-px" aria-hidden />}
                 </button>
                 <span className="mono shrink-0 text-xs text-[var(--color-fg-muted)] tnum">
                   {fmtTime(time)} / {fmtTime(dur)}
@@ -715,8 +730,9 @@ function CaptionsPanel({
   if (!cues.length) {
     return (
       <div>
-        <label className="eyebrow mb-2 block">Spoken language</label>
+        <label htmlFor="spoken-language" className="eyebrow mb-2 block">Spoken language</label>
         <select
+          id="spoken-language"
           value={language}
           onChange={(e) => onLanguage(e.target.value)}
           className="mb-4 w-full rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-white/25"
@@ -766,15 +782,17 @@ function CaptionsPanel({
             </button>
             <button
               onClick={() => onDelete(c.id)}
+              aria-label={`Delete caption at ${fmtTime(c.start)}`}
               className="text-[var(--color-fg-subtle)] opacity-0 transition-opacity hover:text-[var(--color-danger)] group-hover:opacity-100"
             >
-              <Trash2 className="size-3.5" />
+              <Trash2 className="size-3.5" aria-hidden />
             </button>
           </div>
           <input
             value={c.text}
             onChange={(e) => onEdit(c.id, e.target.value)}
-            className="mt-1 w-full bg-transparent text-sm text-white outline-none"
+            aria-label={`Caption at ${fmtTime(c.start)}`}
+            className="mt-1 w-full rounded bg-transparent px-1 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
             spellCheck={false}
           />
         </div>
@@ -824,13 +842,15 @@ function StylePanel({
         ))}
       </div>
 
-      <label className="eyebrow mb-2 mt-6 block">Vertical position</label>
+      <label htmlFor="caption-y" className="eyebrow mb-2 mt-6 block">Vertical position</label>
       <input
+        id="caption-y"
         type="range"
         min={0.4}
         max={0.92}
         step={0.01}
         value={pos.y}
+        aria-label="Caption vertical position"
         onChange={(e) => onPos({ ...pos, y: parseFloat(e.target.value) })}
         className="w-full accent-[var(--color-brand)]"
       />

@@ -22,17 +22,27 @@ function PlusMinus({ open }: { open: boolean }) {
   );
 }
 
-function Item({ qa, open, onToggle }: { qa: QA; open: boolean; onToggle: () => void }) {
+function Item({ qa, open, onToggle, id }: { qa: QA; open: boolean; onToggle: () => void; id: string }) {
   return (
     <div className="border-b border-white/[0.07]">
       <button
         onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={`${id}-panel`}
+        id={`${id}-btn`}
         className="flex w-full items-center justify-between gap-4 py-5 text-left text-[var(--color-fg-muted)] transition-colors hover:text-white"
       >
         <span className="text-[15px] font-medium text-white">{qa.q}</span>
-        <PlusMinus open={open} />
+        <span aria-hidden>
+          <PlusMinus open={open} />
+        </span>
       </button>
-      <div className={cn("grid overflow-hidden transition-all duration-300", open ? "grid-rows-[1fr] pb-5" : "grid-rows-[0fr]")}>
+      <div
+        id={`${id}-panel`}
+        role="region"
+        aria-labelledby={`${id}-btn`}
+        className={cn("grid overflow-hidden transition-all duration-300", open ? "grid-rows-[1fr] pb-5" : "grid-rows-[0fr]")}
+      >
         <div className="min-h-0 text-[15px] leading-relaxed text-[var(--color-fg-muted)]">{qa.a}</div>
       </div>
     </div>
@@ -45,7 +55,7 @@ export function FaqAccordion({ faqs = DEFAULT_FAQS, withChrome = true }: { faqs?
   const body = (
     <div className="mx-auto max-w-2xl">
       {faqs.map((qa, i) => (
-        <Item key={qa.q} qa={qa} open={open === i} onToggle={() => setOpen(open === i ? null : i)} />
+        <Item key={qa.q} id={`faq-${i}`} qa={qa} open={open === i} onToggle={() => setOpen(open === i ? null : i)} />
       ))}
     </div>
   );

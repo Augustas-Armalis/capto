@@ -17,7 +17,7 @@ export function EditorMock() {
 
   React.useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const id = setInterval(() => setActive((a) => (a + 1) % CUES.length), 1800);
+    const id = setInterval(() => setActive((a) => (a + 1) % CUES.length), 2400);
     return () => clearInterval(id);
   }, []);
 
@@ -41,7 +41,10 @@ export function EditorMock() {
           {/* canvas */}
           <div className="relative aspect-[16/10] flex-1 bg-[#070709]">
             <div className="absolute inset-x-0 bottom-0 top-0 flex items-end justify-center px-6 pb-24">
-              <div className="text-center text-2xl font-bold uppercase leading-tight tracking-tight text-white sm:text-4xl">
+              <div
+                key={active}
+                className="cap-in text-center text-2xl font-bold uppercase leading-tight tracking-tight text-white sm:text-4xl"
+              >
                 {cue.text.split(" ").map((w, i) => (
                   <span key={i} className={i === cue.key ? "text-magic" : "text-white"}>
                     {w}{" "}
@@ -58,7 +61,7 @@ export function EditorMock() {
                     <div
                       key={i}
                       className={cn(
-                        "absolute top-1 h-3 rounded transition-colors duration-300",
+                        "absolute top-1 h-3 rounded transition-colors duration-500",
                         i === active ? "bg-magic" : "bg-white/12",
                       )}
                       style={{ left: `${c.left}%`, width: `${c.w}%` }}

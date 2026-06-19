@@ -11,8 +11,9 @@ const heroDescription =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: { default: siteName, template: `%s · ${siteName}` },
+  title: { default: "Capto, the focused AI caption tool for short-form video", template: `%s · ${siteName}` },
   description: heroDescription,
+  alternates: { canonical: "/" },
   keywords: [
     "AI captions",
     "AI subtitle generator",

@@ -134,7 +134,13 @@ export async function exportCaptionedVideo(opts: ExportOpts): Promise<ExportResu
     recorder.onstop = () => {
       cleanup();
       signal?.removeEventListener("abort", onAbort);
-      resolve({ blob: new Blob(chunks, { type: mime }), ext, mime });
+      const blob = new Blob(chunks, { type: mime });
+      if (!chunks.length || blob.size === 0) {
+        reject(new Error("Export produced no data. Try a shorter clip or a different browser."));
+        return;
+      }
+      onProgress?.(1);
+      resolve({ blob, ext, mime });
     };
     recorder.onerror = () => {
       cleanup();
@@ -151,9 +157,12 @@ export async function exportCaptionedVideo(opts: ExportOpts): Promise<ExportResu
       if (watermark) drawWatermark(ctx, w, h);
       onProgress?.(Math.min(1, t / duration));
 
-      if (video.ended || t >= duration - 0.02) {
+      if (video.ended || t >= duration - 1 / 30) {
         cancelAnimationFrame(raf);
+        onProgress?.(1);
+        // Flush any buffered frame data, then stop on the next tick.
         try {
+          recorder.requestData?.();
           recorder.stop();
         } catch {
           /* noop */

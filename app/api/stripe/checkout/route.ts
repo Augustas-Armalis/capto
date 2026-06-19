@@ -7,6 +7,8 @@ import { env, isConfigured } from "@/lib/env";
 import { priceIdFor, currencyFromString, type Interval } from "@/lib/billing";
 import type { PlanId } from "@/lib/pricing";
 
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
   if (!isConfigured.stripe()) {
     return NextResponse.json(

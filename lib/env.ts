@@ -15,8 +15,8 @@ export const env = {
   stripeWebhookSecret: read("STRIPE_WEBHOOK_SECRET"),
   stripePublishable: read("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"),
   encryptionKey: read("ENCRYPTION_KEY"),
-  // Reserved: not yet consumed. Roadmap, house transcription fallback so the
-  // free tier can transcribe without a user-supplied key. No code reads this yet.
+  // House Groq key. /api/transcribe uses it ONLY as a fallback when the user
+  // hasn't supplied their own key. Optional; leave unset for strict BYOK.
   houseGroqKey: read("GROQ_API_KEY"),
 };
 

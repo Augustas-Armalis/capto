@@ -11,6 +11,9 @@ export function getStripe(): Stripe {
   _stripe = new Stripe(env.stripeSecret, {
     apiVersion: "2025-02-24.acacia",
     typescript: true,
+    // Cloudflare Workers has no Node http stack — use the Fetch client so the
+    // SDK's outbound calls work (otherwise every Stripe call hangs).
+    httpClient: Stripe.createFetchHttpClient(),
   });
   return _stripe;
 }

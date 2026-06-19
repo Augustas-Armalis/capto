@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, env.stripeWebhookSecret);
+    event = await stripe.webhooks.constructEventAsync(body, sig, env.stripeWebhookSecret);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "bad signature";
     return NextResponse.json({ error: `Webhook signature failed: ${msg}` }, { status: 400 });

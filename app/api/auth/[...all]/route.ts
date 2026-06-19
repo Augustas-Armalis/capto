@@ -2,6 +2,8 @@ import { toNextJsHandler } from "better-auth/next-js";
 import { getAuth } from "@/lib/auth";
 import { isConfigured } from "@/lib/env";
 
+export const runtime = "nodejs";
+
 function handlers() {
   if (!isConfigured.db() || !isConfigured.auth()) {
     const stub = () =>

@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/marketing/site-footer";
 import { Container } from "@/components/ui/container";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/privacy" },
   title: "Privacy",
   description: "How Capto handles your data, short and plain.",
 };

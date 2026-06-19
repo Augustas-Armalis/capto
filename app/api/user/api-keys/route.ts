@@ -6,6 +6,8 @@ import { getDb, userApiKey } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { isConfigured } from "@/lib/env";
 
+export const runtime = "nodejs";
+
 function unauthorized() {
   return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 }

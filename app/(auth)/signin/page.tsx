@@ -7,6 +7,7 @@ import { SignInForm } from "@/components/auth/signin-form";
 export const metadata: Metadata = {
   title: "Sign in",
   description: "Sign in to Capto.",
+  robots: { index: false },
 };
 
 export default function SignInPage() {

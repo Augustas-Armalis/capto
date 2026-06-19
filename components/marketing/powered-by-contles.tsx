@@ -11,7 +11,7 @@ export function PoweredByContles({ variant = "footer" }: { variant?: "footer" | 
         rel="noopener noreferrer"
         className="group inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] py-1 pl-1.5 pr-3 text-xs font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all duration-[var(--dur-fast)] hover:border-white/20 hover:bg-white/[0.07] hover:text-white"
       >
-        <Image src="/contles.png" alt="" width={14} height={14} className="rounded-[3px]" />
+        <Image src="/contles.png" alt="" width={12} height={12} className="shrink-0" />
         Powered by <span className="font-semibold text-white">Contles</span>
         <ArrowUpRight className="size-3 opacity-50 transition-all group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
       </a>
@@ -42,7 +42,7 @@ export function PoweredByContles({ variant = "footer" }: { variant?: "footer" | 
       rel="noopener noreferrer"
       className="group inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.03] py-1.5 pl-1.5 pr-3 text-sm text-[var(--color-fg-muted)] transition-all duration-[var(--dur-fast)] hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
     >
-      <Image src="/contles.png" alt="" width={20} height={20} className="rounded-[5px]" />
+      <Image src="/contles.png" alt="" width={16} height={16} className="shrink-0" />
       Powered by <span className="font-semibold text-white">Contles</span>
       <ArrowUpRight className="size-3.5 opacity-50 transition-all group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
     </a>

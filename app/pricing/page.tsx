@@ -8,6 +8,7 @@ import { DEFAULT_FAQS } from "@/lib/faqs";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/pricing" },
   title: "Pricing, One honest plan",
   description:
     "Capto Pro is €6.99/month. Free plan available with your own Groq API key. Cancel any time.",

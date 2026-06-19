@@ -1,13 +1,23 @@
 "use client";
 
 import * as React from "react";
+import { usePathname } from "next/navigation";
 import Lenis from "lenis";
 
+// App surfaces that should NOT run smooth scroll (precision tools / no long
+// marketing scroll). The editor especially needs its full frame budget.
+const NO_SMOOTH = ["/editor", "/dashboard", "/settings", "/billing", "/onboarding"];
+
 /**
- * Lenis smooth scroll. Disabled when the OS prefers reduced motion.
+ * Lenis smooth scroll on marketing routes only. Disabled when the OS prefers
+ * reduced motion or on app/editor surfaces.
  */
 export function SmoothScroll() {
+  const pathname = usePathname();
+  const enabled = !NO_SMOOTH.some((p) => pathname === p || pathname.startsWith(p + "/"));
+
   React.useEffect(() => {
+    if (!enabled) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const lenis = new Lenis({
@@ -43,7 +53,7 @@ export function SmoothScroll() {
       document.removeEventListener("click", onClick);
       lenis.destroy();
     };
-  }, []);
+  }, [enabled]);
 
   return null;
 }

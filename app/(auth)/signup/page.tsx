@@ -7,6 +7,7 @@ import { SignUpForm } from "@/components/auth/signup-form";
 export const metadata: Metadata = {
   title: "Create your account",
   description: "Start captioning your videos with Capto, free.",
+  robots: { index: false },
 };
 
 export default function SignUpPage() {

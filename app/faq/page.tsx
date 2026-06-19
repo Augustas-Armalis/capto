@@ -5,6 +5,7 @@ import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/faq" },
   title: "FAQ",
   description: "Frequently asked questions about Capto.",
 };

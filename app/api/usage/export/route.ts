@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+import { neon } from "@neondatabase/serverless";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, user } from "@/lib/db";
-import { isConfigured } from "@/lib/env";
+import { env, isConfigured } from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -17,33 +18,23 @@ type Usage = {
   remaining: number | null;
 };
 
-async function loadUsage(): Promise<{ usage: Usage; userId: string } | null> {
+// Read-only view of the user's usage (no mutation — safe to call from renders).
+async function readUsage(): Promise<{ usage: Usage; userId: string } | null> {
   if (!isConfigured.db()) return null;
   const session = await getCurrentSession();
   if (!session?.user?.id) return null;
   const db = getDb();
   const [row] = await db
-    .select({
-      plan: user.plan,
-      used: user.monthlyExportsUsed,
-      resetAt: user.monthlyResetAt,
-    })
+    .select({ plan: user.plan, used: user.monthlyExportsUsed, resetAt: user.monthlyResetAt })
     .from(user)
     .where(eq(user.id, session.user.id))
     .limit(1);
   if (!row) return null;
 
-  // Roll the monthly window if it has lapsed.
-  let used = row.used;
-  const now = Date.now();
-  if (row.resetAt && now - new Date(row.resetAt).getTime() > MONTH_MS) {
-    used = 0;
-    await db
-      .update(user)
-      .set({ monthlyExportsUsed: 0, monthlyResetAt: new Date() })
-      .where(eq(user.id, session.user.id));
-  }
-
+  // Effective used: 0 if the monthly window has lapsed (the actual reset happens
+  // atomically on the next consume, not here).
+  const lapsed = row.resetAt && Date.now() - new Date(row.resetAt).getTime() > MONTH_MS;
+  const used = lapsed ? 0 : row.used;
   const isFree = row.plan === "free";
   const limit = isFree ? FREE_MONTHLY_EXPORTS : null;
   return {
@@ -59,9 +50,7 @@ async function loadUsage(): Promise<{ usage: Usage; userId: string } | null> {
 }
 
 export async function GET() {
-  const r = await loadUsage();
-  // No DB / not signed in -> treat as free with watermark, no hard cap (the
-  // editor still works locally; counting only matters when accounts exist).
+  const r = await readUsage();
   if (!r)
     return NextResponse.json({
       plan: "free",
@@ -73,28 +62,37 @@ export async function GET() {
   return NextResponse.json(r.usage);
 }
 
-// Consume one export. Returns allowed:false when a free user is out of exports.
+// Consume one export. Single atomic statement handles month-rollover, the free
+// cap, and the increment, so concurrent requests can't exceed the cap.
 export async function POST() {
-  const r = await loadUsage();
-  if (!r) return NextResponse.json({ allowed: true, watermark: true });
+  const session = await getCurrentSession();
+  if (!isConfigured.db() || !session?.user?.id) {
+    return NextResponse.json({ allowed: true, watermark: true });
+  }
 
-  if (r.usage.limit !== null && r.usage.used >= r.usage.limit) {
+  const sql = neon(env.databaseUrl);
+  const months = `${MONTH_MS} milliseconds`;
+  const cap = FREE_MONTHLY_EXPORTS;
+  const rows = (await sql`
+    UPDATE "user" u SET
+      monthly_exports_used = (CASE WHEN now() - u.monthly_reset_at > ${months}::interval THEN 0 ELSE u.monthly_exports_used END) + 1,
+      monthly_reset_at = CASE WHEN now() - u.monthly_reset_at > ${months}::interval THEN now() ELSE u.monthly_reset_at END
+    WHERE u.id = ${session.user.id}
+      AND (u.plan <> 'free' OR (CASE WHEN now() - u.monthly_reset_at > ${months}::interval THEN 0 ELSE u.monthly_exports_used END) < ${cap})
+    RETURNING u.monthly_exports_used AS used, u.plan AS plan
+  `) as { used: number; plan: "free" | "pro" | "ultra" }[];
+
+  if (!rows.length) {
     return NextResponse.json(
-      { allowed: false, watermark: true, used: r.usage.used, limit: r.usage.limit },
+      { allowed: false, watermark: true, used: cap, limit: cap },
       { status: 402 },
     );
   }
-
-  const db = getDb();
-  await db
-    .update(user)
-    .set({ monthlyExportsUsed: r.usage.used + 1 })
-    .where(eq(user.id, r.userId));
-
+  const { used, plan } = rows[0];
   return NextResponse.json({
     allowed: true,
-    watermark: r.usage.watermark,
-    used: r.usage.used + 1,
-    limit: r.usage.limit,
+    watermark: plan === "free",
+    used,
+    limit: plan === "free" ? cap : null,
   });
 }
