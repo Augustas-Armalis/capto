@@ -31,9 +31,8 @@ export function Hero() {
           </h1>
 
           <p className="mx-auto mt-6 max-w-xl text-lg text-[var(--color-fg-muted)]">
-            Upload a clip and Capto times every word to the audio, styles it to your brand, and
-            exports in full quality with no watermark. Captions are all we make, so they come out
-            better.
+            Captions that hold attention and grow your reach, from a tool built for nothing else.
+            Endlessly customizable, exported lossless, no watermark.
           </p>
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
