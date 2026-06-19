@@ -22,6 +22,9 @@ export const env = {
   // verification is skipped so the app still works without it.
   resendApiKey: read("RESEND_API_KEY"),
   resendFrom: read("RESEND_FROM", "Capto <onboarding@capto.video>"),
+  // Google Analytics 4 measurement id (G-XXXXXXXXXX). When set, the GA4 tag is
+  // injected; when unset, nothing is loaded — keeps page weight zero by default.
+  gaId: read("NEXT_PUBLIC_GA_ID"),
 };
 
 export const isConfigured = {

@@ -8,12 +8,12 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 // export; everything else is locked to our own origin + Stripe Checkout.
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://api.stripe.com",
+  "connect-src 'self' https://api.stripe.com https://www.google-analytics.com https://*.analytics.google.com https://*.g.doubleclick.net",
   "frame-src 'self' https://checkout.stripe.com https://js.stripe.com",
   "form-action 'self' https://checkout.stripe.com",
   "frame-ancestors 'self'",

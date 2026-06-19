@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { env } from "@/lib/env";
 import { SmoothScroll } from "@/components/smooth-scroll";
+import { GoogleAnalytics } from "@/components/marketing/google-analytics";
 import "./globals.css";
 
 const siteName = env.siteName;
@@ -72,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-[var(--color-bg)] text-[var(--color-fg)] antialiased">
         <SmoothScroll />
         {children}
+        <GoogleAnalytics />
       </body>
     </html>
   );
