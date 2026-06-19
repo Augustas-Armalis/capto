@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CursorGlow } from "./cursor-glow";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
@@ -29,7 +28,6 @@ export function SiteNav() {
 
   return (
     <>
-    <CursorGlow />
     <header className={cn("fixed inset-x-0 top-0 z-50 transition-all duration-[var(--dur-base)]", scrolled ? "py-2" : "py-4")}>
       <div className="mx-auto w-full max-w-6xl px-4">
         <nav

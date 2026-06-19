@@ -218,18 +218,6 @@ label[for] {
 }
 .spotlight:hover::before { opacity: 1; }
 
-/* Tiny cursor dot that trails the pointer and cycles brand colors */
-.cursor-dot {
-  background-color: oklch(0.74 0.18 268);
-  box-shadow: 0 0 10px 1px oklch(1 0 0 / 0.25);
-  animation: cursor-hue 7s linear infinite;
-}
-@keyframes cursor-hue {
-  0%, 100% { background-color: oklch(0.74 0.18 268); }
-  33% { background-color: oklch(0.82 0.13 224); }
-  66% { background-color: oklch(0.72 0.23 324); }
-}
-
 /* ── Animated trace border (Supabase-style), runs on hover ──────────── */
 .glow-border { position: relative; }
 .glow-border::before {

@@ -54,6 +54,10 @@ export function SiteFooter() {
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--color-fg-muted)]">
               Captions, redesigned. AI subtitles for short-form video.
             </p>
+            <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-[var(--color-fg-subtle)]">
+              <span className="size-1.5 rounded-full bg-[var(--color-brand)]" />
+              Desktop apps for Mac and Windows coming soon
+            </p>
             <div className="mt-6">
               <PoweredByContles />
             </div>

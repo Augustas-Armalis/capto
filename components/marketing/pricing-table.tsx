@@ -65,11 +65,15 @@ export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
   const grid = (
     <div className="grid items-stretch gap-5 lg:grid-cols-3">
       {PLANS.map((plan) => {
-        const eur = annual ? plan.priceAnnualMonthly : plan.priceMonthly;
-        const usd = annual ? plan.priceAnnualMonthlyUsd : plan.priceMonthlyUsd;
         const isFree = plan.id === "free";
         const isPro = plan.id === "pro";
         const isUltra = plan.id === "ultra";
+        // Accurate, derived straight from the real (Stripe) yearly totals.
+        const savePct = isFree
+          ? 0
+          : Math.round((1 - plan.priceAnnualTotal / (plan.priceMonthly * 12)) * 100);
+        const perMoEur = (plan.priceAnnualTotal / 12).toFixed(2);
+        const perMoUsd = (plan.priceAnnualTotalUsd / 12).toFixed(2);
         return (
           <div
             key={plan.id}
@@ -98,21 +102,43 @@ export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
             <h3 className="heading text-xl text-white">{plan.name}</h3>
             <p className="mt-1 text-sm text-[var(--color-fg-muted)]">{plan.tagline}</p>
 
-            <div className="mt-6 flex items-baseline gap-1">
-              <span className="display text-5xl text-white tnum">
-                {eur === 0 ? <Money eur="0" usd="0" /> : <Money eur={eur.toFixed(2)} usd={usd.toFixed(2)} />}
-              </span>
-              {eur > 0 && <span className="text-sm text-[var(--color-fg-subtle)]">/mo</span>}
-            </div>
-            <p className="mt-1 h-4 text-xs text-[var(--color-fg-subtle)] tnum">
-              {plan.id !== "free" && annual ? (
-                <>
-                  billed <Money eur={plan.priceAnnualTotal.toFixed(2)} usd={plan.priceAnnualTotalUsd.toFixed(2)} />/yr
-                </>
-              ) : (
-                " "
-              )}
-            </p>
+            {isFree ? (
+              <>
+                <div className="mt-6 flex items-baseline gap-1">
+                  <span className="display text-5xl text-white tnum"><Money eur="0" usd="0" /></span>
+                </div>
+                <p className="mt-1 h-5 text-xs text-[var(--color-fg-subtle)]">Free forever</p>
+              </>
+            ) : annual ? (
+              <>
+                <div className="mt-6 flex items-baseline gap-1">
+                  <span className="display text-5xl text-white tnum">
+                    <Money eur={plan.priceAnnualTotal.toFixed(2)} usd={plan.priceAnnualTotalUsd.toFixed(2)} />
+                  </span>
+                  <span className="text-sm text-[var(--color-fg-subtle)]">/yr</span>
+                </div>
+                <p className="mt-1.5 flex h-5 items-center gap-2 text-xs text-[var(--color-fg-subtle)] tnum">
+                  <span>
+                    <Money eur={perMoEur} usd={perMoUsd} />/mo billed yearly
+                  </span>
+                  <span className="rounded-full bg-[var(--color-success)]/15 px-1.5 py-0.5 font-medium text-[var(--color-success)]">
+                    save {savePct}%
+                  </span>
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="mt-6 flex items-baseline gap-1">
+                  <span className="display text-5xl text-white tnum">
+                    <Money eur={plan.priceMonthly.toFixed(2)} usd={plan.priceMonthlyUsd.toFixed(2)} />
+                  </span>
+                  <span className="text-sm text-[var(--color-fg-subtle)]">/mo</span>
+                </div>
+                <p className="mt-1.5 h-5 text-xs text-[var(--color-fg-subtle)] tnum">
+                  or <Money eur={plan.priceAnnualTotal.toFixed(2)} usd={plan.priceAnnualTotalUsd.toFixed(2)} />/yr, save {savePct}%
+                </p>
+              </>
+            )}
 
             {isFree ? (
               <Button href="/signup" variant="primary" size="lg" className="mt-6 w-full">
