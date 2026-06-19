@@ -3,6 +3,7 @@ import { getStripe } from "@/lib/stripe";
 import { env, isConfigured } from "@/lib/env";
 import { priceIdFor, currencyFromString, type Interval } from "@/lib/billing";
 import type { PlanId } from "@/lib/pricing";
+import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
   if (!isConfigured.stripe()) {
     return NextResponse.json({ error: "Payments are not configured yet." }, { status: 503 });
   }
+  const rl = await rateLimit(`checkout:${clientIp(req)}`, 10, 60);
+  if (!rl.ok) return tooMany(rl.retryAfter);
 
   const body = (await req.json().catch(() => ({}))) as {
     plan?: PlanId;

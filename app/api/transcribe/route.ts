@@ -4,6 +4,7 @@ import { getCurrentSession } from "@/lib/session";
 import { getDb, userApiKey } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { env, isConfigured } from "@/lib/env";
+import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,6 +44,10 @@ async function resolveGroqKey(): Promise<string | null> {
 }
 
 export async function POST(req: Request) {
+  // Throttle the AI endpoint to stop hammering / cost abuse.
+  const rl = await rateLimit(`transcribe:${clientIp(req)}`, 40, 60 * 10);
+  if (!rl.ok) return tooMany(rl.retryAfter);
+
   const key = await resolveGroqKey();
   if (!key) {
     return NextResponse.json(

@@ -92,5 +92,23 @@ export const project = pgTable("project", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ─── Email verification codes (OTP), one active per user ─────────────
+export const emailCode = pgTable("email_code", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Generic DB-backed rate-limit buckets ────────────────────────────
+export const apiRateLimit = pgTable("api_rate_limit", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  resetAt: timestamp("reset_at").notNull(),
+});
+
 export type User = typeof user.$inferSelect;
 export type Project = typeof project.$inferSelect;

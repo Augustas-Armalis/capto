@@ -18,10 +18,15 @@ export const env = {
   // House Groq key. /api/transcribe uses it ONLY as a fallback when the user
   // hasn't supplied their own key. Optional; leave unset for strict BYOK.
   houseGroqKey: read("GROQ_API_KEY"),
+  // Resend transactional email (verification codes). Optional: when unset, email
+  // verification is skipped so the app still works without it.
+  resendApiKey: read("RESEND_API_KEY"),
+  resendFrom: read("RESEND_FROM", "Capto <onboarding@capto.video>"),
 };
 
 export const isConfigured = {
   db: () => env.databaseUrl.length > 10,
   stripe: () => env.stripeSecret.startsWith("sk_"),
   auth: () => env.authSecret.length >= 16,
+  email: () => env.resendApiKey.startsWith("re_"),
 };

@@ -3,6 +3,24 @@ import path from 'node:path';
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
+// Content-Security-Policy. 'unsafe-inline' is required because Next injects
+// inline hydration scripts/styles and we have no nonce pipeline on static
+// export; everything else is locked to our own origin + Stripe Checkout.
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://api.stripe.com",
+  "frame-src 'self' https://checkout.stripe.com https://js.stripe.com",
+  "form-action 'self' https://checkout.stripe.com",
+  "frame-ancestors 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+].join('; ');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -16,11 +34,15 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', 'motion'],
   },
   async headers() {
+    // CSP only in production: React's dev build uses eval() for debugging, which
+    // a strict CSP blocks. Production React never uses eval, so prod stays strict.
+    const isProd = process.env.NODE_ENV === 'production';
     return [
       {
         // Baseline security headers for every route.
         source: '/:path*',
         headers: [
+          ...(isProd ? [{ key: 'Content-Security-Policy', value: csp }] : []),
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, KeyRound, Sparkles, ExternalLink } from "lucide-react";
+import { ArrowRight, Check, KeyRound, Sparkles, ExternalLink, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,12 +12,15 @@ import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 export function OnboardingClient({
   firstName,
   needsPassword = false,
+  needsEmailVerify = false,
 }: {
   firstName: string;
   needsPassword?: boolean;
+  needsEmailVerify?: boolean;
 }) {
   const router = useRouter();
   const STEPS = [needsPassword ? "Set password" : "Welcome", "Connect your AI", "You're set"] as const;
+  const [emailDone, setEmailDone] = React.useState(!needsEmailVerify);
   const [step, setStep] = React.useState(0);
   const [groqKey, setGroqKey] = React.useState("");
   const [skip, setSkip] = React.useState(false);
@@ -72,6 +75,10 @@ export function OnboardingClient({
     } finally {
       setSaving(false);
     }
+  }
+
+  if (!emailDone) {
+    return <EmailVerify onDone={() => setEmailDone(true)} />;
   }
 
   return (
@@ -305,6 +312,125 @@ export function OnboardingClient({
           )}
         </div>
 
+        <div className="mt-5 flex items-center justify-center">
+          <PoweredByContles variant="chip" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmailVerify({ onDone }: { onDone: () => void }) {
+  const [code, setCode] = React.useState("");
+  const [sending, setSending] = React.useState(true);
+  const [verifying, setVerifying] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [cooldown, setCooldown] = React.useState(0);
+  const sent = React.useRef(false);
+
+  const send = React.useCallback(async () => {
+    setError(null);
+    setSending(true);
+    try {
+      const res = await fetch("/api/verify-email/send", { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      if (j.skipped || j.verified) {
+        onDone();
+        return;
+      }
+      if (res.status === 429) {
+        setError("Please wait a moment before requesting another code.");
+      } else if (!res.ok) {
+        setError(j.error || "Could not send the code.");
+      } else {
+        setCooldown(30);
+      }
+    } catch {
+      setError("Could not send the code. Check your connection.");
+    } finally {
+      setSending(false);
+    }
+  }, [onDone]);
+
+  React.useEffect(() => {
+    if (sent.current) return;
+    sent.current = true;
+    send();
+  }, [send]);
+
+  React.useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  async function verify() {
+    setError(null);
+    setVerifying(true);
+    try {
+      const res = await fetch("/api/verify-email/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (j.verified) {
+        onDone();
+        return;
+      }
+      setError(j.error || "Wrong code. Try again.");
+    } catch {
+      setError("Something went wrong. Try again.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4 py-16">
+      <div className="blueprint blueprint-fade pointer-events-none absolute inset-0" />
+      <div className="relative w-full max-w-md">
+        <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-8 sm:p-10">
+          <Badge variant="brand">
+            <Mail className="size-3" />
+            Step 1 of 3
+          </Badge>
+          <h1 className="heading mt-4 text-3xl">Verify your email.</h1>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--color-fg-muted)]">
+            We sent a 6-digit code to your inbox. Enter it below to confirm it&rsquo;s really you.
+          </p>
+
+          <input
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onKeyDown={(e) => e.key === "Enter" && code.length === 6 && verify()}
+            placeholder="000000"
+            aria-label="Verification code"
+            className="mono mt-7 w-full rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-4 py-4 text-center text-3xl tracking-[0.5em] text-white outline-none focus:border-[var(--color-brand)]/50"
+          />
+
+          {error && (
+            <div className="mt-4 rounded-xl border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2.5 text-sm text-[var(--color-danger)]">
+              {error}
+            </div>
+          )}
+
+          <Button onClick={verify} loading={verifying} size="lg" className="mt-6 w-full" disabled={code.length !== 6}>
+            Verify and continue
+            <ArrowRight className="size-4" />
+          </Button>
+
+          <button
+            onClick={send}
+            disabled={sending || cooldown > 0}
+            className="mt-4 w-full text-center text-sm text-[var(--color-fg-muted)] transition-colors hover:text-white disabled:opacity-50"
+          >
+            {cooldown > 0 ? `Resend code in ${cooldown}s` : sending ? "Sending…" : "Resend code"}
+          </button>
+        </div>
         <div className="mt-5 flex items-center justify-center">
           <PoweredByContles variant="chip" />
         </div>
