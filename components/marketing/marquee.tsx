@@ -1,11 +1,14 @@
+"use client";
+
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Seam-free infinite marquee. Renders two identical groups and translates the
- * track by exactly -50%, so the loop has no jump. Each group carries a trailing
- * gap equal to its internal gap, and `repeat` widens one group past the viewport
- * so there's never an empty stretch on large screens. Pure CSS (no JS / rAF).
+ * Seam-free infinite marquee. Two identical groups, translate -50%, so the loop
+ * never jumps. `repeat` widens one group past the viewport for big screens.
+ * Pause is JS-controlled via animation-play-state (only ever pauses/resumes —
+ * it can never reset the track to its start, which is what caused the prior
+ * "jumps back to the beginning" glitch on hover).
  */
 export function Marquee({
   items,
@@ -24,7 +27,9 @@ export function Marquee({
   className?: string;
   maskClass?: string;
 }) {
+  const [paused, setPaused] = React.useState(false);
   const oneGroup = Array.from({ length: repeat }).flatMap(() => items);
+
   const Group = ({ hidden }: { hidden?: boolean }) => (
     <div
       aria-hidden={hidden}
@@ -36,9 +41,20 @@ export function Marquee({
       ))}
     </div>
   );
+
   return (
-    <div className={cn("overflow-hidden", pauseOnHover && "marquee-paused", maskClass, className)}>
-      <div className="marquee-track flex w-max" style={{ animationDuration: `${durationSec}s` }}>
+    <div
+      className={cn("overflow-hidden", maskClass, className)}
+      onPointerEnter={pauseOnHover ? () => setPaused(true) : undefined}
+      onPointerLeave={pauseOnHover ? () => setPaused(false) : undefined}
+    >
+      <div
+        className="marquee-track flex w-max"
+        style={{
+          animationDuration: `${durationSec}s`,
+          animationPlayState: paused ? "paused" : "running",
+        }}
+      >
         <Group />
         <Group hidden />
       </div>

@@ -1,7 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { Check } from "lucide-react";
+import {
+  Check,
+  Languages,
+  BadgeCheck,
+  Gem,
+  Infinity as InfinityIcon,
+  Users,
+  KeyRound,
+  Palette,
+  SlidersHorizontal,
+  FileText,
+  Wand2,
+  Zap,
+  Crown,
+  Gauge,
+  Code,
+  Crop,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Money } from "@/components/ui/money";
 import { Container } from "@/components/ui/container";
@@ -10,40 +27,60 @@ import { PLANS } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) => void }) {
+  // Two equal-width tabs so the pill centers cleanly; the savings badge floats
+  // on the Annual tab's corner (doesn't shift the layout / centering).
   return (
-    <div className="inline-flex items-center gap-2.5">
-      <div className="relative inline-flex rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] p-1 backdrop-blur-md">
-        {/* sliding indicator */}
-        <span
-          aria-hidden
-          className="absolute inset-y-1 left-1 w-[88px] rounded-[var(--radius-pill)] bg-white transition-transform duration-300 ease-[var(--ease-out)]"
-          style={{ transform: annual ? "translateX(100%)" : "translateX(0)" }}
-        />
-        {([["Monthly", false], ["Annual", true]] as const).map(([label, val]) => (
-          <button
-            key={label}
-            onClick={() => onChange(val)}
-            className={cn(
-              "relative z-10 w-[88px] rounded-[var(--radius-pill)] py-1.5 text-center text-sm font-medium transition-colors duration-300",
-              annual === val ? "text-black" : "text-[var(--color-fg-muted)] hover:text-white",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+    <div className="relative inline-flex rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] p-1 backdrop-blur-md">
       <span
-        className={cn(
-          "rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold transition-all",
-          annual
-            ? "bg-[var(--color-success)]/15 text-[var(--color-success)]"
-            : "bg-[var(--color-success)]/10 text-[var(--color-success)]/80",
-        )}
-      >
-        Save up to 28%
-      </span>
+        aria-hidden
+        className="absolute inset-y-1 left-1 w-[96px] rounded-[var(--radius-pill)] bg-white transition-transform duration-300 ease-[var(--ease-out)]"
+        style={{ transform: annual ? "translateX(100%)" : "translateX(0)" }}
+      />
+      {([["Monthly", false], ["Annual", true]] as const).map(([label, val]) => (
+        <button
+          key={label}
+          onClick={() => onChange(val)}
+          className={cn(
+            "relative z-10 w-[96px] rounded-[var(--radius-pill)] py-1.5 text-center text-sm font-medium transition-colors duration-300",
+            annual === val ? "text-black" : "text-[var(--color-fg-muted)] hover:text-white",
+          )}
+        >
+          {label}
+          {val === true && (
+            <span
+              className={cn(
+                "absolute -top-2.5 right-0 translate-x-1/3 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none shadow-sm transition-colors",
+                annual ? "bg-[var(--color-success)] text-black" : "bg-[var(--color-success)]/80 text-black/80",
+              )}
+            >
+              −28%
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   );
+}
+
+// Pick a lucide icon that fits each feature line (falls back to a check).
+function FeatureIcon({ text }: { text: string }) {
+  const t = text.toLowerCase();
+  const cls = "mt-0.5 size-4 shrink-0 text-[var(--color-brand)]";
+  if (/everything in/.test(t)) return <Crown className={cls} strokeWidth={2} />;
+  if (/translat|language/.test(t)) return <Languages className={cls} strokeWidth={2} />;
+  if (/watermark/.test(t)) return <BadgeCheck className={cls} strokeWidth={2} />;
+  if (/lossless|quality|4k|60fps/.test(t)) return <Gem className={cls} strokeWidth={2} />;
+  if (/unlimited/.test(t)) return <InfinityIcon className={cls} strokeWidth={2} />;
+  if (/team|seat/.test(t)) return <Users className={cls} strokeWidth={2} />;
+  if (/api|zapier|key/.test(t)) return /zapier|api/.test(t) ? <Code className={cls} strokeWidth={2} /> : <KeyRound className={cls} strokeWidth={2} />;
+  if (/style|font|color|brand|highlight|preset/.test(t)) return <Palette className={cls} strokeWidth={2} />;
+  if (/aspect|ratio/.test(t)) return <Crop className={cls} strokeWidth={2} />;
+  if (/timeline|control/.test(t)) return <SlidersHorizontal className={cls} strokeWidth={2} />;
+  if (/clip|b-roll|magic|transition|filler|silence/.test(t)) return <Wand2 className={cls} strokeWidth={2} />;
+  if (/priority|queue|fast/.test(t)) return <Zap className={cls} strokeWidth={2} />;
+  if (/minute/.test(t)) return <Gauge className={cls} strokeWidth={2} />;
+  if (/srt|vtt|file|export/.test(t)) return <FileText className={cls} strokeWidth={2} />;
+  return <Check className={cls} strokeWidth={2} />;
 }
 
 export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
@@ -174,7 +211,7 @@ export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
             <ul className="mt-7 flex-1 space-y-2.5">
               {plan.features.map((f) => (
                 <li key={f} className="flex items-start gap-2.5 text-sm">
-                  <Check className="mt-0.5 size-4 shrink-0 text-white/70" strokeWidth={2} />
+                  <FeatureIcon text={f} />
                   <span className="text-[var(--color-fg-muted)]">{f}</span>
                 </li>
               ))}

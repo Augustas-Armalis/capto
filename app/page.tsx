@@ -12,6 +12,7 @@ import { MadeWithCapto } from "@/components/marketing/made-with-capto";
 import { PricingTable } from "@/components/marketing/pricing-table";
 import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import { CtaBanner } from "@/components/marketing/cta-banner";
+import { Reveal } from "@/components/marketing/reveal";
 import { JsonLd, softwareAppLd, faqLd, organizationLd } from "@/components/seo/json-ld";
 import { DEFAULT_FAQS } from "@/lib/faqs";
 
@@ -23,15 +24,15 @@ export default function HomePage() {
       <main className="relative">
         <Hero />
         <LogoMarquee />
-        <FeatureGrid />
-        <CaptionStyleStudio />
-        <Workflow />
-        <ValueProof />
-        <Comparison />
+        <Reveal variant="up"><FeatureGrid /></Reveal>
+        <Reveal variant="blur"><CaptionStyleStudio /></Reveal>
+        <Reveal variant="up"><Workflow /></Reveal>
+        <Reveal variant="up"><ValueProof /></Reveal>
+        <Reveal variant="up"><Comparison /></Reveal>
         <Testimonials />
         <MadeWithCapto />
-        <PricingTable />
-        <FaqAccordion />
+        <Reveal variant="up"><PricingTable /></Reveal>
+        <Reveal variant="up"><FaqAccordion /></Reveal>
         <CtaBanner />
       </main>
       <SiteFooter />

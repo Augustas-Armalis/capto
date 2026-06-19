@@ -33,7 +33,7 @@ export default function StylesIndex() {
                 <Link
                   key={s.slug}
                   href={`/styles/${s.slug}`}
-                  className="group relative block aspect-[5/4] overflow-hidden rounded-[var(--radius-xl)] border border-white/[0.08] transition-colors hover:border-white/20"
+                  className="group relative block aspect-[16/9] sm:aspect-[5/4] overflow-hidden rounded-[var(--radius-xl)] border border-white/[0.08] transition-colors hover:border-white/20"
                 >
                   <div className={`absolute inset-0 bg-gradient-to-b ${s.bg}`} />
                   <div className="absolute inset-0 flex items-center justify-center p-6">
@@ -58,7 +58,7 @@ export default function StylesIndex() {
               {/* Create your own, every style is fully customizable in the editor */}
               <Link
                 href="/signup"
-                className="group relative flex aspect-[5/4] flex-col items-center justify-center gap-3 overflow-hidden rounded-[var(--radius-xl)] border border-dashed border-white/15 bg-white/[0.02] p-6 text-center transition-colors hover:border-[var(--color-brand)]/50 hover:bg-white/[0.04]"
+                className="group relative flex aspect-[16/9] sm:aspect-[5/4] flex-col items-center justify-center gap-3 overflow-hidden rounded-[var(--radius-xl)] border border-dashed border-white/15 bg-white/[0.02] p-6 text-center transition-colors hover:border-[var(--color-brand)]/50 hover:bg-white/[0.04]"
               >
                 <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)] transition-transform group-hover:scale-105">
                   <Plus className="size-6" />

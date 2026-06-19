@@ -1,153 +1,113 @@
 import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
-import { ArrowRight, Plus, Video, Sparkles, Clock, KeyRound } from "lucide-react";
+import { Plus, Sparkles, ArrowRight, Upload, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/components/ui/money";
+import { PoweredByContles } from "@/components/marketing/powered-by-contles";
+import { ProjectsGrid, type ProjectRow } from "@/components/app/projects-grid";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, project, user } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
-import { fmtTime } from "@/lib/cues";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
-
-type Row = { id: string; name: string; durationSec: number | null; updatedAt: Date };
 
 export default async function DashboardPage() {
   const session = await getCurrentSession();
   const u = session?.user;
   const firstName = u?.name?.split(" ")[0] || "there";
 
-  let projects: Row[] = [];
+  let projects: ProjectRow[] = [];
   let plan: "free" | "pro" | "ultra" = "free";
   if (isConfigured.db() && u?.id) {
     const db = getDb();
     const [meRow] = await db.select({ plan: user.plan }).from(user).where(eq(user.id, u.id)).limit(1);
     if (meRow?.plan) plan = meRow.plan;
-    projects = await db
+    const rows = await db
       .select({
         id: project.id,
         name: project.name,
         durationSec: project.durationSec,
         updatedAt: project.updatedAt,
+        thumbnail: project.thumbnailUrl,
       })
       .from(project)
       .where(eq(project.userId, u.id))
       .orderBy(desc(project.updatedAt))
       .limit(24);
+    projects = rows.map((r) => ({ ...r, updatedAt: new Date(r.updatedAt).toISOString() }));
   }
+  const isFree = plan === "free";
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-10 lg:px-10">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <Badge variant="brand">Welcome back</Badge>
-          <h1 className="heading mt-3 text-4xl sm:text-5xl">Hey {firstName} 👋</h1>
-          <p className="mt-2 text-[var(--color-fg-muted)]">
-            Drop a new clip in the editor or pick up where you left off.
-          </p>
-        </div>
-        <Button href="/editor" size="lg">
-          <Plus className="size-4" />
-          New project
-        </Button>
+    <div className="mx-auto w-full max-w-5xl px-6 py-10 lg:px-10">
+      <div className="flex flex-col gap-1">
+        <h1 className="heading text-3xl text-white sm:text-4xl">Hey {firstName} 👋</h1>
+        <p className="text-[var(--color-fg-muted)]">Drop a clip, get word-perfect captions, ship it.</p>
       </div>
 
-      <div className="mt-10 grid gap-5 md:grid-cols-3">
-        <Link
-          href="/editor"
-          className="group relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-brand)]/10 via-[var(--color-bg-elev)] to-[var(--color-bg-elev)] p-7 transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)]/40"
-        >
-          <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
-            <Video className="size-5" />
+      {/* Free-tier upsell */}
+      {isFree && (
+        <div className="glow-border-always mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/15 bg-white/[0.04] p-5">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+              <Sparkles className="size-5" />
+            </span>
+            <div>
+              <p className="font-semibold text-white">You&rsquo;re on Free</p>
+              <p className="text-sm text-[var(--color-fg-muted)]">
+                One project, watermark, 1080p. Go Pro for unlimited lossless exports, no watermark, every style. From{" "}
+                <Money eur="5.00" usd="5.83" />/mo.
+              </p>
+            </div>
           </div>
-          <h3 className="mt-5 text-lg font-semibold">Open the editor</h3>
-          <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
-            Drop a video, get word-perfect captions, ship it.
-          </p>
-          <ArrowRight className="absolute bottom-6 right-6 size-5 text-[var(--color-fg-muted)] transition-all group-hover:translate-x-1 group-hover:text-[var(--color-brand)]" />
-        </Link>
+          <Button href="/billing" variant="primary" size="md">
+            Upgrade to Pro
+            <ArrowRight className="size-4" />
+          </Button>
+        </div>
+      )}
 
+      {/* Drop / new project */}
+      <Link
+        href="/editor"
+        className="group mt-6 flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-white/12 bg-gradient-to-b from-white/[0.04] to-transparent p-12 text-center transition-colors hover:border-[var(--color-brand)]/50 hover:from-white/[0.06]"
+      >
+        <span className="inline-flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)] transition-transform group-hover:scale-105">
+          <Upload className="size-7" />
+        </span>
+        <span className="heading mt-5 text-xl text-white">Start a new project</span>
+        <span className="mt-2 max-w-sm text-sm text-[var(--color-fg-muted)]">
+          Drop an MP4, MOV or WebM. It stays on your device, we just add the captions.
+        </span>
+        <span className="mt-5 inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-white px-4 py-2 text-sm font-medium text-black">
+          <Plus className="size-4" />
+          Open the editor
+        </span>
+      </Link>
+
+      {/* Secondary: connect a key (until BYOK is removed) */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <Link
           href="/settings#api-keys"
-          className="group relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7 transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)]/40"
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] px-3.5 py-1.5 text-sm text-[var(--color-fg-muted)] transition-colors hover:border-[var(--color-brand)]/40 hover:text-white"
         >
-          <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--color-bg-soft)] text-[var(--color-fg)]">
-            <KeyRound className="size-5" />
-          </div>
-          <h3 className="mt-5 text-lg font-semibold">API keys</h3>
-          <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
-            Bring your Groq key for transcription. We encrypt and store it for you.
-          </p>
-          <ArrowRight className="absolute bottom-6 right-6 size-5 text-[var(--color-fg-muted)] transition-all group-hover:translate-x-1 group-hover:text-[var(--color-fg)]" />
+          <KeyRound className="size-3.5" />
+          API keys
         </Link>
-
-        {plan === "free" ? (
-          <Link
-            href="/billing"
-            className="group relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7 transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)]/40"
-          >
-            <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--color-bg-soft)] text-[var(--color-fg)]">
-              <Sparkles className="size-5" />
-            </div>
-            <h3 className="mt-5 text-lg font-semibold">Upgrade to Pro</h3>
-            <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
-              Unlimited exports, no watermark, lossless quality. <Money eur="6.99" usd="7.99" />/mo.
-            </p>
-            <ArrowRight className="absolute bottom-6 right-6 size-5 text-[var(--color-fg-muted)] transition-all group-hover:translate-x-1 group-hover:text-[var(--color-fg)]" />
-          </Link>
-        ) : (
-          <div className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
-            <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
-              <Sparkles className="size-5" />
-            </div>
-            <h3 className="mt-5 text-lg font-semibold capitalize">{plan} plan</h3>
-            <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
-              Unlimited, watermark-free, lossless exports are on. Manage it in billing.
-            </p>
-            <Link href="/billing" className="mt-3 inline-flex items-center gap-1 text-sm text-[var(--color-brand)] hover:underline">
-              Manage billing <ArrowRight className="size-3.5" />
-            </Link>
-          </div>
-        )}
+        <span className="ml-auto">
+          <PoweredByContles variant="inline" />
+        </span>
       </div>
 
+      {/* Recent projects */}
       <div className="mt-10">
-        <h2 className="text-base font-semibold tracking-tight">Recent projects</h2>
-        {projects.length === 0 ? (
-          <div className="mt-5 rounded-3xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elev)]/40 p-12 text-center">
-            <p className="text-sm text-[var(--color-fg-muted)]">
-              Your captioned reels will appear here. Open the editor to start your first one.
-            </p>
-            <Button href="/editor" variant="secondary" className="mt-5" size="md">
-              Open editor →
-            </Button>
-          </div>
-        ) : (
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((p) => (
-              <Link
-                key={p.id}
-                href={`/editor?project=${p.id}`}
-                className="group rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-5 transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)]/40"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="inline-flex size-9 items-center justify-center rounded-xl bg-[var(--color-bg-soft)] text-[var(--color-fg-muted)] group-hover:text-[var(--color-brand)]">
-                    <Video className="size-4" />
-                  </div>
-                  <ArrowRight className="size-4 text-[var(--color-fg-subtle)] transition-all group-hover:translate-x-1 group-hover:text-[var(--color-brand)]" />
-                </div>
-                <h3 className="mt-4 truncate font-medium text-white">{p.name}</h3>
-                <div className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-fg-subtle)]">
-                  <Clock className="size-3" />
-                  {p.durationSec ? fmtTime(p.durationSec) : "—"} · saved{" "}
-                  {new Date(p.updatedAt).toLocaleDateString()}
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold tracking-tight">Recent projects</h2>
+          {projects.length > 0 && <Badge variant="outline">{projects.length}</Badge>}
+        </div>
+        <ProjectsGrid initial={projects} />
       </div>
     </div>
   );

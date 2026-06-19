@@ -22,7 +22,7 @@ export function CaptionStyleStudio() {
             <Link
               key={s.slug}
               href={`/styles/${s.slug}`}
-              className="group relative block aspect-[4/5] overflow-hidden rounded-[var(--radius-lg)] border border-white/[0.08] transition-colors hover:border-white/20"
+              className="group relative block aspect-[16/10] sm:aspect-[4/5] overflow-hidden rounded-[var(--radius-lg)] border border-white/[0.08] transition-colors hover:border-white/20"
             >
               <div className={`absolute inset-0 bg-gradient-to-b ${s.bg}`} />
               <div className="absolute inset-0 flex items-center justify-center p-6">

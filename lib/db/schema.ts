@@ -114,6 +114,15 @@ export const passwordReset = pgTable("password_reset", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── Waitlist signups ────────────────────────────────────────────────
+export const waitlist = pgTable("waitlist", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  source: text("source"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ─── Generic DB-backed rate-limit buckets ────────────────────────────
 export const apiRateLimit = pgTable("api_rate_limit", {
   key: text("key").primaryKey(),

@@ -19,12 +19,16 @@ export function SmoothScroll() {
   React.useEffect(() => {
     if (!enabled) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // Touch devices: skip Lenis entirely. Hijacking native momentum scrolling on
+    // mobile is the main source of the "glitchy on load / scroll" jank; native
+    // scrolling is smoother there.
+    if (window.matchMedia("(pointer: coarse)").matches) return;
 
     const lenis = new Lenis({
       duration: 1.05,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       smoothWheel: true,
-      touchMultiplier: 1.5,
+      syncTouch: false,
     });
 
     let raf = 0;

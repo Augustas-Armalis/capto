@@ -1,19 +1,40 @@
 "use client";
 
 import * as React from "react";
-import { KeyRound, Save, CheckCircle2, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { KeyRound, Save, CheckCircle2, Trash2, Check, Crown, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 type ApiKeyMeta = { provider: "groq" | "openai"; label: string | null; lastUsedAt: string | null };
+type Plan = "free" | "pro" | "ultra";
 
-export function SettingsClient({ name, email }: { name: string; email: string }) {
+export function SettingsClient({
+  name,
+  email,
+  plan = "free",
+  subscriptionStatus,
+}: {
+  name: string;
+  email: string;
+  plan?: Plan;
+  subscriptionStatus?: string | null;
+}) {
+  const router = useRouter();
   const [groqKey, setGroqKey] = React.useState("");
   const [openaiKey, setOpenaiKey] = React.useState("");
   const [meta, setMeta] = React.useState<ApiKeyMeta[]>([]);
   const [saving, setSaving] = React.useState<null | "groq" | "openai">(null);
   const [savedAt, setSavedAt] = React.useState<{ groq?: number; openai?: number }>({});
+
+  // Profile name
+  const [displayName, setDisplayName] = React.useState(name);
+  const [nameSaving, setNameSaving] = React.useState(false);
+  const [nameSaved, setNameSaved] = React.useState(false);
+
+  // Delete account
+  const [deleting, setDeleting] = React.useState(false);
 
   React.useEffect(() => {
     fetch("/api/user/api-keys")
@@ -21,6 +42,39 @@ export function SettingsClient({ name, email }: { name: string; email: string })
       .then((j) => setMeta(j.keys || []))
       .catch(() => {});
   }, []);
+
+  async function saveName() {
+    if (!displayName.trim() || displayName.trim() === name) return;
+    setNameSaving(true);
+    setNameSaved(false);
+    try {
+      const r = await fetch("/api/account/profile", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: displayName.trim() }),
+      });
+      if (!r.ok) throw new Error();
+      setNameSaved(true);
+      setTimeout(() => setNameSaved(false), 2500);
+      router.refresh();
+    } finally {
+      setNameSaving(false);
+    }
+  }
+
+  async function deleteAccount() {
+    if (!confirm("Delete your account permanently? This removes your projects and cancels any subscription. This cannot be undone.")) return;
+    if (!confirm("Are you absolutely sure? There is no going back.")) return;
+    setDeleting(true);
+    try {
+      const r = await fetch("/api/account/delete", { method: "POST" });
+      if (!r.ok) throw new Error();
+      window.location.href = "/";
+    } catch {
+      setDeleting(false);
+      alert("Could not delete the account. Please try again.");
+    }
+  }
 
   async function saveKey(provider: "groq" | "openai") {
     const key = provider === "groq" ? groqKey : openaiKey;
@@ -52,35 +106,71 @@ export function SettingsClient({ name, email }: { name: string; email: string })
 
   const hasGroq = meta.some((m) => m.provider === "groq");
   const hasOpenai = meta.some((m) => m.provider === "openai");
+  const planLabel = plan === "free" ? "Free" : plan === "pro" ? "Pro" : "Ultra";
 
   return (
-    <div className="px-6 lg:px-10 py-10 max-w-3xl mx-auto w-full">
-      <h1 className="heading text-4xl ">Settings</h1>
-      <p className="mt-2 text-[var(--color-fg-muted)]">Profile and API connections.</p>
+    <div className="mx-auto w-full max-w-3xl px-6 py-10 lg:px-10">
+      <h1 className="heading text-4xl">Settings</h1>
+      <p className="mt-2 text-[var(--color-fg-muted)]">Profile, plan, and AI connections.</p>
 
-      <section className="mt-10 rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
+      {/* Plan & billing */}
+      <section className="mt-10 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+              <Crown className="size-5" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold">{planLabel} plan</h2>
+                {subscriptionStatus && plan !== "free" && (
+                  <Badge variant={subscriptionStatus === "active" ? "brand" : "outline"}>{subscriptionStatus}</Badge>
+                )}
+              </div>
+              <p className="text-sm text-[var(--color-fg-muted)]">
+                {plan === "free"
+                  ? "You're on the free plan. Upgrade for unlimited, watermark-free, lossless exports."
+                  : "Manage billing, change plan, or cancel from the billing portal."}
+              </p>
+            </div>
+          </div>
+          <Button href="/billing" variant={plan === "free" ? "primary" : "secondary"} size="md">
+            {plan === "free" ? "Upgrade" : "Manage billing"}
+            <ArrowRight className="size-4" />
+          </Button>
+        </div>
+      </section>
+
+      {/* Profile */}
+      <section className="mt-6 rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
         <h2 className="text-lg font-semibold">Profile</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <label htmlFor="profile-name" className="text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">Name</label>
-            <Input id="profile-name" defaultValue={name} disabled />
+            <label htmlFor="profile-name" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">Name</label>
+            <div className="flex gap-2">
+              <Input id="profile-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={120} />
+              <Button onClick={saveName} loading={nameSaving} disabled={!displayName.trim() || displayName.trim() === name}>
+                {nameSaved ? <Check className="size-4 text-[var(--color-success)]" /> : <Save className="size-4" />}
+              </Button>
+            </div>
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="profile-email" className="text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">Email</label>
+            <label htmlFor="profile-email" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">Email</label>
             <Input id="profile-email" defaultValue={email} disabled />
           </div>
         </div>
         <p className="mt-3 text-xs text-[var(--color-fg-subtle)]">
-          Email us at hello@capto.video to change these (we'll add inline editing soon).
+          To change your email, contact hello@capto.video. Reset your password from the sign-in page.
         </p>
       </section>
 
+      {/* API keys */}
       <section id="api-keys" className="mt-6 rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">API keys</h2>
             <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-              Encrypted with AES-256-GCM before storage. Used only when you transcribe.
+              Encrypted with AES-256-GCM before storage. Used only when you transcribe. Optional — we provide a managed key.
             </p>
           </div>
           <Badge variant="outline">
@@ -106,7 +196,7 @@ export function SettingsClient({ name, email }: { name: string; email: string })
                   <button
                     onClick={() => deleteKey("groq")}
                     aria-label="Delete Groq key"
-                    className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-elev)]"
+                    className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elev)] hover:text-[var(--color-danger)]"
                   >
                     <Trash2 className="size-3.5" aria-hidden />
                   </button>
@@ -126,9 +216,7 @@ export function SettingsClient({ name, email }: { name: string; email: string })
                 Save
               </Button>
             </div>
-            {savedAt.groq && Date.now() - savedAt.groq < 4000 && (
-              <p className="mt-2 text-xs text-[var(--color-brand)]">Saved.</p>
-            )}
+            {savedAt.groq && Date.now() - savedAt.groq < 4000 && <p className="mt-2 text-xs text-[var(--color-brand)]">Saved.</p>}
           </div>
 
           {/* OpenAI */}
@@ -147,7 +235,7 @@ export function SettingsClient({ name, email }: { name: string; email: string })
                   <button
                     onClick={() => deleteKey("openai")}
                     aria-label="Delete OpenAI key"
-                    className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-elev)]"
+                    className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elev)] hover:text-[var(--color-danger)]"
                   >
                     <Trash2 className="size-3.5" aria-hidden />
                   </button>
@@ -167,11 +255,21 @@ export function SettingsClient({ name, email }: { name: string; email: string })
                 Save
               </Button>
             </div>
-            {savedAt.openai && Date.now() - savedAt.openai < 4000 && (
-              <p className="mt-2 text-xs text-[var(--color-brand)]">Saved.</p>
-            )}
+            {savedAt.openai && Date.now() - savedAt.openai < 4000 && <p className="mt-2 text-xs text-[var(--color-brand)]">Saved.</p>}
           </div>
         </div>
+      </section>
+
+      {/* Danger zone */}
+      <section className="mt-6 rounded-3xl border border-[var(--color-danger)]/25 bg-[var(--color-danger)]/[0.04] p-7">
+        <h2 className="text-lg font-semibold text-[var(--color-danger)]">Delete account</h2>
+        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
+          Permanently delete your account, projects, and saved keys. Any active subscription is cancelled. This cannot be undone.
+        </p>
+        <Button onClick={deleteAccount} loading={deleting} variant="destructive" size="md" className="mt-5">
+          <Trash2 className="size-4" />
+          Delete my account
+        </Button>
       </section>
     </div>
   );
