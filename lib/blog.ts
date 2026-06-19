@@ -69,7 +69,7 @@ export const POSTS: Post[] = [
         "heading": "What focused pricing looks like",
         "paras": [
           "Bundles charge bundle prices. You pay for the color grading and the stock library and the AI B-roll generator whether you touch them or not, and the caption feature you actually came for is rolled into a €20-plus monthly bill.",
-          "Capto Pro is €6.99 a month, or €4.99 a month on the annual plan. That is the price of doing one thing and doing it well, instead of charging you for forty things to subsidize the nine that are half-finished. The math is simple: if captions are most of why you open an editor, pay for captions, not for the rest of someone's roadmap."
+          "Capto Pro is €6.99 a month, or €59.99 a year, which works out to about €5 a month. That is the price of doing one thing and doing it well, instead of charging you for forty things to subsidize the nine that are half-finished. The math is simple: if captions are most of why you open an editor, pay for captions, not for the rest of someone's roadmap."
         ]
       },
       {

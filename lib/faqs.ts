@@ -32,8 +32,8 @@ export const DEFAULT_FAQS: QA[] = [
   },
   {
     q: "How much does it cost?",
-    text: "Pro is €6.99 a month, or €4.99 a month billed annually. Ultra is €17.99 a month and adds 4K, clipping, brand kits, the API and 5 flat team seats. There is a Free plan to try it on a real clip.",
-    a: "Pro is €6.99 a month, or €4.99 billed annually. Ultra is €17.99 a month and adds 4K, clipping, brand kits, the API and 5 flat team seats. There is a Free plan so you can try it on a real clip first.",
+    text: "Pro is €6.99 a month, or €59.99 a year (about €5 a month, 28 percent off). Ultra is €17.99 a month, or €179.99 a year, and adds 4K, clipping, brand kits, the API and 5 flat team seats. There is a Free plan to try it on a real clip.",
+    a: "Pro is €6.99 a month, or €59.99 a year (about €5 a month, 28 percent off). Ultra is €17.99 a month, or €179.99 a year, and adds 4K, clipping, brand kits, the API and 5 flat team seats. There is a Free plan so you can try it on a real clip first.",
   },
   {
     q: "What languages does it support?",
