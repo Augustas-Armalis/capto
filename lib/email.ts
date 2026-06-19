@@ -33,6 +33,10 @@ const wrap = (inner: string) => `
     </div>
   </div>`;
 
+function codeBlock(code: string) {
+  return `<div style="margin:8px 0 18px;font-size:34px;font-weight:700;letter-spacing:8px;color:#fff;font-family:'DM Mono',ui-monospace,monospace;">${code}</div>`;
+}
+
 export function verificationEmail(code: string): { subject: string; html: string } {
   return {
     subject: `${code} is your Capto verification code`,
@@ -40,11 +44,23 @@ export function verificationEmail(code: string): { subject: string; html: string
       <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#c7c9d4;">
         Enter this code to verify your email and finish setting up Capto.
       </p>
-      <div style="margin:8px 0 18px;font-size:34px;font-weight:700;letter-spacing:8px;color:#fff;font-family:'DM Mono',ui-monospace,monospace;">
-        ${code}
-      </div>
+      ${codeBlock(code)}
       <p style="margin:0;font-size:13px;line-height:1.6;color:#7c7f8c;">
         This code expires in 10 minutes. If you didn't create a Capto account, you can ignore this email.
+      </p>`),
+  };
+}
+
+export function resetEmail(code: string): { subject: string; html: string } {
+  return {
+    subject: `${code} is your Capto password reset code`,
+    html: wrap(`
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#c7c9d4;">
+        Use this code to reset your Capto password.
+      </p>
+      ${codeBlock(code)}
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#7c7f8c;">
+        This code expires in 15 minutes. If you didn't ask to reset your password, ignore this email and your password stays the same.
       </p>`),
   };
 }

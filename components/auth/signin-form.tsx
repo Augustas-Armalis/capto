@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,8 +52,11 @@ export function SignInForm() {
         />
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="password" className="flex justify-between text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">
+        <label htmlFor="password" className="flex items-center justify-between text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">
           <span>Password</span>
+          <Link href="/reset-password" className="font-medium normal-case tracking-normal text-[var(--color-fg-subtle)] transition-colors hover:text-[var(--color-fg)]">
+            Forgot?
+          </Link>
         </label>
         <Input
           id="password"

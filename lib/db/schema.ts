@@ -103,6 +103,17 @@ export const emailCode = pgTable("email_code", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── Password reset codes (OTP), one active per user ─────────────────
+export const passwordReset = pgTable("password_reset", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ─── Generic DB-backed rate-limit buckets ────────────────────────────
 export const apiRateLimit = pgTable("api_rate_limit", {
   key: text("key").primaryKey(),
