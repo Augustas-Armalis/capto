@@ -16,7 +16,15 @@ const ITEMS = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function AppNav({ userName, userEmail }: { userName?: string; userEmail?: string }) {
+export function AppNav({
+  userName,
+  userEmail,
+  userImage,
+}: {
+  userName?: string;
+  userEmail?: string;
+  userImage?: string | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = React.useState(false);
@@ -65,8 +73,13 @@ export function AppNav({ userName, userEmail }: { userName?: string; userEmail?:
       <div className="border-t border-[var(--color-border)] p-3 space-y-3">
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-3 py-2.5">
           <div className="flex items-center gap-2.5">
-            <div className="size-8 rounded-full bg-[var(--color-brand)]/15 text-[var(--color-brand)] inline-flex items-center justify-center text-sm font-semibold">
-              {(userName || userEmail || "?")[0]?.toUpperCase()}
+            <div className="size-8 overflow-hidden rounded-full bg-[var(--color-brand)]/15 text-[var(--color-brand)] inline-flex items-center justify-center text-sm font-semibold">
+              {userImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={userImage} alt="" className="size-full object-cover" />
+              ) : (
+                (userName || userEmail || "?")[0]?.toUpperCase()
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">{userName || ","}</div>

@@ -12,20 +12,23 @@ export default async function SettingsPage() {
   const session = await getCurrentSession();
   let plan: "free" | "pro" | "ultra" = "free";
   let subscriptionStatus: string | null = null;
+  let image: string | null = session?.user?.image ?? null;
   if (isConfigured.db() && session?.user?.id) {
     const db = getDb();
     const [u] = await db
-      .select({ plan: userTable.plan, status: userTable.subscriptionStatus })
+      .select({ plan: userTable.plan, status: userTable.subscriptionStatus, image: userTable.image })
       .from(userTable)
       .where(eq(userTable.id, session.user.id))
       .limit(1);
     if (u?.plan) plan = u.plan;
     subscriptionStatus = u?.status ?? null;
+    image = u?.image ?? image;
   }
   return (
     <SettingsClient
       name={session?.user?.name || ""}
       email={session?.user?.email || ""}
+      image={image}
       plan={plan}
       subscriptionStatus={subscriptionStatus}
     />

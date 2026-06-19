@@ -14,10 +14,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   const userName = session?.user?.name || undefined;
   const userEmail = session?.user?.email || undefined;
+  const userImage = session?.user?.image || undefined;
 
   return (
     <div className="min-h-screen flex">
-      <AppNav userName={userName} userEmail={userEmail} />
+      <AppNav userName={userName} userEmail={userEmail} userImage={userImage} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileTopBar userName={userName} />
         <main className="flex-1 pb-20 lg:pb-0">{children}</main>
