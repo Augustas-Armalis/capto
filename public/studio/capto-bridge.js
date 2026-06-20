@@ -102,6 +102,109 @@
     return json({ cues: wordsToCues(data.words), language: data.language || body.language });
   }
 
+  // ───────────────── project persistence (Capto DB, per-account) ─────────────────
+  // The video stays on the device; we persist only name + editor state (cues,
+  // style, meta) + a small thumbnail to Capto's DB, so projects follow the user
+  // across devices/accounts. On reopen we relink the local file.
+  let captoProject = null;     // current full state {meta,style,originalName,language,cues}
+  let pendingRelinkId = null;  // a reopened project whose local video isn't loaded yet
+  const thumbCache = {};       // id -> data-url thumbnail (for the home grid)
+
+  function captureThumb() {
+    try {
+      const v = document.getElementById('video');
+      if (!v || !v.videoWidth) return null;
+      const w = 320, h = Math.round((v.videoHeight / v.videoWidth) * w) || 180;
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(v, 0, 0, w, h);
+      return c.toDataURL('image/jpeg', 0.6);
+    } catch { return null; }
+  }
+
+  const captoApi = {
+    async list() {
+      try {
+        const r = await realFetch('/api/projects');
+        if (!r.ok) throw 0;
+        const data = await r.json();
+        return (data.projects || []).map((row) => {
+          let st = {};
+          try { st = row.state ? JSON.parse(row.state) : {}; } catch {}
+          if (row.thumbnailUrl) thumbCache[row.id] = row.thumbnailUrl;
+          const meta = st.meta || {};
+          return {
+            id: row.id, name: row.name, originalName: row.name,
+            duration: meta.duration || row.durationSec || 0,
+            width: meta.width, height: meta.height,
+            cueCount: (st.cues || []).length, language: st.language, updatedAt: row.updatedAt,
+          };
+        });
+      } catch { return null; }
+    },
+    async create(name, durationSec, state) {
+      const r = await realFetch('/api/projects', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, durationSec, state }),
+      });
+      if (!r.ok) throw new Error('create failed');
+      return (await r.json()).id;
+    },
+    async get(id) {
+      const r = await realFetch('/api/projects/' + id);
+      if (!r.ok) throw new Error('get failed');
+      const data = await r.json();
+      let st = {};
+      try { st = data.project && data.project.state ? JSON.parse(data.project.state) : {}; } catch {}
+      st.originalName = st.originalName || (data.project && data.project.name);
+      return st;
+    },
+    save(id, fields) {
+      return realFetch('/api/projects/' + id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      }).catch(() => {});
+    },
+    del(id) { return realFetch('/api/projects/' + id, { method: 'DELETE' }).catch(() => {}); },
+  };
+
+  function clearRelink() {
+    const o = document.getElementById('capto-relink');
+    if (o) o.remove();
+    pendingRelinkId = null;
+  }
+  function showRelink(id, name) {
+    if (document.getElementById('capto-relink')) return;
+    const area = document.getElementById('canvasArea');
+    if (!area) return;
+    const o = document.createElement('div');
+    o.id = 'capto-relink';
+    o.style.cssText = 'position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(8,8,10,.88);backdrop-filter:blur(6px);text-align:center;padding:24px';
+    o.innerHTML =
+      `<div style="font-size:15px;font-weight:600;color:var(--text)">Locate “${escHtml(name || 'your video')}”</div>` +
+      `<div style="font-size:13px;color:var(--muted);max-width:380px;line-height:1.5">Your video stays on your device, so reopening a project needs you to point Capto at the original file again. Your captions and style are saved.</div>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn primary lg';
+    btn.textContent = 'Choose video file';
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'video/*'; input.style.display = 'none';
+    btn.onclick = () => input.click();
+    input.onchange = () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      if (window.__captoMedia && window.__captoMedia.url) { try { URL.revokeObjectURL(window.__captoMedia.url); } catch {} }
+      readVideoMeta(f).then(({ url, meta }) => {
+        window.__captoMedia = { id, file: f, url, meta };
+        clearRelink();
+        const v = document.getElementById('video');
+        if (v) { v.src = url; v.load(); }
+      });
+    };
+    o.appendChild(btn);
+    o.appendChild(input);
+    area.appendChild(o);
+  }
+
   // ───────────────────────── client-side export ─────────────────────────
   // Subby exported via server ffmpeg. On the web we burn captions in the
   // browser: draw each video frame + the active caption(s) onto a canvas with
@@ -308,15 +411,7 @@
 
     // projects collection
     if (path === '/api/projects' && method === 'GET') {
-      const store = loadStore();
-      const list = Object.values(store)
-        .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
-        .map((p) => ({
-          id: p.id, name: p.name || p.originalName, originalName: p.originalName,
-          duration: (p.meta && p.meta.duration) || 0, width: p.meta && p.meta.width, height: p.meta && p.meta.height,
-          cueCount: (p.cues || []).length, language: p.language, updatedAt: p.updatedAt,
-        }));
-      return Promise.resolve(json(list));
+      return (async () => json((await captoApi.list()) || []))();
     }
     if (path === '/api/projects' && method === 'POST') {
       return (async () => {
@@ -324,13 +419,16 @@
         const file = body instanceof FormData ? body.get('video') : null;
         if (!(file instanceof File)) return json({ error: 'No video provided.' }, 400);
         const { url, meta } = await readVideoMeta(file);
-        const id = genId();
         const style = defaultStyle(meta);
+        const state = { meta, style, originalName: file.name, language: 'en', cues: [] };
+        let id;
+        try { id = await captoApi.create(file.name, meta.duration, state); }
+        catch { id = genId(); } // offline / signed-out fallback (won't sync)
         if (window.__captoMedia && window.__captoMedia.url) { try { URL.revokeObjectURL(window.__captoMedia.url); } catch {} }
         window.__captoMedia = { id, file, url, meta };
-        const store = loadStore();
-        store[id] = { id, originalName: file.name, name: file.name, meta, style, cues: [], language: 'en', updatedAt: new Date().toISOString() };
-        saveStore(store);
+        captoProject = state;
+        pendingRelinkId = null;
+        clearRelink();
         return json({ id, meta, originalName: file.name, style });
       })();
     }
@@ -340,17 +438,20 @@
     if (m) {
       const id = m[1];
       const sub = m[2] || '';
-      const store = loadStore();
 
       if (sub === '/transcribe' && method === 'POST') {
         const file = window.__captoMedia && window.__captoMedia.id === id ? window.__captoMedia.file : null;
         let parsed = {}; try { parsed = JSON.parse(init.body); } catch {}
-        if (!file) return Promise.resolve(json({ error: 'Re-open the clip to caption it.' }, 400));
+        if (!file) return Promise.resolve(json({ error: 'Locate the video first, then caption it.' }, 400));
         return transcribe(file, parsed);
       }
-      if (sub === '/thumb') return Promise.resolve(new Response('', { status: 404 }));
+      if (sub === '/thumb') {
+        const t = thumbCache[id];
+        if (t) return realFetch(t); // data URLs are fetchable → returns the image
+        return Promise.resolve(new Response('', { status: 404 }));
+      }
       if (sub === '/video' || sub.startsWith('/preview/')) {
-        if (window.__captoMedia && window.__captoMedia.url) return realFetch(window.__captoMedia.url);
+        if (window.__captoMedia && window.__captoMedia.id === id && window.__captoMedia.url) return realFetch(window.__captoMedia.url);
         return Promise.resolve(new Response('', { status: 404 }));
       }
       if (sub === '/export' && method === 'POST') {
@@ -360,20 +461,35 @@
       }
 
       if (sub === '' && method === 'GET') {
-        const p = store[id];
-        if (!p) return Promise.resolve(json({ error: 'Project not found.' }, 404));
-        return Promise.resolve(json({ meta: p.meta, originalName: p.originalName, style: p.style, cues: p.cues, language: p.language }));
+        return (async () => {
+          try {
+            const st = await captoApi.get(id);
+            captoProject = st;
+            pendingRelinkId = window.__captoMedia && window.__captoMedia.id === id ? null : id;
+            return json({ meta: st.meta, originalName: st.originalName, style: st.style, cues: st.cues || [], language: st.language });
+          } catch { return json({ error: 'Project not found.' }, 404); }
+        })();
       }
       if (sub === '' && (method === 'PUT' || method === 'PATCH')) {
-        let body = {}; try { body = JSON.parse(init.body); } catch {}
-        const p = store[id] || { id };
-        Object.assign(p, body, { id, updatedAt: new Date().toISOString() });
-        store[id] = p; saveStore(store);
-        return Promise.resolve(json({ ok: true }));
+        return (async () => {
+          let body = {}; try { body = JSON.parse(init.body); } catch {}
+          if (!captoProject) captoProject = {};
+          if (body.cues) captoProject.cues = body.cues;
+          if (body.style) captoProject.style = body.style;
+          if (body.name) captoProject.originalName = body.name;
+          const fields = { name: captoProject.originalName || 'Untitled project' };
+          if (method === 'PUT') {
+            fields.state = captoProject;
+            if (captoProject.meta && captoProject.meta.duration) fields.durationSec = captoProject.meta.duration;
+            const thumb = captureThumb();
+            if (thumb) { fields.thumbnail = thumb; thumbCache[id] = thumb; }
+          }
+          await captoApi.save(id, fields);
+          return json({ ok: true });
+        })();
       }
       if (sub === '' && method === 'DELETE') {
-        delete store[id]; saveStore(store);
-        return Promise.resolve(json({ ok: true }));
+        return (async () => { await captoApi.del(id); delete thumbCache[id]; return json({ ok: true }); })();
       }
     }
 
@@ -474,6 +590,26 @@
     if (dest) dest.style.display = 'none';
     const openFolder = document.getElementById('exOpenFolder');
     if (openFolder) openFolder.style.display = 'none';
+    // When a reopened project's video can't load (no local file), offer relink.
+    const vid = document.getElementById('video');
+    if (vid) vid.addEventListener('error', () => {
+      if (pendingRelinkId) showRelink(pendingRelinkId, captoProject && captoProject.originalName);
+    });
+    // Home thumbnails are saved as data URLs in the DB; the grid loads them via
+    // CSS background-image (which bypasses our fetch shim), so paint them in.
+    const grid = document.getElementById('homeGrid');
+    if (grid) {
+      const applyThumbs = () => {
+        grid.querySelectorAll('.proj[data-id]').forEach((card) => {
+          const t = thumbCache[card.dataset.id];
+          if (t) {
+            const th = card.querySelector('.thumb');
+            if (th) th.style.backgroundImage = `url(${t})`;
+          }
+        });
+      };
+      new MutationObserver(applyThumbs).observe(grid, { childList: true });
+    }
     renderQuotaUI();
     fetchMe();
   });

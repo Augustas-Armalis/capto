@@ -314,8 +314,9 @@ function renderAll() { fitFrame(); renderCues(); renderTimeline(); renderOverlay
 function previewSrc() {
   const q = el.previewQ ? el.previewQ.value : 'auto';
   // Capto web: the video never leaves the device — play the local object URL
-  // directly instead of streaming it back from a server.
-  if (window.__captoMedia && window.__captoMedia.url) return window.__captoMedia.url;
+  // directly instead of streaming it back from a server. Only when the loaded
+  // file belongs to THIS project (else a reopened project triggers relink).
+  if (window.__captoMedia && window.__captoMedia.url && window.__captoMedia.id === state.id) return window.__captoMedia.url;
   if (!state.id) return '';
   if (q === 'orig') return `/api/projects/${state.id}/video`;
   let h = parseInt(q, 10);
