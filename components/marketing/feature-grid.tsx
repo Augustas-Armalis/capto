@@ -14,15 +14,15 @@ import { Section, SectionEyebrow, SectionTitle } from "@/components/ui/section";
 import { Spotlight } from "@/components/ui/spotlight";
 
 const FEATURES = [
-  { icon: Gem, title: "Lossless export", body: "Exactly the quality you put in." },
-  { icon: Type, title: "Word-level timing", body: "Each word lands on the beat." },
-  { icon: Zap, title: "90-second render", body: "Upload, caption, export. Done." },
-  { icon: Layers, title: "Real timeline", body: "Drag, trim, retime like an editor." },
-  { icon: ShieldCheck, title: "No watermark", body: "Clean export on every plan." },
-  { icon: Languages, title: "50+ languages", body: "Auto-transcribed, auto-translated." },
-  { icon: EyeOff, title: "Reads on mute", body: "85% scroll silent. Reach them anyway." },
-  { icon: Sparkles, title: "Animated styles", body: "Pop, karaoke, highlight, bounce." },
-  { icon: MousePointerClick, title: "One-click edits", body: "Fix a word, not the timeline." },
+  { icon: Type, title: "Words on the beat.", body: "Word-level timing, auto-synced. The kind people screenshot." },
+  { icon: EyeOff, title: "Reads on mute.", body: "Sized for silent scroll. Reach the 85% who never tap the speaker." },
+  { icon: Sparkles, title: "Looks made, not generated.", body: "Designed styles. Your videos stop looking like everyone else's." },
+  { icon: Gem, title: "Lossless export.", body: "4K in, 4K out. Audio untouched." },
+  { icon: ShieldCheck, title: "No watermark.", body: "Not on Pro. Not on Free. Ever." },
+  { icon: Layers, title: "Minutes, not credits.", body: "Re-edit forever. Fix a typo without paying for it." },
+  { icon: Languages, title: "50+ languages.", body: "Diacritics done right. Most tools quietly drop them." },
+  { icon: Zap, title: "90 second render.", body: "Drop, style, export. Done before your coffee cools." },
+  { icon: MousePointerClick, title: "Real timeline.", body: "Drag words, not lines. Premiere-level control, browser-level speed." },
 ];
 
 export function FeatureGrid() {
@@ -31,7 +31,7 @@ export function FeatureGrid() {
       <Container>
         <div className="max-w-xl">
           <SectionEyebrow>What you get</SectionEyebrow>
-          <SectionTitle>Everything the big editors bury behind a paywall.</SectionTitle>
+          <SectionTitle>Built for the one thing that decides if a video gets watched.</SectionTitle>
         </div>
 
         <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

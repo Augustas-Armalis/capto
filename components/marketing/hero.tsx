@@ -27,12 +27,11 @@ export function Hero() {
           </a>
 
           <h1 className="display mx-auto mt-7 max-w-4xl text-balance text-5xl text-white sm:text-7xl">
-            Captions That <span className="text-magic">Keep Them Watching.</span>
+            Your captions are why people <span className="text-magic">scroll.</span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-xl text-lg text-[var(--color-fg-muted)]">
-            Captions that hold attention and grow your reach, from a tool built for nothing else.
-            Endlessly customizable, exported lossless, no watermark.
+            Bad timing kills retention. Capto fixes it in 90 seconds.
           </p>
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -44,6 +43,10 @@ export function Hero() {
               See pricing
             </Button>
           </div>
+
+          <p className="mt-5 text-sm text-[var(--color-fg-subtle)]">
+            Free to start. €6.99 when you want more.
+          </p>
         </div>
 
         <div className="fade-up mx-auto mt-12 max-w-4xl" style={{ animationDelay: "120ms" }}>
