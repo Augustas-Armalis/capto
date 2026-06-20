@@ -169,6 +169,45 @@
     del(id) { return realFetch('/api/projects/' + id, { method: 'DELETE' }).catch(() => {}); },
   };
 
+  // Social safe-zone guides over the video frame — shaded "avoid" areas where
+  // TikTok / Reels / Shorts paint their own UI (caption, username, action
+  // buttons, top status), so the user doesn't place captions in a bad zone.
+  function safeZone(l, t, w, h, label, labelTop) {
+    return (
+      `<div style="position:absolute;left:${l};top:${t};width:${w};height:${h};` +
+      `background:repeating-linear-gradient(45deg,rgba(251,113,133,.10),rgba(251,113,133,.10) 7px,transparent 7px,transparent 15px);` +
+      `border:1px dashed rgba(251,113,133,.55)">` +
+      `<span style="position:absolute;${labelTop ? 'top' : 'bottom'}:4px;left:6px;font-size:9px;font-weight:700;` +
+      `letter-spacing:.04em;text-transform:uppercase;color:#ffc4cc;background:rgba(0,0,0,.45);padding:1px 6px;border-radius:5px">${label}</span></div>`
+    );
+  }
+  function setupSafeZones() {
+    const frame = document.getElementById('frame');
+    const tools = document.querySelector('.canvas-tools');
+    if (!frame || !tools || document.getElementById('capto-safe')) return;
+    const ov = document.createElement('div');
+    ov.id = 'capto-safe';
+    ov.style.cssText = 'position:absolute;inset:0;z-index:5;pointer-events:none;display:none;border-radius:4px;overflow:hidden';
+    ov.innerHTML =
+      safeZone('0', '0', '100%', '8%', 'Status bar', true) +
+      safeZone('0', '80%', '100%', '20%', 'Caption + nav', false) +
+      safeZone('84%', '34%', '16%', '46%', 'Buttons', true);
+    frame.appendChild(ov);
+    const sep = document.createElement('span');
+    sep.className = 'ct-sep';
+    const btn = document.createElement('button');
+    btn.id = 'capto-safe-btn';
+    btn.title = 'Toggle social safe zones (TikTok / Reels / Shorts)';
+    btn.textContent = '⛶';
+    btn.onclick = () => {
+      const on = ov.style.display === 'none';
+      ov.style.display = on ? 'block' : 'none';
+      btn.style.color = on ? 'var(--accent-2)' : '';
+    };
+    tools.appendChild(sep);
+    tools.appendChild(btn);
+  }
+
   function clearRelink() {
     const o = document.getElementById('capto-relink');
     if (o) o.remove();
@@ -664,6 +703,7 @@
         `Powered by Contles</span>`;
       wrap.appendChild(c);
     }
+    setupSafeZones();
     renderQuotaUI();
     fetchMe();
   });
