@@ -24,6 +24,7 @@ import {
   Smile,
   Languages,
   X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,7 @@ import {
   type Word,
 } from "@/lib/cues";
 import { exportCaptionedVideo, downloadBlob } from "@/lib/export-video";
+import { pickVideoFile, saveHandle, tryRelink, fsAccessSupported } from "@/lib/media-handles";
 import { cn } from "@/lib/utils";
 
 type Plan = "free" | "pro" | "ultra";
@@ -156,6 +158,9 @@ function Editor({
   const [enhancing, setEnhancing] = React.useState<null | "translate" | "emoji">(null);
   const [targetLang, setTargetLang] = React.useState("es");
   const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
+  // Custom project thumbnail (a frame the user picked). Falls back to an
+  // auto-captured frame on save when unset.
+  const [customThumb, setCustomThumb] = React.useState<string | null>(null);
 
   const [transcribing, setTranscribing] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
@@ -204,17 +209,79 @@ function Editor({
     [src],
   );
 
+  // Holds the File System Access handle for the current video, so the project
+  // can re-link its media automatically next visit (no re-upload).
+  const fileHandleRef = React.useRef<FileSystemFileHandle | null>(null);
+  const [autoRelinking, setAutoRelinking] = React.useState(false);
+
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) loadFile(f, needsRelink);
+    if (f) {
+      fileHandleRef.current = null; // input picks don't yield a persistable handle
+      loadFile(f, needsRelink);
+    }
     e.target.value = "";
   };
+
+  // Open the file picker. Prefers the File System Access API so we get a handle
+  // we can store and silently re-open later; falls back to the <input>.
+  const pickFile = React.useCallback(async () => {
+    if (fsAccessSupported()) {
+      const picked = await pickVideoFile();
+      if (picked) {
+        fileHandleRef.current = picked.handle;
+        loadFile(picked.file, needsRelink);
+        return;
+      }
+      return; // user cancelled the native picker
+    }
+    fileInputRef.current?.click();
+  }, [loadFile, needsRelink]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files?.[0];
-    if (f && f.type.startsWith("video/")) loadFile(f, needsRelink);
+    if (f && f.type.startsWith("video/")) {
+      fileHandleRef.current = null;
+      loadFile(f, needsRelink);
+    }
   };
+
+  // Auto-relink: on reopening a saved project, try to silently re-read its file
+  // from the stored handle. Only if that's not possible do we show the
+  // "media lost → re-upload" prompt.
+  React.useEffect(() => {
+    const id = initialProject?.id;
+    if (!id || src) return;
+    let cancelled = false;
+    (async () => {
+      setAutoRelinking(true);
+      try {
+        const file = await tryRelink(id, false);
+        if (!cancelled && file) loadFile(file, true);
+      } finally {
+        if (!cancelled) setAutoRelinking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Manual relink button: try the stored handle interactively (may prompt to
+  // re-grant), else fall back to the normal file picker.
+  const relinkMedia = React.useCallback(async () => {
+    const id = initialProject?.id;
+    if (id) {
+      const file = await tryRelink(id, true);
+      if (file) {
+        loadFile(file, true);
+        return;
+      }
+    }
+    await pickFile();
+  }, [initialProject?.id, loadFile, pickFile]);
 
   // Release the active object URL when the editor unmounts or the source changes
   // (revoking an already-revoked URL is a harmless no-op).
@@ -409,6 +476,15 @@ function Editor({
     }
   };
 
+  // Set the current frame as this project's custom thumbnail.
+  const setThumbnailFromFrame = () => {
+    const t = captureThumbnail();
+    if (t) {
+      setCustomThumb(t);
+      setSaved(false);
+    }
+  };
+
   const saveProject = async () => {
     setSaving(true);
     setSaved(false);
@@ -417,9 +493,10 @@ function Editor({
       const payload = {
         name: projectName,
         durationSec: meta?.dur,
-        thumbnail: captureThumbnail(),
+        thumbnail: customThumb ?? captureThumbnail(),
         state: buildState(),
       };
+      let savedId = projectId;
       if (projectId) {
         const r = await fetch(`/api/projects/${projectId}`, {
           method: "PUT",
@@ -436,6 +513,11 @@ function Editor({
         const d = (await r.json()) as { id?: string; error?: string };
         if (!r.ok || !d.id) throw new Error(d.error || "Could not save.");
         setProjectId(d.id);
+        savedId = d.id;
+      }
+      // Remember the file handle for this project so it auto-relinks next time.
+      if (savedId && fileHandleRef.current) {
+        void saveHandle(savedId, fileHandleRef.current);
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -621,10 +703,11 @@ function Editor({
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3">
           {!src ? (
             <Dropzone
-              onClick={() => fileInputRef.current?.click()}
+              onClick={needsRelink ? relinkMedia : pickFile}
               onDrop={onDrop}
               relink={needsRelink}
               expectedName={expectedName}
+              autoRelinking={autoRelinking}
             />
           ) : (
             <div
@@ -736,6 +819,8 @@ function Editor({
                 onAnim={setAnim}
                 freeLimit={isFree ? FREE_STYLE_LIMIT : null}
                 onLocked={() => setUpgradeOpen(true)}
+                thumbnail={customThumb}
+                onSetThumbnail={setThumbnailFromFrame}
               />
             )}
           </div>
@@ -771,6 +856,8 @@ function Editor({
                 exportPct={exportPct}
                 friendMB={friendMB}
                 onFriendMB={setFriendMB}
+                thumbnail={customThumb}
+                onSetThumbnail={setThumbnailFromFrame}
                 onExport={(q) => {
                   if (q !== "friend") setExportMenuOpen(false);
                   runExport(q, friendMB);
@@ -832,6 +919,8 @@ function Editor({
                     exportPct={exportPct}
                     friendMB={friendMB}
                     onFriendMB={setFriendMB}
+                    thumbnail={customThumb}
+                    onSetThumbnail={setThumbnailFromFrame}
                     onExport={(q) => {
                       setExportMenuOpen(false);
                       runExport(q, friendMB);
@@ -972,6 +1061,8 @@ function Editor({
                 onAnim={setAnim}
                 freeLimit={isFree ? FREE_STYLE_LIMIT : null}
                 onLocked={() => setUpgradeOpen(true)}
+                thumbnail={customThumb}
+                onSetThumbnail={setThumbnailFromFrame}
               />
             )}
           </div>
@@ -998,12 +1089,27 @@ function Dropzone({
   onDrop,
   relink,
   expectedName,
+  autoRelinking,
 }: {
   onClick: () => void;
   onDrop: (e: React.DragEvent) => void;
   relink: boolean;
   expectedName?: string;
+  autoRelinking?: boolean;
 }) {
+  if (autoRelinking) {
+    return (
+      <div className="flex aspect-[16/10] w-full max-w-2xl flex-col items-center justify-center rounded-[var(--radius-xl)] border-2 border-dashed border-white/12 bg-white/[0.02] p-10 text-center">
+        <div className="inline-flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+          <Link2 className="size-7 animate-pulse" />
+        </div>
+        <h2 className="heading mt-5 text-xl text-white">Reconnecting your video…</h2>
+        <p className="mt-2 max-w-sm text-sm text-[var(--color-fg-muted)]">
+          Finding <span className="text-white">{expectedName || "your file"}</span> where you left it.
+        </p>
+      </div>
+    );
+  }
   return (
     <button
       onClick={onClick}
@@ -1030,7 +1136,7 @@ function Dropzone({
       </p>
       <span className="mt-5 inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-white px-4 py-2 text-sm font-medium text-black">
         <Upload className="size-4" />
-        Choose file
+        {relink ? "Reconnect file" : "Choose file"}
       </span>
     </button>
   );
@@ -1282,6 +1388,8 @@ function StylePanel({
   onAnim,
   freeLimit,
   onLocked,
+  thumbnail,
+  onSetThumbnail,
 }: {
   presetId: string;
   onPreset: (id: string) => void;
@@ -1291,7 +1399,10 @@ function StylePanel({
   onAnim: (a: CaptionAnim) => void;
   freeLimit: number | null;
   onLocked: () => void;
+  thumbnail: string | null;
+  onSetThumbnail: () => void;
 }) {
+  const isFreeTier = freeLimit !== null;
   return (
     <div>
       <label className="eyebrow mb-2 block">Caption style</label>
@@ -1341,17 +1452,26 @@ function StylePanel({
         </button>
       )}
 
-      <label className="eyebrow mb-2 mt-6 block">Animation</label>
+      {/* Animation — premium */}
+      <div className="mb-2 mt-6 flex items-center gap-2">
+        <label className="eyebrow">Animation</label>
+        {isFreeTier && (
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-brand)] px-1.5 py-0.5 text-[9px] font-semibold text-white">
+            <Lock className="size-2.5" /> Pro
+          </span>
+        )}
+      </div>
       <div className="flex flex-wrap gap-2">
         {CAPTION_ANIMS.map((a) => (
           <button
             key={a.id}
-            onClick={() => onAnim(a.id)}
+            onClick={() => (isFreeTier ? onLocked() : onAnim(a.id))}
             className={cn(
               "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-              anim === a.id
+              !isFreeTier && anim === a.id
                 ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-white"
                 : "border-white/[0.08] bg-white/[0.02] text-[var(--color-fg-muted)] hover:border-white/20 hover:text-white",
+              isFreeTier && "opacity-60",
             )}
           >
             {a.name}
@@ -1375,6 +1495,56 @@ function StylePanel({
         <span>Higher</span>
         <span>Lower</span>
       </div>
+
+      {/* Horizontal position — premium-only extra control */}
+      {!isFreeTier ? (
+        <>
+          <label htmlFor="caption-x" className="eyebrow mb-2 mt-6 block">Horizontal position</label>
+          <input
+            id="caption-x"
+            type="range"
+            min={0.1}
+            max={0.9}
+            step={0.01}
+            value={pos.x}
+            aria-label="Caption horizontal position"
+            onChange={(e) => onPos({ ...pos, x: parseFloat(e.target.value) })}
+            className="w-full accent-[var(--color-brand)]"
+          />
+          <div className="mt-1 flex justify-between text-[10px] text-[var(--color-fg-subtle)]">
+            <span>Left</span>
+            <span>Right</span>
+          </div>
+        </>
+      ) : (
+        <button
+          onClick={onLocked}
+          className="mt-5 flex w-full items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] px-3 py-2 text-xs font-medium text-white transition-colors hover:border-[var(--color-brand)]/60"
+        >
+          <Sparkles className="size-3.5 text-[var(--color-brand)]" />
+          More controls — animations &amp; positioning with Pro
+        </button>
+      )}
+
+      {/* Project thumbnail */}
+      <label className="eyebrow mb-2 mt-6 block">Thumbnail</label>
+      <div className="flex items-center gap-3">
+        <div className="h-14 w-24 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
+          {thumbnail ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={thumbnail} alt="" className="size-full object-cover" />
+          ) : (
+            <div className="flex size-full items-center justify-center text-[10px] text-[var(--color-fg-subtle)]">Auto</div>
+          )}
+        </div>
+        <button
+          onClick={onSetThumbnail}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
+        >
+          <ImageIcon className="size-3.5" />
+          Use current frame
+        </button>
+      </div>
     </div>
   );
 }
@@ -1387,6 +1557,8 @@ function ExportPanel({
   friendMB,
   onFriendMB,
   onExport,
+  thumbnail,
+  onSetThumbnail,
 }: {
   isFree: boolean;
   hasCues: boolean;
@@ -1395,6 +1567,8 @@ function ExportPanel({
   friendMB: number;
   onFriendMB: (n: number) => void;
   onExport: (q: ExportQuality) => void;
+  thumbnail?: string | null;
+  onSetThumbnail?: () => void;
 }) {
   if (!hasCues) {
     return (
@@ -1405,6 +1579,30 @@ function ExportPanel({
   }
   return (
     <div className="space-y-2.5">
+      {/* Thumbnail */}
+      {onSetThumbnail && (
+        <div className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-white/[0.08] bg-white/[0.02] p-2.5">
+          <div className="h-12 w-20 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
+            {thumbnail ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={thumbnail} alt="" className="size-full object-cover" />
+            ) : (
+              <div className="flex size-full items-center justify-center text-[10px] text-[var(--color-fg-subtle)]">Auto</div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-white">Thumbnail</div>
+            <div className="text-xs text-[var(--color-fg-subtle)]">Shown in your projects list.</div>
+          </div>
+          <button
+            onClick={onSetThumbnail}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
+          >
+            <ImageIcon className="size-3.5" />
+            Current frame
+          </button>
+        </div>
+      )}
       {/* Lossless (paid) */}
       <button
         onClick={() => onExport("lossless")}
