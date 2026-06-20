@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Upload, ArrowRight, Globe } from "lucide-react";
+import { Upload, ArrowRight } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
 
 const LANGS: [string, string][] = [
   ["auto", "Auto-detect language"],
@@ -40,24 +41,17 @@ export function StartPanel() {
       </button>
 
       <div className="mx-auto mt-6 flex max-w-md flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Globe className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-fg-subtle)]" />
-          <select
+        <div className="flex-1">
+          <Combobox
             value={lang}
-            onChange={(e) => setLang(e.target.value)}
-            aria-label="Spoken language"
-            className="w-full appearance-none rounded-[var(--radius-md)] border border-white/10 bg-white/[0.04] py-2.5 pl-9 pr-3 text-sm text-white outline-none focus:border-white/25"
-          >
-            {LANGS.map(([v, l]) => (
-              <option key={v} value={v} className="bg-[var(--color-bg-elev)]">
-                {l}
-              </option>
-            ))}
-          </select>
+            onChange={setLang}
+            options={LANGS.map(([v, l]) => ({ value: v, label: l }))}
+            ariaLabel="Spoken language"
+          />
         </div>
         <button
           onClick={go}
-          className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-white px-5 py-2.5 text-sm font-medium text-black transition-[transform,background-color] hover:bg-white/90 active:scale-[0.98]"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-white px-5 py-2.5 text-sm font-medium text-black transition-[transform,background-color] hover:bg-white/90 active:scale-[0.98]"
         >
           Open the editor
           <ArrowRight className="size-4" />

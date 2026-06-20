@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Combobox } from "@/components/ui/combobox";
 import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 import { PRESETS, getPreset } from "@/lib/caption-presets";
 import {
@@ -1154,19 +1155,15 @@ function CaptionsPanel({
   if (!cues.length) {
     return (
       <div>
-        <label htmlFor="spoken-language" className="eyebrow mb-2 block">Spoken language</label>
-        <select
-          id="spoken-language"
-          value={language}
-          onChange={(e) => onLanguage(e.target.value)}
-          className="mb-4 w-full rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-white/25"
-        >
-          {LANGS.map(([v, l]) => (
-            <option key={v} value={v} className="bg-[var(--color-bg-elev)]">
-              {l}
-            </option>
-          ))}
-        </select>
+        <label className="eyebrow mb-2 block">Spoken language</label>
+        <div className="mb-4">
+          <Combobox
+            value={language}
+            onChange={onLanguage}
+            options={LANGS.map(([v, l]) => ({ value: v, label: l }))}
+            ariaLabel="Spoken language"
+          />
+        </div>
         <Button onClick={onTranscribe} variant="magic" size="lg" className="w-full" loading={transcribing}>
           {transcribing ? (
             "Transcribing…"
@@ -1220,18 +1217,15 @@ function CaptionsPanel({
       </div>
       {/* Translate (premium) */}
       <div className="mb-3 flex items-center gap-2">
-        <select
-          value={targetLang}
-          onChange={(e) => onTargetLang(e.target.value)}
-          aria-label="Translation language"
-          className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-white outline-none focus:border-white/25"
-        >
-          {LANGS.filter(([v]) => v !== "auto").map(([v, l]) => (
-            <option key={v} value={v} className="bg-[var(--color-bg-elev)]">
-              {l}
-            </option>
-          ))}
-        </select>
+        <div className="w-36">
+          <Combobox
+            value={targetLang}
+            onChange={onTargetLang}
+            options={LANGS.filter(([v]) => v !== "auto").map(([v, l]) => ({ value: v, label: l }))}
+            ariaLabel="Translation language"
+            size="sm"
+          />
+        </div>
         <button
           onClick={onTranslate}
           disabled={!!enhancing}

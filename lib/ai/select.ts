@@ -70,8 +70,10 @@ export async function resolveEngine(
   const hasOwn = (p: AiProvider) => !!keys[p] && keys[p]!.length > 10;
   const ownTranscribers = (["deepgram", "openai", "groq"] as AiProvider[]).filter(hasOwn);
 
-  // 1) User explicitly wants their own key.
-  if (prefs.aiUseOwnKey && ownTranscribers.length) {
+  // 1) Own key first when: the user opted in, OR they're on Free and have pasted
+  // a key (Free runs uncapped on its own key, falling back to house Groq).
+  const preferOwn = prefs.aiUseOwnKey || plan === "free";
+  if (preferOwn && ownTranscribers.length) {
     const picked = getModel(prefs.aiProvider);
     if (picked && hasOwn(picked.provider)) {
       return { model: picked, apiKey: keys[picked.provider]!, isHouse: false };
