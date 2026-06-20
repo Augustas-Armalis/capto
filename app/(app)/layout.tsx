@@ -1,6 +1,6 @@
 import * as React from "react";
 import { redirect } from "next/navigation";
-import { AppNav, MobileTopBar, MobileBottomNav } from "@/components/app/app-nav";
+import { AppNav } from "@/components/app/app-nav";
 import { getCurrentSession } from "@/lib/session";
 import { isConfigured } from "@/lib/env";
 
@@ -17,13 +17,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const userImage = session?.user?.image || undefined;
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen">
       <AppNav userName={userName} userEmail={userEmail} userImage={userImage} />
-      <div className="flex-1 flex flex-col min-w-0">
-        <MobileTopBar userName={userName} />
-        <main className="flex-1 pb-20 lg:pb-0">{children}</main>
-        <MobileBottomNav />
-      </div>
+      <main>{children}</main>
     </div>
   );
 }

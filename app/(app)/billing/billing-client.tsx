@@ -4,6 +4,7 @@ import * as React from "react";
 import { ArrowRight, Check, Crown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { FeatureIcon } from "@/components/marketing/pricing-table";
 import { PLANS, getPlan, type PlanId } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
@@ -221,9 +222,9 @@ export function BillingClient({
                   </div>
                   <p className="mt-1 text-sm text-[var(--color-fg-muted)]">{p.tagline}</p>
                   <ul className="mt-4 flex-1 space-y-2">
-                    {p.features.slice(0, 5).map((f) => (
+                    {p.features.slice(0, 6).map((f) => (
                       <li key={f} className="flex items-start gap-2 text-sm text-[var(--color-fg-muted)]">
-                        <Check className="mt-0.5 size-4 shrink-0 text-[var(--color-brand)]" />
+                        <FeatureIcon text={f} />
                         {f}
                       </li>
                     ))}

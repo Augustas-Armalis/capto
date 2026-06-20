@@ -63,7 +63,7 @@ function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) 
 }
 
 // Pick a lucide icon that fits each feature line (falls back to a check).
-function FeatureIcon({ text }: { text: string }) {
+export function FeatureIcon({ text }: { text: string }) {
   const t = text.toLowerCase();
   const cls = "mt-0.5 size-4 shrink-0 text-[var(--color-brand)]";
   if (/everything in/.test(t)) return <Crown className={cls} strokeWidth={2} />;
