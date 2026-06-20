@@ -575,7 +575,18 @@ body.theme-light .toast { background: #fff; }
 }
 
 /* ---- Capto brand touches ---- */
-.brand-wm { height: 24px; width: auto; display: block; }
-/* Active tab indicator + the home title use the Capto gradient (matches landing) */
+/* Match the landing-page UI font (DM Sans), self-hosted by the Capto app. */
+@font-face { font-family: 'DM Sans'; font-weight: 400; font-display: swap; src: url('/fonts/DMSans-400.woff2') format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-weight: 500; font-display: swap; src: url('/fonts/DMSans-500.woff2') format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-weight: 600; font-display: swap; src: url('/fonts/DMSans-600.woff2') format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-weight: 700; font-display: swap; src: url('/fonts/DMSans-700.woff2') format('woff2'); }
+body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif; }
+
+/* The Capto wordmark — keep its real proportions (the generic .brand img rule
+   forces a 26×26 square, which squished it). */
+.brand img.brand-wm, .brand-wm { height: 26px; width: auto; max-width: 132px; object-fit: contain; display: block; }
+.home-title img.home-wm { width: auto; height: 30px; max-width: 150px; }
+
+/* Active tab indicator + segmented controls use the Capto gradient (landing) */
 .tab.active::after { background: linear-gradient(90deg, #82a5ff, #8983ff 55%, #62d8ff); height: 2px; }
 .seg button.on { background: linear-gradient(120deg, #82a5ff, #8983ff); color: #0b0c14; }

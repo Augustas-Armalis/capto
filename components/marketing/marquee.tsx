@@ -42,29 +42,13 @@ export function Marquee({
     </div>
   );
 
-  const rootRef = React.useRef<HTMLDivElement | null>(null);
-  // On hover we pause the scroll AND freeze every video inside (so a clip the
-  // user is looking at holds its frame instead of looping past it). On leave,
-  // each VideoReel's own visibility observer resumes the on-screen ones.
-  const setVideos = (play: boolean) => {
-    const root = rootRef.current;
-    if (!root) return;
-    root.querySelectorAll("video").forEach((v) => {
-      if (play) {
-        const p = v.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
-      } else {
-        v.pause();
-      }
-    });
-  };
-
+  // Hover pauses only the SCROLL — never the videos (pausing + resuming a
+  // <video> reloads it and replays from black, which looked broken on hover).
   return (
     <div
-      ref={rootRef}
       className={cn("overflow-hidden", maskClass, className)}
-      onPointerEnter={pauseOnHover ? () => { setPaused(true); setVideos(false); } : undefined}
-      onPointerLeave={pauseOnHover ? () => { setPaused(false); setVideos(true); } : undefined}
+      onPointerEnter={pauseOnHover ? () => setPaused(true) : undefined}
+      onPointerLeave={pauseOnHover ? () => setPaused(false) : undefined}
     >
       <div
         className="marquee-track flex w-max"

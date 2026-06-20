@@ -197,8 +197,9 @@
     sep.className = 'ct-sep';
     const btn = document.createElement('button');
     btn.id = 'capto-safe-btn';
-    btn.title = 'Toggle social safe zones (TikTok / Reels / Shorts)';
-    btn.textContent = '⛶';
+    btn.title = 'Safe zones — where TikTok / Reels / Shorts cover the screen';
+    // A phone frame with a marked bottom zone — reads as "safe areas".
+    btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><rect x="9" y="15.5" width="6" height="3.2" rx="1" fill="currentColor" stroke="none" opacity="0.55"/></svg>';
     btn.onclick = () => {
       const on = ov.style.display === 'none';
       ov.style.display = on ? 'block' : 'none';
@@ -517,7 +518,7 @@
     panel.style.cssText = 'display:none;margin:2px 0 14px';
     panel.innerHTML =
       `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Thumbnail — drag to a frame, or upload your own</div>` +
-      `<img id="capto-thumb-preview" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#000;display:block">` +
+      `<img id="capto-thumb-preview" alt="" style="max-height:300px;max-width:100%;width:auto;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#000;display:block;margin:0 auto">` +
       `<input id="capto-thumb-scrub" type="range" min="0" max="100" value="35" style="width:100%;margin-top:10px">` +
       `<div style="margin-top:8px"><button id="capto-thumb-upload" class="btn ghost sm" type="button">Upload image</button></div>` +
       `<input id="capto-thumb-file" type="file" accept="image/*" hidden>`;

@@ -1,5 +1,5 @@
 import { Container } from "@/components/ui/container";
-import { SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
+import { SectionEyebrow, SectionTitle } from "@/components/ui/section";
 import { Marquee } from "./marquee";
 import { VideoReel } from "./video-reel";
 import { CAROUSEL_VIDEOS } from "./carousel-manifest";
@@ -47,7 +47,6 @@ export function MadeWithCapto() {
         <div className="max-w-xl">
           <SectionEyebrow>Made with Capto</SectionEyebrow>
           <SectionTitle>Real clips. No watermark to hide behind.</SectionTitle>
-          <SectionLede>Short-form from creators who dropped the pricey tools.</SectionLede>
         </div>
       </Container>
 

@@ -39,36 +39,41 @@ export async function POST(req: Request) {
     );
   }
 
-  const stripe = getStripe();
-  const db = getDb();
+  try {
+    const stripe = getStripe();
+    const db = getDb();
 
-  const [row] = await db
-    .select({ stripeCustomerId: userTable.stripeCustomerId })
-    .from(userTable)
-    .where(eq(userTable.id, session.user.id))
-    .limit(1);
+    const [row] = await db
+      .select({ stripeCustomerId: userTable.stripeCustomerId })
+      .from(userTable)
+      .where(eq(userTable.id, session.user.id))
+      .limit(1);
 
-  let customerId = row?.stripeCustomerId || null;
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: session.user.email,
-      name: session.user.name || undefined,
-      metadata: { userId: session.user.id },
+    let customerId = row?.stripeCustomerId || null;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: session.user.email,
+        name: session.user.name || undefined,
+        metadata: { userId: session.user.id },
+      });
+      customerId = customer.id;
+      await db.update(userTable).set({ stripeCustomerId: customerId }).where(eq(userTable.id, session.user.id));
+    }
+
+    const checkout = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      success_url: `${env.siteUrl}/billing?success=1`,
+      cancel_url: `${env.siteUrl}/billing?canceled=1`,
+      metadata: { userId: session.user.id, plan },
+      subscription_data: { metadata: { userId: session.user.id, plan } },
     });
-    customerId = customer.id;
-    await db.update(userTable).set({ stripeCustomerId: customerId }).where(eq(userTable.id, session.user.id));
+
+    return NextResponse.json({ url: checkout.url });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Checkout failed.";
+    return NextResponse.json({ error: msg, plan, interval }, { status: 502 });
   }
-
-  const checkout = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    allow_promotion_codes: true,
-    success_url: `${env.siteUrl}/billing?success=1`,
-    cancel_url: `${env.siteUrl}/billing?canceled=1`,
-    metadata: { userId: session.user.id, plan },
-    subscription_data: { metadata: { userId: session.user.id, plan } },
-  });
-
-  return NextResponse.json({ url: checkout.url });
 }

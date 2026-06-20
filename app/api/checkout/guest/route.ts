@@ -37,17 +37,23 @@ export async function POST(req: Request) {
     );
   }
 
-  const stripe = getStripe();
-  const checkout = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    line_items: [{ price: priceId, quantity: 1 }],
-    allow_promotion_codes: true,
-    billing_address_collection: "auto",
-    success_url: `${env.siteUrl}/welcome?cs={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${env.siteUrl}/pricing?canceled=1`,
-    metadata: { plan, flow: "guest" },
-    subscription_data: { metadata: { plan, flow: "guest" } },
-  });
-
-  return NextResponse.json({ url: checkout.url });
+  try {
+    const stripe = getStripe();
+    const checkout = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      billing_address_collection: "auto",
+      success_url: `${env.siteUrl}/welcome?cs={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${env.siteUrl}/pricing?canceled=1`,
+      metadata: { plan, flow: "guest" },
+      subscription_data: { metadata: { plan, flow: "guest" } },
+    });
+    return NextResponse.json({ url: checkout.url });
+  } catch (e) {
+    // Surface the real Stripe reason (bad key / archived price / test-vs-live
+    // mismatch) instead of a raw 500, so the frontend can fall back to /signup.
+    const msg = e instanceof Error ? e.message : "Checkout failed.";
+    return NextResponse.json({ error: msg, plan, interval, currency }, { status: 502 });
+  }
 }

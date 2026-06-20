@@ -2,12 +2,13 @@
 
 import * as React from "react";
 
-// A reel clip that:
-//  • loads NOTHING until it nears the viewport (preload="none" + play-on-visible),
-//    so a wall of clips never all decode at once and stutter the page;
-//  • pauses when it scrolls away (frees the decoder);
-//  • falls back to a soft gradient if the codec can't play (e.g. AV1 on Safari)
-//    instead of showing a broken black box or breaking layout.
+// A reel clip that loads once and then just loops — no pause/resume churn.
+//   • preload="metadata" + start playing the FIRST time it nears the viewport,
+//     then stop observing, so it never gets paused → reloaded → restarted
+//     (that black-out-and-replay was the bug on hover/scroll).
+//   • muted + loop so autoplay is allowed and it runs forever.
+//   • onError → soft gradient fallback (e.g. AV1 on Safari) instead of a broken
+//     black box that breaks the row.
 export function VideoReel({ src, index = 0 }: { src: string; index?: number }) {
   const ref = React.useRef<HTMLVideoElement | null>(null);
   const [broken, setBroken] = React.useState(false);
@@ -21,12 +22,11 @@ export function VideoReel({ src, index = 0 }: { src: string; index?: number }) {
           if (e.isIntersecting) {
             const p = v.play();
             if (p && typeof p.catch === "function") p.catch(() => {});
-          } else {
-            v.pause();
+            io.unobserve(v); // started — leave it looping, never pause/restart it
           }
         }
       },
-      { rootMargin: "120px" },
+      { rootMargin: "400px" },
     );
     io.observe(v);
     return () => io.disconnect();
@@ -51,7 +51,7 @@ export function VideoReel({ src, index = 0 }: { src: string; index?: number }) {
           muted
           loop
           playsInline
-          preload="none"
+          preload="metadata"
           disablePictureInPicture
           tabIndex={-1}
           onError={() => setBroken(true)}
