@@ -11,10 +11,18 @@ import { VideoReel } from "./video-reel";
 function getVideos(): string[] {
   try {
     const dir = path.join(process.cwd(), "public", "videos");
-    return fs
+    const all = fs
       .readdirSync(dir)
-      .filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f) && !f.startsWith("."))
-      .sort();
+      .filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f) && !f.startsWith("."));
+    // Prefer the optimized "carousel" clips; never the raw transcoded sources
+    // (they're huge and not meant for autoplay). Order numerically (2 before 10).
+    const carousel = all.filter((f) => /carousel/i.test(f));
+    const pick = (carousel.length ? carousel : all.filter((f) => !/original|transcoded|source/i.test(f)));
+    return pick.sort((a, b) => {
+      const na = parseInt((a.match(/\d+/) || ["0"])[0], 10);
+      const nb = parseInt((b.match(/\d+/) || ["0"])[0], 10);
+      return na - nb || a.localeCompare(b);
+    });
   } catch {
     return [];
   }
