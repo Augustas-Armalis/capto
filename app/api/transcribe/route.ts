@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, user as userTable } from "@/lib/db";
-import { env, isConfigured, houseKeyFor } from "@/lib/env";
+import { isConfigured, houseKeyFor } from "@/lib/env";
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
-import { resolveEngine, resolveByokEngine } from "@/lib/ai/select";
+import { resolveEngine, resolveByokEngine, type ResolvedEngine } from "@/lib/ai/select";
 import { runTranscription, TranscribeError } from "@/lib/ai/transcribe";
 import { consumeTranscription, recordRun, topVocabulary } from "@/lib/usage";
 import { STT_MODELS, getModel } from "@/lib/ai/models";
@@ -13,14 +13,21 @@ import type { PlanId } from "@/lib/pricing";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const houseGroq = (): ResolvedEngine | null => {
+  const key = houseKeyFor("groq");
+  if (!key) return null;
+  const model = STT_MODELS.find((m) => m.provider === "groq")!;
+  return { model, apiKey: key, isHouse: true };
+};
+
 /**
- * Transcription proxy. The browser sends the clip's audio; we route it to the
- * best available engine (managed or the user's own key), enforce the plan's
- * monthly budget for managed use, bias the model with the user's learned
- * vocabulary, and record quality metrics. The video never touches our storage.
+ * Transcription proxy. Routes the clip to the best available engine (managed or
+ * the user's own key), meters managed use, and biases the model with learned
+ * vocabulary. The smart path is fully guarded: on ANY error it falls back to the
+ * house Groq key and still transcribes, so a metering/DB hiccup never blocks a
+ * caption. The video never touches our storage.
  */
 export async function POST(req: Request) {
-  // Throttle the AI endpoint to stop hammering / cost abuse.
   const rl = await rateLimit(`transcribe:${clientIp(req)}`, 40, 60 * 10);
   if (!rl.ok) return tooMany(rl.retryAfter);
 
@@ -32,99 +39,98 @@ export async function POST(req: Request) {
   const language = (inForm?.get("language") as string) || "auto";
   const requestedModel = (inForm?.get("model") as string) || "";
 
-  // ── resolve the user + engine ──────────────────────────────────────────
+  // ── resolve the signed-in user (guarded) ───────────────────────────────
   let plan: PlanId = "free";
   let userId: string | null = null;
   let prefs = { aiProvider: "auto", aiUseOwnKey: false };
-  if (isConfigured.db()) {
-    const session = await getCurrentSession();
-    if (session?.user?.id) {
-      userId = session.user.id;
-      const db = getDb();
-      const [u] = await db
-        .select({ plan: userTable.plan, aiProvider: userTable.aiProvider, aiUseOwnKey: userTable.aiUseOwnKey })
-        .from(userTable)
-        .where(eq(userTable.id, session.user.id))
-        .limit(1);
-      if (u) {
-        plan = u.plan;
-        // A per-request model override (from the editor picker) wins for this run.
-        prefs = {
-          aiProvider: requestedModel && getModel(requestedModel) ? requestedModel : u.aiProvider,
-          aiUseOwnKey: u.aiUseOwnKey,
-        };
+  try {
+    if (isConfigured.db()) {
+      const session = await getCurrentSession();
+      if (session?.user?.id) {
+        userId = session.user.id;
+        const db = getDb();
+        const [u] = await db
+          .select({ plan: userTable.plan, aiProvider: userTable.aiProvider, aiUseOwnKey: userTable.aiUseOwnKey })
+          .from(userTable)
+          .where(eq(userTable.id, session.user.id))
+          .limit(1);
+        if (u) {
+          plan = u.plan;
+          prefs = {
+            aiProvider: requestedModel && getModel(requestedModel) ? requestedModel : u.aiProvider,
+            aiUseOwnKey: u.aiUseOwnKey,
+          };
+        }
       }
     }
+  } catch {
+    /* session/DB hiccup — fall through; we'll use the house key */
   }
 
-  // In production (DB configured) transcription requires an account so all
-  // managed/house usage is metered — no uncapped anonymous house spend. Only
-  // the keyless/dev mode (no DB) serves anonymous requests off the house key.
-  if (!userId) {
-    if (isConfigured.db()) {
-      return NextResponse.json(
-        { error: "Please sign in to generate captions.", code: "auth" },
-        { status: 401 },
-      );
-    }
-    const key = houseKeyFor("groq");
-    if (!key) return NextResponse.json({ error: "No transcription engine configured." }, { status: 503 });
-    const model = STT_MODELS.find((m) => m.provider === "groq")!;
-    return transcribeAndRespond({ model, apiKey: key, isHouse: true }, file, language, [], null, plan);
-  }
-
-  const engine = await resolveEngine(userId, plan, prefs);
-  if (!engine) {
+  // Anonymous in production must sign in (editor is auth-gated; this only stops
+  // direct unmetered API abuse). Dev/no-DB serves the house key.
+  if (!userId && isConfigured.db()) {
     return NextResponse.json(
-      {
-        error:
-          "No AI engine available. Add your own key in Settings, or upgrade for managed AI.",
-        code: "no_engine",
-      },
-      { status: 400 },
+      { error: "Please sign in to generate captions.", code: "auth" },
+      { status: 401 },
     );
   }
 
-  // Enforce the monthly budget only for managed (house) usage. BYOK is uncapped.
-  let active = engine;
-  if (engine.isHouse) {
-    const consumed = await consumeTranscription(userId, plan);
-    if (!consumed.allowed) {
-      // Budget spent — fall back to the user's OWN key if they have one, so a
-      // user who already added a key is never blocked (BYOK is uncapped).
-      const own = await resolveByokEngine(userId);
-      if (own) {
-        active = own;
-      } else {
-        return NextResponse.json(
-          {
-            error:
-              plan === "free"
-                ? "You've used your free AI captions this month. Add your own free Groq key in Settings, or upgrade for more."
-                : "You've reached this month's transcription limit.",
-            code: "cap_reached",
-            plan,
-            limit: consumed.limit,
-          },
-          { status: 402 },
-        );
+  // ── pick the engine, with a guaranteed house-Groq fallback ──────────────
+  let active: ResolvedEngine | null = null;
+  let capError: NextResponse | null = null;
+  if (userId) {
+    try {
+      const engine = await resolveEngine(userId, plan, prefs);
+      if (engine?.isHouse) {
+        const consumed = await consumeTranscription(userId, plan).catch(() => ({
+          allowed: true,
+          used: 0,
+          limit: null,
+        }));
+        if (consumed.allowed) {
+          active = engine;
+        } else {
+          const own = await resolveByokEngine(userId).catch(() => null);
+          if (own) active = own;
+          else {
+            capError = NextResponse.json(
+              {
+                error:
+                  plan === "free"
+                    ? "You've used your free AI captions this month. Add your own free Groq key in Settings, or upgrade for more."
+                    : "You've reached this month's transcription limit.",
+                code: "cap_reached",
+                plan,
+                limit: consumed.limit,
+              },
+              { status: 402 },
+            );
+          }
+        }
+      } else if (engine) {
+        active = engine; // BYOK, uncapped
       }
+    } catch {
+      /* resolution failed — house fallback below */
     }
   }
+  if (capError) return capError;
+  if (!active) active = houseGroq();
+  if (!active) {
+    return NextResponse.json({ error: "No transcription engine configured." }, { status: 503 });
+  }
 
-  const vocab = await topVocabulary(userId);
-  return transcribeAndRespond(active, file, language, vocab, userId, plan);
+  const vocab = userId ? await topVocabulary(userId).catch(() => []) : [];
+  return transcribeAndRespond(active, file, language, vocab);
 }
 
 async function transcribeAndRespond(
-  engine: { model: typeof STT_MODELS[number]; apiKey: string; isHouse: boolean },
+  engine: ResolvedEngine,
   file: File,
   language: string,
   vocab: string[],
-  userId: string | null,
-  plan: PlanId,
 ) {
-  // Build a spelling/style prompt from the user's learned vocabulary.
   const base = "Transcribe accurately with correct spelling, punctuation, and capitalization.";
   const prompt = vocab.length ? `${base} Proper nouns: ${vocab.join(", ")}.` : base;
 
@@ -140,7 +146,6 @@ async function transcribeAndRespond(
     if (!result.words.length) {
       return NextResponse.json({ error: "No speech detected in this clip." }, { status: 422 });
     }
-    // Learning loop: record this run (best-effort, never blocks the response).
     void recordRun(engine.model.provider, engine.model.apiModel, result.words.length);
 
     return NextResponse.json({

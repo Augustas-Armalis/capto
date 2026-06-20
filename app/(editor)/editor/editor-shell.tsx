@@ -23,6 +23,7 @@ import {
   Send,
   Smile,
   Languages,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -124,7 +125,7 @@ function Editor({
   const [playing, setPlaying] = React.useState(false);
   const [time, setTime] = React.useState(0);
   const [tab, setTab] = React.useState<"captions" | "style">("captions");
-  const [mobileTab, setMobileTab] = React.useState<"style" | "captions" | "export">("captions");
+  const [mobileTab, setMobileTab] = React.useState<"style" | "captions">("captions");
   const [friendMB, setFriendMB] = React.useState(8);
   // Which AI engine produced the current captions, + a snapshot of its raw
   // output. On save we diff this against the edited captions to feed the
@@ -276,11 +277,14 @@ function Editor({
     if (!fileObj) return;
     setErr(null);
     setTranscribing(true);
+    // Hard timeout so the button can never spin forever on a stalled request.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 150_000);
     try {
       const fd = new FormData();
       fd.append("file", fileObj, fileObj.name);
       fd.append("language", language);
-      const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+      const res = await fetch("/api/transcribe", { method: "POST", body: fd, signal: ctrl.signal });
       const data = (await res.json()) as {
         words?: Word[];
         text?: string;
@@ -303,8 +307,11 @@ function Editor({
       if (data.engine) setEngine(data.engine);
       setTab("captions");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Transcription failed.");
+      if (e instanceof DOMException && e.name === "AbortError")
+        setErr("Transcription timed out. Try a shorter clip or check your connection.");
+      else setErr(e instanceof Error ? e.message : "Transcription failed.");
     } finally {
+      clearTimeout(timer);
       setTranscribing(false);
     }
   };
@@ -581,10 +588,11 @@ function Editor({
             </button>
           )}
           <Button
-            onClick={() => setMobileTab("export")}
+            onClick={() => setExportMenuOpen(true)}
             variant="primary"
             size="sm"
-            disabled={!cues.length}
+            disabled={!cues.length || exporting}
+            loading={exporting}
             className="shrink-0"
           >
             <Download className="size-4" />
@@ -657,15 +665,12 @@ function Editor({
 
         {/* tabbed sheet */}
         <div className="flex shrink-0 flex-col border-t border-[var(--color-border)] bg-[var(--color-bg-elev)]/70">
-          <div className="grid grid-cols-3 gap-1 p-2">
+          <div className="grid grid-cols-2 gap-1 p-2">
             <TabBtn active={mobileTab === "style"} onClick={() => setMobileTab("style")} icon={<Type className="size-4" />}>
               Style
             </TabBtn>
             <TabBtn active={mobileTab === "captions"} onClick={() => setMobileTab("captions")} icon={<ListVideo className="size-4" />}>
               Captions
-            </TabBtn>
-            <TabBtn active={mobileTab === "export"} onClick={() => setMobileTab("export")} icon={<Download className="size-4" />}>
-              Export
             </TabBtn>
           </div>
           <div className="max-h-[44vh] min-h-[180px] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-1">
@@ -716,22 +721,47 @@ function Editor({
                 onLocked={() => setUpgradeOpen(true)}
               />
             )}
-            {mobileTab === "export" && (
-              <MobileExportPanel
+          </div>
+        </div>
+
+        <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={onPick} />
+        {upgradeOpen && <UpgradeModal onClose={() => setUpgradeOpen(false)} />}
+
+        {/* Export popup (bottom sheet) — replaces the old export tab */}
+        {exportMenuOpen && (
+          <div
+            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+            onClick={() => !exporting && setExportMenuOpen(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-t-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="heading text-lg text-white">Export</h3>
+                <button
+                  onClick={() => setExportMenuOpen(false)}
+                  aria-label="Close"
+                  className="inline-flex size-8 items-center justify-center rounded-full text-[var(--color-fg-muted)] hover:bg-white/5 hover:text-white"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+              <ExportPanel
                 isFree={isFree}
                 hasCues={cues.length > 0}
                 exporting={exporting}
                 exportPct={exportPct}
                 friendMB={friendMB}
                 onFriendMB={setFriendMB}
-                onExport={(q) => runExport(q, friendMB)}
+                onExport={(q) => {
+                  if (q !== "friend") setExportMenuOpen(false);
+                  runExport(q, friendMB);
+                }}
               />
-            )}
+            </div>
           </div>
-        </div>
-
-        <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={onPick} />
-        {upgradeOpen && <UpgradeModal onClose={() => setUpgradeOpen(false)} />}
+        )}
       </div>
     );
   }
@@ -778,7 +808,7 @@ function Editor({
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setExportMenuOpen(false)} />
                 <div className="absolute right-0 z-50 mt-2 w-80 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-3 shadow-[var(--shadow-pop)]">
-                  <MobileExportPanel
+                  <ExportPanel
                     isFree={isFree}
                     hasCues={cues.length > 0}
                     exporting={exporting}
@@ -1339,7 +1369,7 @@ function StylePanel({
   );
 }
 
-function MobileExportPanel({
+function ExportPanel({
   isFree,
   hasCues,
   exporting,
