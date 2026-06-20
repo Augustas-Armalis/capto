@@ -13,6 +13,11 @@ function buildAuth() {
       autoSignIn: true,
       minPasswordLength: 8,
     },
+    user: {
+      // Let users change their own email from Settings (direct change — no
+      // verification step, since Capto's pay-first accounts start unverified).
+      changeEmail: { enabled: true },
+    },
     session: {
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,

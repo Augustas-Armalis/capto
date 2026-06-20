@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { TeamSection } from "@/components/app/team-section";
 import { STT_MODELS, PROVIDER_LABEL, PLAN_RANK, type AiProvider } from "@/lib/ai/models";
+import { changeEmail, changePassword } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 type Provider = AiProvider;
@@ -88,6 +89,51 @@ export function SettingsClient({
   const [nameSaving, setNameSaving] = React.useState(false);
   const [nameSaved, setNameSaved] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+
+  // change email
+  const [newEmail, setNewEmail] = React.useState(email);
+  const [emailBusy, setEmailBusy] = React.useState(false);
+  const [emailMsg, setEmailMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
+  async function saveEmail() {
+    const e = newEmail.trim();
+    if (!e || e === email) return;
+    setEmailBusy(true);
+    setEmailMsg(null);
+    try {
+      const res = await changeEmail({ newEmail: e });
+      if (res?.error) throw new Error(res.error.message || "Could not change email.");
+      setEmailMsg({ ok: true, text: "Email updated." });
+    } catch (err) {
+      setEmailMsg({ ok: false, text: err instanceof Error ? err.message : "Could not change email." });
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  // change password
+  const [curPwd, setCurPwd] = React.useState("");
+  const [newPwd, setNewPwd] = React.useState("");
+  const [pwdBusy, setPwdBusy] = React.useState(false);
+  const [pwdMsg, setPwdMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
+  async function savePassword() {
+    if (newPwd.length < 8) {
+      setPwdMsg({ ok: false, text: "New password must be at least 8 characters." });
+      return;
+    }
+    setPwdBusy(true);
+    setPwdMsg(null);
+    try {
+      const res = await changePassword({ currentPassword: curPwd, newPassword: newPwd, revokeOtherSessions: true });
+      if (res?.error) throw new Error(res.error.message || "Could not change password.");
+      setPwdMsg({ ok: true, text: "Password changed." });
+      setCurPwd("");
+      setNewPwd("");
+    } catch (err) {
+      setPwdMsg({ ok: false, text: err instanceof Error ? err.message : "Could not change password." });
+    } finally {
+      setPwdBusy(false);
+    }
+  }
 
   React.useEffect(() => {
     fetch("/api/user/api-keys").then((r) => r.json()).then((j) => setMeta(j.keys || [])).catch(() => {});
@@ -233,12 +279,19 @@ export function SettingsClient({
   const has = (p: Provider) => meta.some((m) => m.provider === p);
   const planLabel = plan === "free" ? "Free" : plan === "pro" ? "Pro" : "Ultra";
 
+  // Only offer engines the user can actually run: Groq is always available (our
+  // house key); every other provider's models appear only once its key is saved
+  // under API keys. Models above the user's plan are hidden too.
   const engineOptions = [
-    { value: "auto", label: "Auto — best engine (improves over time)" },
-    ...STT_MODELS.map((m) => ({
+    { value: "auto", label: "Auto — best Groq engine (improves over time)" },
+    ...STT_MODELS.filter((m) => {
+      if (m.provider !== "groq" && !has(m.provider as Provider)) return false;
+      if (PLAN_RANK[m.minPlan] > PLAN_RANK[plan]) return false;
+      return true;
+    }).map((m) => ({
       value: m.id,
       label: m.label,
-      hint: m.minPlan !== "free" ? (m.minPlan === "pro" ? "Pro" : "Ultra") : undefined,
+      hint: m.provider === "groq" ? undefined : "your key",
     })),
   ];
 
@@ -347,12 +400,34 @@ export function SettingsClient({
                   </div>
                   <div className="space-y-1.5">
                     <label htmlFor="profile-email" className="eyebrow block">Email</label>
-                    <Input id="profile-email" defaultValue={email} disabled />
+                    <div className="flex gap-2">
+                      <Input id="profile-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} autoComplete="email" />
+                      <Button onClick={saveEmail} loading={emailBusy} disabled={!newEmail.trim() || newEmail.trim() === email}>
+                        <Save className="size-4" />
+                      </Button>
+                    </div>
+                    {emailMsg && (
+                      <p className={cn("text-xs", emailMsg.ok ? "text-[var(--color-success)]" : "text-[var(--color-danger)]")}>{emailMsg.text}</p>
+                    )}
                   </div>
                 </div>
-                <p className="mt-3 text-xs text-[var(--color-fg-subtle)]">
-                  To change your email, contact hello@capto.video. Reset your password from the sign-in page.
-                </p>
+
+                {/* Change password */}
+                <div className="mt-7 border-t border-[var(--color-border)] pt-6">
+                  <h3 className="text-sm font-semibold">Change password</h3>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Input type="password" placeholder="Current password" value={curPwd} onChange={(e) => setCurPwd(e.target.value)} autoComplete="current-password" />
+                    <Input type="password" placeholder="New password (min 8)" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} autoComplete="new-password" />
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <Button onClick={savePassword} loading={pwdBusy} disabled={!curPwd || !newPwd}>
+                      <Save className="size-4" /> Update password
+                    </Button>
+                    {pwdMsg && (
+                      <span className={cn("text-xs", pwdMsg.ok ? "text-[var(--color-success)]" : "text-[var(--color-danger)]")}>{pwdMsg.text}</span>
+                    )}
+                  </div>
+                </div>
               </Section>
             </>
           )}
@@ -410,10 +485,12 @@ export function SettingsClient({
           {tab === "keys" && (
             <Section title="Your API keys" badge={<Badge variant="outline"><KeyRound className="size-3" /> Encrypted</Badge>}>
               <p className="-mt-1 text-sm text-[var(--color-fg-muted)]">
-                Encrypted with AES-256-GCM before storage. Optional — paid plans get managed AI. Bring your own to run on your account.
+                {plan === "free"
+                  ? "On Free you can add your own Groq key to run uncapped. Other providers (OpenAI, Deepgram, Gemini) need Pro."
+                  : "Keys are encrypted with AES-256-GCM. Add a Groq key to run uncapped, or any other provider to use its models."}
               </p>
               <div className="mt-5 space-y-4">
-                {PROVIDERS.map((p) => (
+                {PROVIDERS.filter((p) => plan !== "free" || p.id === "groq").map((p) => (
                   <div key={p.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-5">
                     <div className="flex items-center justify-between">
                       <div>

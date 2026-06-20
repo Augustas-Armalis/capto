@@ -7,4 +7,4 @@ export const authClient = createAuthClient({
     typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL,
 });
 
-export const { signIn, signUp, signOut, useSession } = authClient;
+export const { signIn, signUp, signOut, useSession, changeEmail, changePassword } = authClient;

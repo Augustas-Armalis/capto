@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Settings, CreditCard, FolderOpen, Plus, ChevronDown } from "lucide-react";
+import { LogOut, Settings, CreditCard, FolderOpen, ChevronLeft, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
 
@@ -41,9 +41,12 @@ export function AppNav({
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <Image src="/logo.png" alt="Capto" width={24} height={24} />
-          <span className="font-bold tracking-tight">Capto</span>
+        <Link
+          href="/editor"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)]"
+        >
+          <ChevronLeft className="size-4" />
+          Back to platform
         </Link>
 
         <div className="flex items-center gap-2">
@@ -58,13 +61,6 @@ export function AppNav({
           >
             <FolderOpen className="size-4" />
             Projects
-          </Link>
-          <Link
-            href="/editor"
-            className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-black transition-[transform,background-color] hover:bg-white/90 active:scale-[0.98]"
-          >
-            <Plus className="size-4" />
-            New
           </Link>
 
           <div className="relative">

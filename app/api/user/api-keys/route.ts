@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { getCurrentSession } from "@/lib/session";
-import { getDb, userApiKey } from "@/lib/db";
+import { getDb, userApiKey, user } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { isConfigured } from "@/lib/env";
 
@@ -54,6 +54,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
   const { provider, key, label } = parsed.data;
+
+  // Free users may only bring a Groq key (everything else needs a paid plan).
+  // The Settings UI hides these too, but enforce it here so the API can't be
+  // driven directly to stash an unusable key.
+  if (provider !== "groq") {
+    const db0 = getDb();
+    const prow = await db0
+      .select({ plan: user.plan })
+      .from(user)
+      .where(eq(user.id, session.user.id))
+      .limit(1);
+    if ((prow[0]?.plan ?? "free") === "free") {
+      return NextResponse.json(
+        { error: "Other providers require a paid plan. Upgrade to add this key." },
+        { status: 403 },
+      );
+    }
+  }
 
   if (provider === "groq" && !key.startsWith("gsk_")) {
     return NextResponse.json({ error: "Groq keys start with gsk_." }, { status: 400 });
