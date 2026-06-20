@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
@@ -18,6 +19,8 @@ const NAV_LINKS = [
 export function SiteNav() {
   const [scrolled, setScrolled] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+  const { data: session } = useSession();
+  const authed = !!session?.user;
 
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -54,12 +57,20 @@ export function SiteNav() {
           </div>
 
           <div className="hidden items-center gap-2 md:flex">
-            <Button href="/signin" variant="ghost" size="sm">
-              Sign in
-            </Button>
-            <Button href="/signup" size="sm">
-              Start free
-            </Button>
+            {authed ? (
+              <Button href="/dashboard" size="sm">
+                Open app
+              </Button>
+            ) : (
+              <>
+                <Button href="/signin" variant="ghost" size="sm">
+                  Sign in
+                </Button>
+                <Button href="/signup" size="sm">
+                  Start free
+                </Button>
+              </>
+            )}
           </div>
 
           {/* mobile toggle, no border box */}
@@ -87,10 +98,14 @@ export function SiteNav() {
               ))}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <Button href="/signin" variant="secondary">
-                Sign in
-              </Button>
-              <Button href="/signup">Start free</Button>
+              {authed ? (
+                <Button href="/dashboard" className="col-span-2">Open app</Button>
+              ) : (
+                <>
+                  <Button href="/signin" variant="secondary">Sign in</Button>
+                  <Button href="/signup">Start free</Button>
+                </>
+              )}
             </div>
           </div>
         )}

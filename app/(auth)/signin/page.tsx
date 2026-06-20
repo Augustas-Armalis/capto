@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { AuthCard } from "@/components/auth/auth-card";
 import { SignInForm } from "@/components/auth/signin-form";
+import { getCurrentSession } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -10,7 +12,12 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-export default function SignInPage() {
+export const dynamic = "force-dynamic";
+
+export default async function SignInPage() {
+  // Already signed in? Skip straight into the app (auto-login feel).
+  const session = await getCurrentSession();
+  if (session?.user) redirect("/dashboard");
   return (
     <AuthCard
       title="Welcome back."
