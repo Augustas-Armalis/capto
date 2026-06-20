@@ -993,7 +993,7 @@ function Editor({
 
           {/* transport + timeline */}
           {src && (
-            <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-elev)]/60 px-4 py-3">
+            <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-elev)]/60 px-4 py-3.5">
               <div className="flex items-center gap-3">
                 <button
                   onClick={togglePlay}
@@ -1012,6 +1012,14 @@ function Editor({
                   activeIdx={activeIdx}
                   onSeek={seek}
                 />
+                <button
+                  onClick={addCueAtPlayhead}
+                  title="Add a caption at the playhead"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
+                >
+                  <Plus className="size-3.5" />
+                  Add caption
+                </button>
               </div>
               {exporting && (
                 <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
