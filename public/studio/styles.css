@@ -553,6 +553,25 @@ body.theme-light .toast { background: #fff; }
   .home-hero { flex-direction: column; align-items: flex-start; gap: 14px; }
   .home-tx-row { grid-template-columns: 1fr 1fr; }
   .brand-wm { height: 20px; }
+
+  /* Home: drop the "what is Capto" explainer — just the dropzone + projects.
+     The minutes pill + profile chip (injected) stay in the actions row. */
+  .home-title > div > h1, .home-title > div > p { display: none; }
+  .home-title img { width: 38px; height: 38px; }
+  .home-hero { padding-bottom: 18px; margin-bottom: 18px; }
+  .home-actions { width: 100%; flex-wrap: wrap; }
+  #capto-min-card { padding: 14px; }
+
+  /* Editor: no row pickers / linked-row UI on phones (single row by time). */
+  .rowsel, #capRowSel, #scriptRowSel { display: none !important; }
+  .transport { padding: 8px 12px; }
+  .timeline-wrap { padding: 0 12px 10px; }
+  .timeline { height: 130px; }                    /* shorter track on phones */
+  .tl-resize { display: none; }                   /* no manual timeline resize */
+  .retranscribe { grid-template-columns: 1fr; }
+  .rt-controls { flex-wrap: wrap; }
+  .panel { min-width: 0; }
+  .tabpane { padding: 12px; }
 }
 
 /* ---- Capto brand touches ---- */
