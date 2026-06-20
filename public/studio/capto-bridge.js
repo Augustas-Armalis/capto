@@ -477,6 +477,86 @@
     renderExportOptions();
   }
 
+  // ── thumbnail picker: after choosing the export tier, pick the thumbnail
+  // (scrub a frame or upload one). It becomes the project's home-grid thumb. ──
+  let chosenThumb = null;
+  let thumbVid = null;
+  function frameToDataURL(v) {
+    try {
+      const w = 480, h = Math.round((v.videoHeight / v.videoWidth) * w) || 270;
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(v, 0, 0, w, h);
+      return c.toDataURL('image/jpeg', 0.72);
+    } catch { return null; }
+  }
+  function initThumbPreview() {
+    const media = window.__captoMedia;
+    const prev = document.getElementById('capto-thumb-preview');
+    const scrub = document.getElementById('capto-thumb-scrub');
+    if (!media || !prev || !scrub) return;
+    if (!thumbVid) { thumbVid = document.createElement('video'); thumbVid.muted = true; thumbVid.preload = 'auto'; thumbVid.playsInline = true; }
+    if (thumbVid.src !== media.url) thumbVid.src = media.url;
+    const dur = (media.meta && media.meta.duration) || 0;
+    const grab = (pct) => {
+      if (!dur) return;
+      thumbVid.currentTime = Math.min(Math.max(0, dur - 0.05), (dur * pct) / 100);
+      thumbVid.onseeked = () => { const d = frameToDataURL(thumbVid); if (d) { chosenThumb = d; prev.src = d; } };
+    };
+    scrub.oninput = () => grab(+scrub.value);
+    // seed with the live editor frame, then let the slider refine it
+    chosenThumb = captureThumb();
+    if (chosenThumb) prev.src = chosenThumb; else grab(+scrub.value);
+  }
+  function setupThumbPicker() {
+    const exStart = document.getElementById('exStart');
+    const actions = document.getElementById('exMainActions');
+    if (!exStart || !actions || document.getElementById('capto-thumb')) return;
+    const panel = document.createElement('div');
+    panel.id = 'capto-thumb';
+    panel.style.cssText = 'display:none;margin:2px 0 14px';
+    panel.innerHTML =
+      `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Thumbnail — drag to a frame, or upload your own</div>` +
+      `<img id="capto-thumb-preview" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#000;display:block">` +
+      `<input id="capto-thumb-scrub" type="range" min="0" max="100" value="35" style="width:100%;margin-top:10px">` +
+      `<div style="margin-top:8px"><button id="capto-thumb-upload" class="btn ghost sm" type="button">Upload image</button></div>` +
+      `<input id="capto-thumb-file" type="file" accept="image/*" hidden>`;
+    actions.parentNode.insertBefore(panel, actions);
+    panel.querySelector('#capto-thumb-upload').onclick = () => panel.querySelector('#capto-thumb-file').click();
+    panel.querySelector('#capto-thumb-file').onchange = (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => { chosenThumb = String(r.result); document.getElementById('capto-thumb-preview').src = chosenThumb; };
+      r.readAsDataURL(f);
+    };
+    const toggle = (ids, show) => ids.forEach((id) => { const el = document.getElementById(id); if (el) el.style.display = show ? '' : 'none'; });
+    const orig = exStart.onclick;
+    let step = 0;
+    const reset = () => { step = 0; panel.style.display = 'none'; chosenThumb = null; window.__captoChosenThumb = null; exStart.textContent = 'Export'; toggle(['tiers', 'capto-export-opts'], true); if (supportsSavePicker) toggle(['exDest'], true); };
+    exStart.onclick = (e) => {
+      if (step === 0) {
+        toggle(['tiers', 'capto-export-opts', 'exDest'], false);
+        panel.style.display = 'block';
+        initThumbPreview();
+        exStart.textContent = 'Export';
+        document.getElementById('exTitle').textContent = 'Pick a thumbnail';
+        step = 1;
+        return;
+      }
+      panel.style.display = 'none';
+      window.__captoChosenThumb = chosenThumb;
+      if (chosenThumb && window.__captoMedia) {
+        thumbCache[window.__captoMedia.id] = chosenThumb;
+        captoApi.save(window.__captoMedia.id, { name: (captoProject && captoProject.originalName) || 'Untitled project', thumbnail: chosenThumb });
+      }
+      step = 0;
+      if (orig) orig.call(exStart, e);
+    };
+    const eb = document.getElementById('exportBtn');
+    if (eb) eb.addEventListener('click', () => setTimeout(reset, 0));
+  }
+
   async function runExport(job, id, body) {
     const media = window.__captoMedia;
     if (!media || media.id !== id || !media.file) throw new Error('Video not available — re-open the clip.');
@@ -637,7 +717,7 @@
           if (method === 'PUT') {
             fields.state = captoProject;
             if (captoProject.meta && captoProject.meta.duration) fields.durationSec = captoProject.meta.duration;
-            const thumb = captureThumb();
+            const thumb = window.__captoChosenThumb || captureThumb();
             if (thumb) { fields.thumbnail = thumb; thumbCache[id] = thumb; }
           }
           await captoApi.save(id, fields);
@@ -833,6 +913,7 @@
     }
     setupSafeZones();
     setupExportOptions();
+    setupThumbPicker();
     renderQuotaUI();
     fetchMe();
   });
