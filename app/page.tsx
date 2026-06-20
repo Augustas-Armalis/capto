@@ -8,12 +8,10 @@ import { Hours } from "@/components/marketing/hours";
 import { CaptionStyleStudio } from "@/components/marketing/caption-style-studio";
 import { Workflow } from "@/components/marketing/workflow";
 import { ValueProof } from "@/components/marketing/value-proof";
-import { HonestMath } from "@/components/marketing/honest-math";
 import { Comparison } from "@/components/marketing/comparison";
 import { Testimonials } from "@/components/marketing/testimonials";
 import { MadeWithCapto } from "@/components/marketing/made-with-capto";
 import { PricingTable } from "@/components/marketing/pricing-table";
-import { Objections } from "@/components/marketing/objections";
 import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 import { Reveal } from "@/components/marketing/reveal";
@@ -34,12 +32,10 @@ export default function HomePage() {
         <Reveal variant="blur"><CaptionStyleStudio /></Reveal>
         <Reveal variant="up"><Workflow /></Reveal>
         <Reveal variant="up"><ValueProof /></Reveal>
-        <Reveal variant="up"><HonestMath /></Reveal>
         <Reveal variant="up"><Comparison /></Reveal>
         <Testimonials />
         <MadeWithCapto />
         <Reveal variant="up"><PricingTable /></Reveal>
-        <Reveal variant="up"><Objections /></Reveal>
         <Reveal variant="up"><FaqAccordion /></Reveal>
         <CtaBanner />
       </main>

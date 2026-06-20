@@ -25,6 +25,12 @@ import {
   Languages,
   X,
   Image as ImageIcon,
+  FileText,
+  SlidersHorizontal,
+  Plus,
+  Copy,
+  Cpu,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,7 +148,7 @@ function Editor({
 
   const [playing, setPlaying] = React.useState(false);
   const [time, setTime] = React.useState(0);
-  const [tab, setTab] = React.useState<"captions" | "style">("captions");
+  const [tab, setTab] = React.useState<"captions" | "script" | "style" | "settings">("captions");
   const [mobileTab, setMobileTab] = React.useState<"style" | "captions">("captions");
   const [friendMB, setFriendMB] = React.useState(8);
   // Which AI engine produced the current captions, + a snapshot of its raw
@@ -436,6 +442,24 @@ function Editor({
   };
 
   const deleteCue = (id: string) => setCues((prev) => prev.filter((c) => c.id !== id));
+
+  // Insert a blank caption at the current playhead (original Subby's "Add caption").
+  const addCueAtPlayhead = () => {
+    const t = videoRef.current?.currentTime ?? time;
+    const end = Math.min((meta?.dur ?? t + 1.5), t + 1.5);
+    const c: Cue = {
+      id: `c-${Math.round(t * 1000)}-${cues.length}`,
+      start: t,
+      end,
+      text: "New caption",
+      words: [{ word: "New", start: t, end: (t + end) / 2 }, { word: "caption", start: (t + end) / 2, end }],
+    };
+    setCues((prev) => [...prev, c].sort((a, b) => a.start - b.start));
+    setTab("captions");
+  };
+
+  // Clear all captions (Script tab action).
+  const clearCues = () => setCues([]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -943,10 +967,11 @@ function Editor({
           <div className="flex flex-1 items-center justify-center p-5 sm:p-8">
             {!src ? (
               <Dropzone
-                onClick={() => fileInputRef.current?.click()}
+                onClick={needsRelink ? relinkMedia : pickFile}
                 onDrop={onDrop}
                 relink={needsRelink}
                 expectedName={expectedName}
+                autoRelinking={autoRelinking}
               />
             ) : (
               <div
@@ -1007,8 +1032,14 @@ function Editor({
             <TabBtn active={tab === "captions"} onClick={() => setTab("captions")} icon={<ListVideo className="size-4" />}>
               Captions
             </TabBtn>
+            <TabBtn active={tab === "script"} onClick={() => setTab("script")} icon={<FileText className="size-4" />}>
+              Script
+            </TabBtn>
             <TabBtn active={tab === "style"} onClick={() => setTab("style")} icon={<Type className="size-4" />}>
               Style
+            </TabBtn>
+            <TabBtn active={tab === "settings"} onClick={() => setTab("settings")} icon={<SlidersHorizontal className="size-4" />}>
+              Settings
             </TabBtn>
           </div>
 
@@ -1031,7 +1062,7 @@ function Editor({
               </div>
             )}
 
-            {tab === "captions" ? (
+            {tab === "captions" && (
               <CaptionsPanel
                 cues={cues}
                 activeIdx={activeIdx}
@@ -1044,6 +1075,7 @@ function Editor({
                 onEdit={editCueText}
                 onDelete={deleteCue}
                 onWordByWord={wordByWord}
+                onAddCue={addCueAtPlayhead}
                 engineLabel={engine?.label ?? null}
                 enhancing={enhancing}
                 onTranslate={() => runEnhance("translate")}
@@ -1051,7 +1083,17 @@ function Editor({
                 targetLang={targetLang}
                 onTargetLang={setTargetLang}
               />
-            ) : (
+            )}
+            {tab === "script" && (
+              <ScriptPanel
+                cues={cues}
+                hasVideo={!!src}
+                onWordByWord={wordByWord}
+                onClear={clearCues}
+                onSeek={seek}
+              />
+            )}
+            {tab === "style" && (
               <StylePanel
                 presetId={presetId}
                 onPreset={setPresetId}
@@ -1063,6 +1105,14 @@ function Editor({
                 onLocked={() => setUpgradeOpen(true)}
                 thumbnail={customThumb}
                 onSetThumbnail={setThumbnailFromFrame}
+              />
+            )}
+            {tab === "settings" && (
+              <EditorSettingsPanel
+                language={language}
+                onLanguage={setLanguage}
+                engineLabel={engine?.label ?? null}
+                plan={plan}
               />
             )}
           </div>
@@ -1203,7 +1253,7 @@ function TabBtn({
     <button
       onClick={onClick}
       className={cn(
-        "inline-flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium transition-colors",
+        "inline-flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-2 text-[13px] font-medium transition-colors [&_svg]:shrink-0",
         active ? "bg-white/[0.07] text-white" : "text-[var(--color-fg-muted)] hover:text-white",
       )}
     >
@@ -1225,6 +1275,7 @@ function CaptionsPanel({
   onEdit,
   onDelete,
   onWordByWord,
+  onAddCue,
   engineLabel,
   enhancing,
   onTranslate,
@@ -1243,6 +1294,7 @@ function CaptionsPanel({
   onEdit: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onWordByWord: () => void;
+  onAddCue?: () => void;
   engineLabel: string | null;
   enhancing: null | "translate" | "emoji";
   onTranslate: () => void;
@@ -1298,6 +1350,15 @@ function CaptionsPanel({
       )}
       {/* Quick caption actions */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
+        {onAddCue && (
+          <button
+            onClick={onAddCue}
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-[var(--color-brand)]/60"
+          >
+            <Plus className="size-3.5 text-[var(--color-brand)]" />
+            Add caption
+          </button>
+        )}
         <button
           onClick={onWordByWord}
           className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
@@ -1375,6 +1436,139 @@ function CaptionsPanel({
           />
         </div>
       ))}
+    </div>
+  );
+}
+
+// Script tab — the full transcript at a glance, plus the same quick actions the
+// original Subby exposed (copy, one-word-per-word, clear).
+function ScriptPanel({
+  cues,
+  hasVideo,
+  onWordByWord,
+  onClear,
+  onSeek,
+}: {
+  cues: Cue[];
+  hasVideo: boolean;
+  onWordByWord: () => void;
+  onClear: () => void;
+  onSeek: (t: number) => void;
+}) {
+  const [copied, setCopied] = React.useState(false);
+  if (!hasVideo) {
+    return <p className="text-sm text-[var(--color-fg-muted)]">Drop a video and generate captions to see the script.</p>;
+  }
+  if (!cues.length) {
+    return <p className="text-sm text-[var(--color-fg-muted)]">No captions yet. Generate them in the Captions tab.</p>;
+  }
+  const full = cues.map((c) => c.text).join(" ");
+  const copy = () => {
+    navigator.clipboard?.writeText(full).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  };
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button
+          onClick={copy}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
+        >
+          <Copy className="size-3.5" />
+          {copied ? "Copied" : "Copy transcript"}
+        </button>
+        <button
+          onClick={onWordByWord}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
+        >
+          <Wand2 className="size-3.5" />
+          One word per word
+        </button>
+        <button
+          onClick={() => {
+            if (confirm("Clear all captions?")) onClear();
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]"
+        >
+          <Trash2 className="size-3.5" />
+          Clear
+        </button>
+      </div>
+      <div className="rounded-[var(--radius-md)] border border-white/[0.06] bg-white/[0.02] p-4 text-sm leading-relaxed text-[var(--color-fg)]">
+        {cues.map((c, i) => (
+          <button
+            key={c.id}
+            onClick={() => onSeek(c.start)}
+            className="cursor-pointer rounded px-0.5 text-left hover:bg-[var(--color-brand-soft)] hover:text-white"
+            title={fmtTime(c.start)}
+          >
+            {c.text}
+            {i < cues.length - 1 ? " " : ""}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Settings tab in the editor — quick per-project AI controls + link to full settings.
+function EditorSettingsPanel({
+  language,
+  onLanguage,
+  engineLabel,
+  plan,
+}: {
+  language: string;
+  onLanguage: (l: string) => void;
+  engineLabel: string | null;
+  plan: Plan;
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <label className="eyebrow mb-2 block">Spoken language</label>
+        <Combobox
+          value={language}
+          onChange={onLanguage}
+          options={LANGS.map(([v, l]) => ({ value: v, label: l }))}
+          ariaLabel="Spoken language"
+        />
+        <p className="mt-2 text-xs text-[var(--color-fg-subtle)]">Used the next time you generate captions.</p>
+      </div>
+
+      <div className="rounded-[var(--radius-md)] border border-white/[0.06] bg-white/[0.02] p-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-white">
+          <Cpu className="size-4 text-[var(--color-brand)]" />
+          AI engine
+        </div>
+        <p className="mt-1.5 text-xs text-[var(--color-fg-muted)]">
+          {engineLabel ? `Last used: ${engineLabel}. ` : ""}
+          {plan === "free"
+            ? "Free uses our managed Groq within your monthly minutes, or your own key."
+            : "Runs on our managed AI. Switch models or add your own key in Settings."}
+        </p>
+        <Button href="/settings" variant="secondary" size="sm" className="mt-3">
+          <SlidersHorizontal className="size-4" />
+          AI &amp; model settings
+        </Button>
+      </div>
+
+      <div className="rounded-[var(--radius-md)] border border-white/[0.06] bg-white/[0.02] p-4">
+        <div className="text-sm font-medium text-white">API keys</div>
+        <p className="mt-1.5 text-xs text-[var(--color-fg-muted)]">
+          Bring your own Groq, OpenAI, Deepgram or Gemini key. Encrypted, never exposed.
+        </p>
+        <Button href="/settings#api-keys" variant="secondary" size="sm" className="mt-3">
+          <KeyRound className="size-4" />
+          Manage keys
+        </Button>
+      </div>
+
+      <p className="mono text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
+        Your video stays on this device. Only the captions + a thumbnail are saved.
+      </p>
     </div>
   );
 }

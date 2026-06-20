@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Section, SectionEyebrow, SectionTitle } from "@/components/ui/section";
@@ -16,10 +16,55 @@ export function Hours() {
         <div className="text-center">
           <SectionEyebrow>The hours</SectionEyebrow>
           <SectionTitle>29 days a year.</SectionTitle>
-          <p className="mt-4 text-lg text-[var(--color-fg-muted)]">That&rsquo;s what manual captions cost you.</p>
+          <p className="mt-4 text-lg text-[var(--color-fg-muted)]">
+            That&rsquo;s what manual captions cost you.
+          </p>
         </div>
 
-        <div className="mt-12 overflow-hidden rounded-[var(--radius-2xl)] border border-white/[0.08] bg-white/[0.02]">
+        {/* Visual: a month of squares lost to manual captioning vs. half a day with Capto */}
+        <div className="mt-12 grid gap-4 sm:grid-cols-2">
+          <div className="relative overflow-hidden rounded-[var(--radius-2xl)] border border-white/[0.08] bg-white/[0.02] p-6">
+            <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-fg-muted)]">
+              <Clock className="size-4" /> Manual
+            </div>
+            <div className="mt-5 grid grid-cols-[repeat(10,1fr)] gap-1.5" aria-hidden>
+              {Array.from({ length: 29 }).map((_, i) => (
+                <span
+                  key={i}
+                  className="aspect-square rounded-[3px] bg-[var(--color-danger)]/35"
+                  style={{ animation: `fade-up 480ms var(--ease-out) both`, animationDelay: `${i * 18}ms` }}
+                />
+              ))}
+            </div>
+            <p className="mt-5 text-3xl font-bold text-white">
+              29 <span className="text-base font-medium text-[var(--color-fg-muted)]">days lost</span>
+            </p>
+          </div>
+
+          <div className="relative overflow-hidden rounded-[var(--radius-2xl)] border border-[var(--color-brand)]/30 bg-[var(--color-brand)]/[0.06] p-6">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-[var(--color-brand)]/20 blur-3xl"
+            />
+            <div className="relative flex items-center gap-2 text-sm font-medium text-[var(--color-brand)]">
+              <Clock className="size-4" /> Capto
+            </div>
+            <div className="relative mt-5 grid grid-cols-[repeat(10,1fr)] gap-1.5" aria-hidden>
+              <span
+                className="aspect-square rounded-[3px] bg-[var(--color-brand)]"
+                style={{ animation: `fade-up 480ms var(--ease-out) both` }}
+              />
+              {Array.from({ length: 28 }).map((_, i) => (
+                <span key={i} className="aspect-square rounded-[3px] bg-white/[0.04]" />
+              ))}
+            </div>
+            <p className="relative mt-5 text-3xl font-bold text-white">
+              ½ <span className="text-base font-medium text-[var(--color-fg-muted)]">a day</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-[var(--radius-2xl)] border border-white/[0.08] bg-white/[0.02]">
           <div className="grid grid-cols-3 border-b border-white/[0.08] px-6 py-4 text-sm font-medium">
             <span className="text-[var(--color-fg-subtle)]" />
             <span className="text-center text-[var(--color-fg-muted)]">Manual</span>
