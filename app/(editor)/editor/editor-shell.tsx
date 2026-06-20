@@ -31,6 +31,8 @@ import {
   Copy,
   Cpu,
   KeyRound,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -468,6 +470,82 @@ function Editor({
     else v.pause();
   };
 
+  // Drag the caption right on the video to reposition it (original Subby UX).
+  // A plain click (no movement) still toggles play. Free tier is locked to
+  // vertical-only; Pro can move horizontally too.
+  const startCaptionDrag = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const frame = (e.currentTarget as HTMLElement).parentElement;
+    if (!frame) return;
+    const rect = frame.getBoundingClientRect();
+    const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      moved = true;
+      const y = clamp((ev.clientY - rect.top) / rect.height, 0.2, 0.95);
+      const x = isFree ? pos.x : clamp((ev.clientX - rect.left) / rect.width, 0.1, 0.9);
+      setPos({ x, y });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (!moved) togglePlay();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  // ── undo / redo for captions ───────────────────────────────────────────────
+  const cueHist = React.useRef<Cue[][]>([]);
+  const cueFut = React.useRef<Cue[][]>([]);
+  const cueApplying = React.useRef(false);
+  React.useEffect(() => {
+    if (cueApplying.current) {
+      cueApplying.current = false;
+      return;
+    }
+    cueHist.current.push(cues);
+    if (cueHist.current.length > 100) cueHist.current.shift();
+    cueFut.current = [];
+  }, [cues]);
+  const undo = React.useCallback(() => {
+    if (cueHist.current.length < 2) return;
+    cueFut.current.push(cueHist.current.pop()!);
+    const prev = cueHist.current[cueHist.current.length - 1];
+    cueApplying.current = true;
+    setCues(prev);
+  }, []);
+  const redo = React.useCallback(() => {
+    if (!cueFut.current.length) return;
+    const next = cueFut.current.pop()!;
+    cueHist.current.push(next);
+    cueApplying.current = true;
+    setCues(next);
+  }, []);
+  const canUndo = cueHist.current.length > 1;
+  const canRedo = cueFut.current.length > 0;
+
+  // Keyboard: Cmd/Ctrl+Z undo, Cmd/Ctrl+Shift+Z (or Ctrl+Y) redo.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
+
   // ── persistence ───────────────────────────────────────────────────────────
   const buildState = () => ({
     v: 1,
@@ -746,6 +824,14 @@ function Editor({
                 onClick={togglePlay}
               />
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 size-full" />
+              {cues.length > 0 && (
+                <div
+                  onPointerDown={startCaptionDrag}
+                  title="Drag to move captions"
+                  className="absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-md ring-1 ring-transparent transition hover:ring-white/40 active:cursor-grabbing"
+                  style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%`, width: "74%", height: "20%" }}
+                />
+              )}
               {!playing && (
                 <button
                   onClick={togglePlay}
@@ -916,6 +1002,28 @@ function Editor({
         </div>
         <div className="flex items-center gap-2">
           {src && (
+            <div className="flex items-center">
+              <button
+                onClick={undo}
+                disabled={!canUndo}
+                title="Undo (⌘Z)"
+                aria-label="Undo"
+                className="inline-flex size-8 items-center justify-center rounded-md text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-elev)] hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <Undo2 className="size-4" />
+              </button>
+              <button
+                onClick={redo}
+                disabled={!canRedo}
+                title="Redo (⌘⇧Z)"
+                aria-label="Redo"
+                className="inline-flex size-8 items-center justify-center rounded-md text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-elev)] hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <Redo2 className="size-4" />
+              </button>
+            </div>
+          )}
+          {src && (
             <Button onClick={saveProject} variant="ghost" size="sm" loading={saving}>
               {saved ? <Check className="size-4 text-[var(--color-success)]" /> : <Save className="size-4" />}
               {saved ? "Saved" : "Save"}
@@ -987,6 +1095,14 @@ function Editor({
                   onClick={togglePlay}
                 />
                 <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 size-full" />
+                {cues.length > 0 && (
+                  <div
+                    onPointerDown={startCaptionDrag}
+                    title="Drag to move captions"
+                    className="absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-md ring-1 ring-transparent transition hover:ring-white/40 active:cursor-grabbing"
+                    style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%`, width: "74%", height: "20%" }}
+                  />
+                )}
               </div>
             )}
           </div>
