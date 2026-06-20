@@ -100,9 +100,16 @@ export async function recordEdits(
   if (!isConfigured.db() || editedWords <= 0) return;
   try {
     const sql = db();
+    // Upsert (not a bare UPDATE): if the run row hasn't landed yet — both writes
+    // are fire-and-forget — we still capture the edit signal instead of dropping
+    // it. A words=0 row stays below engineAccuracy's sample gate until a real run
+    // accrues words, so it never skews ranking prematurely.
     await sql`
-      UPDATE ai_metric SET edited_words = edited_words + ${editedWords}, updated_at = now()
-      WHERE provider = ${provider} AND model = ${model}
+      INSERT INTO ai_metric (provider, model, runs, words, edited_words, updated_at)
+      VALUES (${provider}, ${model}, 0, 0, ${editedWords}, now())
+      ON CONFLICT (provider, model) DO UPDATE SET
+        edited_words = ai_metric.edited_words + ${editedWords},
+        updated_at = now()
     `;
   } catch {
     /* best-effort */

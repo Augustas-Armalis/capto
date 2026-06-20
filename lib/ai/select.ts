@@ -47,13 +47,14 @@ function houseCandidates(plan: PlanId): SttModel[] {
 async function rankBest(models: SttModel[]): Promise<SttModel | null> {
   if (!models.length) return null;
   const acc = await engineAccuracy();
-  // Sort by learned accuracy first (when we have data), then static quality.
-  return [...models].sort((a, b) => {
-    const aa = acc[`${a.provider}:${a.apiModel}`];
-    const ba = acc[`${b.provider}:${b.apiModel}`];
-    if (aa !== undefined && ba !== undefined && Math.abs(aa - ba) > 0.01) return ba - aa;
-    return b.quality - a.quality;
-  })[0];
+  // One comparable score per model so the ordering is total + transitive:
+  // learned accuracy (0..1) when we have a meaningful sample, else the static
+  // quality prior mapped onto the same 0..1 scale.
+  const score = (m: SttModel) => {
+    const a = acc[`${m.provider}:${m.apiModel}`];
+    return a !== undefined ? a : m.quality / 10;
+  };
+  return [...models].sort((a, b) => score(b) - score(a))[0];
 }
 
 /**
@@ -97,5 +98,18 @@ export async function resolveEngine(
     if (best) return { model: best, apiKey: keys[best.provider]!, isHouse: false };
   }
 
+  return null;
+}
+
+/**
+ * Resolve the best engine that runs on the user's OWN key (uncapped). Used as a
+ * fallback when the managed monthly budget is exhausted: a user who already
+ * holds a usable key should never be blocked.
+ */
+export async function resolveByokEngine(userId: string): Promise<ResolvedEngine | null> {
+  const keys = await userKeys(userId);
+  const hasOwn = (p: AiProvider) => !!keys[p] && keys[p]!.length > 10;
+  const best = await rankBest(STT_MODELS.filter((m) => hasOwn(m.provider)));
+  if (best) return { model: best, apiKey: keys[best.provider]!, isHouse: false };
   return null;
 }

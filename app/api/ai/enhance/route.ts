@@ -55,9 +55,18 @@ export async function POST(req: Request) {
       /* ignore */
     }
   }
-  if (!geminiKey && (plan === "pro" || plan === "ultra")) geminiKey = env.houseGeminiKey;
+  const paid = plan === "pro" || plan === "ultra";
+  if (!geminiKey && paid) geminiKey = env.houseGeminiKey;
 
   if (!geminiKey) {
+    // Distinguish "feature locked" (free, no own key → upsell) from "server not
+    // configured" (paid, but no house Gemini key set → not their fault).
+    if (paid) {
+      return NextResponse.json(
+        { error: "AI caption enhancement is temporarily unavailable." },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       {
         error:

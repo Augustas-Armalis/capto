@@ -4,7 +4,7 @@ import { getCurrentSession } from "@/lib/session";
 import { getDb, user as userTable } from "@/lib/db";
 import { env, isConfigured, houseKeyFor } from "@/lib/env";
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
-import { resolveEngine } from "@/lib/ai/select";
+import { resolveEngine, resolveByokEngine } from "@/lib/ai/select";
 import { runTranscription, TranscribeError } from "@/lib/ai/transcribe";
 import { consumeTranscription, recordRun, topVocabulary } from "@/lib/usage";
 import { STT_MODELS, getModel } from "@/lib/ai/models";
@@ -57,8 +57,16 @@ export async function POST(req: Request) {
     }
   }
 
-  // No DB / signed-out: fall back to the house Groq key directly (BYOK-less).
+  // In production (DB configured) transcription requires an account so all
+  // managed/house usage is metered — no uncapped anonymous house spend. Only
+  // the keyless/dev mode (no DB) serves anonymous requests off the house key.
   if (!userId) {
+    if (isConfigured.db()) {
+      return NextResponse.json(
+        { error: "Please sign in to generate captions.", code: "auth" },
+        { status: 401 },
+      );
+    }
     const key = houseKeyFor("groq");
     if (!key) return NextResponse.json({ error: "No transcription engine configured." }, { status: 503 });
     const model = STT_MODELS.find((m) => m.provider === "groq")!;
@@ -78,26 +86,34 @@ export async function POST(req: Request) {
   }
 
   // Enforce the monthly budget only for managed (house) usage. BYOK is uncapped.
+  let active = engine;
   if (engine.isHouse) {
     const consumed = await consumeTranscription(userId, plan);
     if (!consumed.allowed) {
-      return NextResponse.json(
-        {
-          error:
-            plan === "free"
-              ? "You've used your free AI captions this month. Add your own free Groq key in Settings, or upgrade for more."
-              : "You've reached this month's transcription limit.",
-          code: "cap_reached",
-          plan,
-          limit: consumed.limit,
-        },
-        { status: 402 },
-      );
+      // Budget spent — fall back to the user's OWN key if they have one, so a
+      // user who already added a key is never blocked (BYOK is uncapped).
+      const own = await resolveByokEngine(userId);
+      if (own) {
+        active = own;
+      } else {
+        return NextResponse.json(
+          {
+            error:
+              plan === "free"
+                ? "You've used your free AI captions this month. Add your own free Groq key in Settings, or upgrade for more."
+                : "You've reached this month's transcription limit.",
+            code: "cap_reached",
+            plan,
+            limit: consumed.limit,
+          },
+          { status: 402 },
+        );
+      }
     }
   }
 
   const vocab = await topVocabulary(userId);
-  return transcribeAndRespond(engine, file, language, vocab, userId, plan);
+  return transcribeAndRespond(active, file, language, vocab, userId, plan);
 }
 
 async function transcribeAndRespond(

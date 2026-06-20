@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { STT_MODELS, PROVIDER_LABEL, type AiProvider } from "@/lib/ai/models";
+import { STT_MODELS, PROVIDER_LABEL, PLAN_RANK, type AiProvider } from "@/lib/ai/models";
 
 type Provider = AiProvider;
 type ApiKeyMeta = { provider: Provider; label: string | null; lastUsedAt: string | null };
@@ -381,12 +381,18 @@ export function SettingsClient({
               className="w-full rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-white/25"
             >
               <option value="auto" className="bg-[var(--color-bg-elev)]">Auto — best engine (improves over time)</option>
-              {STT_MODELS.map((m) => (
-                <option key={m.id} value={m.id} className="bg-[var(--color-bg-elev)]">
-                  {m.label}
-                  {m.minPlan !== "free" ? ` · ${m.minPlan === "pro" ? "Pro" : "Ultra"}` : ""}
-                </option>
-              ))}
+              {STT_MODELS.map((m) => {
+                // Gated models are selectable only on a high-enough plan, or when
+                // running on your own key (BYOK ignores plan tiers).
+                const locked = !useOwn && PLAN_RANK[m.minPlan] > PLAN_RANK[plan];
+                return (
+                  <option key={m.id} value={m.id} disabled={locked} className="bg-[var(--color-bg-elev)]">
+                    {m.label}
+                    {m.minPlan !== "free" ? ` · ${m.minPlan === "pro" ? "Pro" : "Ultra"}` : ""}
+                    {locked ? " (upgrade)" : ""}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <div className="flex items-end">

@@ -449,7 +449,11 @@ function Editor({
       });
       const data = (await res.json()) as { cues?: Cue[]; error?: string; code?: string };
       if (!res.ok) {
-        if (data.code === "upgrade") setUpgradeOpen(true);
+        // Upgrade-gated → show only the modal, not a redundant error banner.
+        if (data.code === "upgrade") {
+          setUpgradeOpen(true);
+          return;
+        }
         throw new Error(data.error || "Enhancement failed.");
       }
       if (Array.isArray(data.cues) && data.cues.length) setCues(data.cues);

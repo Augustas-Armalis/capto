@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, user as userTable } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
-import { getModel } from "@/lib/ai/models";
+import { getModel, PLAN_RANK } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
 
@@ -18,10 +18,29 @@ export async function PUT(req: Request) {
     aiProvider?: string;
     aiUseOwnKey?: boolean;
   };
+
+  const db = getDb();
+  const [u] = await db
+    .select({ plan: userTable.plan, aiUseOwnKey: userTable.aiUseOwnKey })
+    .from(userTable)
+    .where(eq(userTable.id, session.user.id))
+    .limit(1);
+  const plan = u?.plan ?? "free";
+  const effectiveOwnKey = typeof body.aiUseOwnKey === "boolean" ? body.aiUseOwnKey : (u?.aiUseOwnKey ?? false);
+
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   if (typeof body.aiProvider === "string") {
-    const valid = body.aiProvider === "auto" || !!getModel(body.aiProvider);
-    if (!valid) return NextResponse.json({ error: "Unknown engine." }, { status: 400 });
+    if (body.aiProvider !== "auto") {
+      const model = getModel(body.aiProvider);
+      if (!model) return NextResponse.json({ error: "Unknown engine." }, { status: 400 });
+      // A managed (non-BYOK) gated model can't be set below its plan tier.
+      if (!effectiveOwnKey && PLAN_RANK[model.minPlan] > PLAN_RANK[plan]) {
+        return NextResponse.json(
+          { error: `${model.label} needs ${model.minPlan === "pro" ? "Pro" : "Ultra"} (or use your own key).` },
+          { status: 400 },
+        );
+      }
+    }
     patch.aiProvider = body.aiProvider;
   }
   if (typeof body.aiUseOwnKey === "boolean") patch.aiUseOwnKey = body.aiUseOwnKey;
@@ -29,7 +48,6 @@ export async function PUT(req: Request) {
   if (Object.keys(patch).length === 1) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
-  const db = getDb();
   await db.update(userTable).set(patch).where(eq(userTable.id, session.user.id));
   return NextResponse.json({ ok: true });
 }

@@ -401,7 +401,7 @@ function EmailVerify({ onDone }: { onDone: () => void }) {
         <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-8 sm:p-10">
           <Badge variant="brand">
             <Mail className="size-3" />
-            Step 1 of 3
+            Verify email
           </Badge>
           <h1 className="heading mt-4 text-3xl">Verify your email.</h1>
           <p className="mt-3 text-sm leading-relaxed text-[var(--color-fg-muted)]">
