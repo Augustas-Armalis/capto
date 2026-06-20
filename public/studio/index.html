@@ -17,7 +17,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <button class="topbar-back btn ghost icon" id="backHome" title="Back to home" hidden><svg class="ic"><use href="#i-chevron-left"/></svg></button>
-      <button class="brand" id="brandHome" title="Home"><img src="/studio/logo.svg" alt="Capto" /><span class="name">Capto</span></button>
+      <button class="brand" id="brandHome" title="Home"><img class="brand-wm" src="/studio/wordmark.png" alt="Capto" /></button>
       <button class="project-name" id="projectName" title="Click to rename" hidden></button>
     </div>
     <div class="topbar-actions" id="topActions" hidden>
@@ -245,8 +245,8 @@
       <h2 id="exTitle">Export video</h2>
       <p class="sub" id="exSub">Captions are burned in; audio is kept untouched (except the share preset).</p>
       <div class="tiers" id="tiers">
-        <div class="tier" data-q="friend"><span class="emoji">📨</span><div class="t-main"><div class="t-name">Send to a friend</div><div class="t-desc">Small file, fits Discord. Lower resolution & bitrate.</div></div><span class="t-badge">smallest</span></div>
-        <div class="tier" data-q="high"><span class="emoji">✨</span><div class="t-main"><div class="t-name">High quality</div><div class="t-desc">Full resolution, smaller than lossless.</div></div><span class="t-badge">balanced</span></div>
+        <div class="tier" data-q="friend"><span class="emoji">📨</span><div class="t-main"><div class="t-name">Send to a friend</div><div class="t-desc">Pick a target file size — fits Discord, DMs.</div></div><span class="t-badge">smallest</span></div>
+        <div class="tier" data-q="high"><span class="emoji">✨</span><div class="t-main"><div class="t-name">Custom quality</div><div class="t-desc">Choose resolution, fps and bitrate.</div></div><span class="t-badge">balanced</span></div>
         <div class="tier on" data-q="lossless"><span class="emoji">💎</span><div class="t-main"><div class="t-name">Lossless</div><div class="t-desc">Best quality, original audio copied. Recommended.</div></div><span class="t-badge">best</span></div>
       </div>
       <div class="export-dest" id="exDest">

@@ -24,7 +24,7 @@
   async function fetchMe() {
     try {
       const r = await realFetch('/api/studio/me');
-      if (r.ok) { window.__captoUser = await r.json(); renderQuotaUI(); }
+      if (r.ok) { window.__captoUser = await r.json(); renderQuotaUI(); renderExportOptions(); }
     } catch { /* keep defaults */ }
   }
 
@@ -360,16 +360,90 @@
       if (cue) drawCue(ctx, cue, t, s, W, H);
     }
   }
+  function getVal(elId, def) { const e = document.getElementById(elId); return e ? e.value : def; }
+  function clampNum(v, lo, hi) { v = parseFloat(v); if (isNaN(v)) v = lo; return Math.max(lo, Math.min(hi, v)); }
+
+  // Encoding settings per export tier, read live from the modal controls.
+  function readExportSettings(quality, meta) {
+    const nH = meta.height || 1080;
+    const dur = Math.max(1, meta.duration || 10);
+    if (quality === 'friend') {
+      const mb = clampNum(getVal('capto-mb', 25), 3, 300);
+      const totalBps = (mb * 8 * 1024 * 1024) / dur;
+      return { maxH: Math.min(nH, 720), fps: 30, videoBitrate: Math.max(350000, Math.round(totalBps - 128000)) };
+    }
+    if (quality === 'lossless') return { maxH: nH, fps: 30, videoBitrate: 16000000 };
+    const res = parseInt(getVal('capto-res', '1080'), 10) || 1080; // "custom" (middle tier)
+    const fps = parseInt(getVal('capto-fps', '30'), 10) || 30;
+    const mbps = clampNum(getVal('capto-bitrate', 8), 1, 50);
+    return { maxH: Math.min(nH, res), fps, videoBitrate: Math.round(mbps * 1000000) };
+  }
+
+  function currentTier() {
+    const on = document.querySelector('#tiers .tier.on');
+    return on ? on.dataset.q : 'lossless';
+  }
+  function renderExportOptions() {
+    const opts = document.getElementById('capto-export-opts');
+    if (!opts) return;
+    const u = window.__captoUser || {};
+    const free = !u.signedIn || u.plan === 'free';
+    document.querySelectorAll('#tiers .tier').forEach((t) => {
+      const locked = free && (t.dataset.q === 'friend' || t.dataset.q === 'lossless');
+      t.style.opacity = locked ? '.45' : '';
+      let badge = t.querySelector('.capto-prolock');
+      if (locked && !badge) {
+        badge = document.createElement('span');
+        badge.className = 'capto-prolock';
+        badge.textContent = 'Pro';
+        badge.style.cssText = 'position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:99px;color:#0b0c14;background:linear-gradient(120deg,#82a5ff,#8983ff)';
+        t.style.position = 'relative';
+        t.appendChild(badge);
+      } else if (!locked && badge) badge.remove();
+    });
+    let q = currentTier();
+    if (free && (q === 'friend' || q === 'lossless')) {
+      const hi = document.querySelector('#tiers .tier[data-q="high"]');
+      if (hi) { hi.click(); q = 'high'; }
+    }
+    if (q === 'friend') {
+      opts.innerHTML = `<label style="display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)">Target size <input id="capto-mb" type="number" min="3" max="300" value="25" style="width:96px"> MB</label>`;
+    } else if (q === 'lossless') {
+      opts.innerHTML = `<div style="font-size:12px;color:var(--faint)">Full resolution, original audio copied.</div>`;
+    } else {
+      const lock = free ? 'disabled' : '';
+      const sel = 'width:auto;min-width:88px;display:inline-block;padding:7px 26px 7px 10px;font-size:12.5px';
+      opts.innerHTML =
+        `<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">` +
+        `<label style="font-size:12px;color:var(--muted)">Resolution <select id="capto-res" ${lock} style="${sel}"><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></label>` +
+        `<label style="font-size:12px;color:var(--muted)">FPS <select id="capto-fps" ${lock} style="${sel}"><option value="24">24</option><option value="30" selected>30</option><option value="60">60</option></select></label>` +
+        `<label style="font-size:12px;color:var(--muted)">Bitrate <input id="capto-bitrate" type="number" min="1" max="50" value="8" style="width:74px"> Mbps</label>` +
+        `</div>` +
+        (free ? `<div style="margin-top:9px;font-size:11px;color:var(--faint)">Free is capped at 1080p / 30fps. <span style="color:var(--accent-2);cursor:pointer" id="capto-up">Upgrade</span> for send-to-friend, lossless and 60fps.</div>` : '');
+      const up = document.getElementById('capto-up');
+      if (up) up.onclick = goTop('/billing');
+    }
+  }
+  function setupExportOptions() {
+    const tiersEl = document.getElementById('tiers');
+    if (!tiersEl || document.getElementById('capto-export-opts')) return;
+    const opts = document.createElement('div');
+    opts.id = 'capto-export-opts';
+    opts.style.cssText = 'margin:0 0 14px';
+    tiersEl.parentNode.insertBefore(opts, tiersEl.nextSibling);
+    tiersEl.querySelectorAll('.tier').forEach((t) => t.addEventListener('click', () => setTimeout(renderExportOptions, 0)));
+    renderExportOptions();
+  }
+
   async function runExport(job, id, body) {
     const media = window.__captoMedia;
     if (!media || media.id !== id || !media.file) throw new Error('Video not available — re-open the clip.');
     const cues = body.cues || [];
     const style = body.style || {};
     const meta = media.meta || { width: 1080, height: 1920, duration: 0 };
-    const tiers = { friend: { maxH: 720, bitrate: 2_500_000 }, high: { maxH: 1080, bitrate: 8_000_000 }, lossless: { maxH: 100000, bitrate: 14_000_000 } };
-    const cfg = tiers[body.quality] || tiers.lossless;
     const nH = meta.height || 1080, nW = meta.width || 1080;
-    const outH = Math.min(nH, cfg.maxH);
+    const settings = readExportSettings(body.quality, meta);
+    const outH = Math.min(nH, settings.maxH);
     const k = outH / nH;
     const W = Math.max(2, Math.round(nW * k / 2) * 2), H = Math.max(2, Math.round(outH / 2) * 2);
 
@@ -388,7 +462,7 @@
     const drawStyle = scaleStyle(style, k);
     const dur = meta.duration || v.duration || 0;
 
-    const fps = 30;
+    const fps = settings.fps;
     const cstream = canvas.captureStream(fps);
     let audioTrack = null;
     try {
@@ -399,7 +473,7 @@
     if (audioTrack) tracks.push(audioTrack);
     const stream = new MediaStream(tracks);
     const mime = pickExportMime();
-    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: cfg.bitrate });
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: settings.videoBitrate });
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
 
@@ -704,6 +778,7 @@
       wrap.appendChild(c);
     }
     setupSafeZones();
+    setupExportOptions();
     renderQuotaUI();
     fetchMe();
   });
