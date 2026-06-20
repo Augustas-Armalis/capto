@@ -248,17 +248,17 @@ export function SettingsClient({
       <p className="mt-2 text-[var(--color-fg-muted)]">Profile, AI, team, and connections.</p>
 
       <div className="mt-8 grid gap-8 md:grid-cols-[200px_1fr]">
-        {/* Sidebar nav */}
-        <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+        {/* Sidebar nav — horizontal scroll on mobile, vertical on desktop */}
+        <nav className="-mx-5 flex gap-1 overflow-x-auto px-5 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:flex-col md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden">
           {NAV.map((item) => (
             <button
               key={item.id}
               onClick={() => setTab(item.id)}
               className={cn(
-                "inline-flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors md:w-full",
+                "inline-flex shrink-0 items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors md:w-full",
                 tab === item.id
-                  ? "bg-[var(--color-bg-elev)] text-[var(--color-fg)]"
-                  : "text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-elev)]/60 hover:text-[var(--color-fg)]",
+                  ? "border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] text-white"
+                  : "border border-transparent text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-elev)]/60 hover:text-[var(--color-fg)]",
               )}
             >
               <item.icon className="size-4" />
