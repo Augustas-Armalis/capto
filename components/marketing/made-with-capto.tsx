@@ -1,10 +1,25 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Container } from "@/components/ui/container";
 import { SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
 import { Marquee } from "./marquee";
 
+// Real creator clips, auto-discovered from /public/videos at build time. Drop
+// any .mp4/.webm/.mov in there and they appear in the reel automatically. Until
+// then we show the styled placeholders below.
+function getVideos(): string[] {
+  try {
+    const dir = path.join(process.cwd(), "public", "videos");
+    return fs
+      .readdirSync(dir)
+      .filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f) && !f.startsWith("."))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 // Placeholder reel cards until real creator clips land.
-// When you have MP4s: replace the inner block with
-// <video autoPlay muted loop playsInline className="absolute inset-0 size-full object-cover" />
 const REELS = [
   { tag: "GRWM", line: ["YOU CAN'T", "JUST WAKE", "UP & POST"], hot: 1, bg: "from-[#2a1840] to-[#0c0612]", accent: "bg-[var(--color-fuchsia)]" },
   { tag: "FOUNDER", line: ["MOST", "STARTUPS", "FAIL HERE"], hot: 2, bg: "from-[#0f2a3a] to-[#04101a]", accent: "bg-[var(--color-cyan)]" },
@@ -30,7 +45,29 @@ function Reel({ tag, line, hot, bg, accent }: (typeof REELS)[number]) {
   );
 }
 
+function VideoReel({ src }: { src: string }) {
+  return (
+    <div className="relative h-[360px] w-[208px] shrink-0 overflow-hidden rounded-[var(--radius-lg)] border border-white/[0.08] bg-black">
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <video
+        src={`/videos/${src}`}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        className="absolute inset-0 size-full object-cover"
+      />
+    </div>
+  );
+}
+
 export function MadeWithCapto() {
+  const videos = getVideos();
+  const items = videos.length
+    ? videos.map((v) => <VideoReel key={v} src={v} />)
+    : REELS.map((r, i) => <Reel key={i} {...r} />);
+
   return (
     <section className="py-24 sm:py-32">
       <Container>
@@ -42,10 +79,10 @@ export function MadeWithCapto() {
       </Container>
 
       <Marquee
-        items={REELS.map((r) => <Reel {...r} />)}
+        items={items}
         durationSec={80}
         gapPx={16}
-        repeat={3}
+        repeat={videos.length && videos.length < 4 ? 4 : 3}
         pauseOnHover
         className="mt-12"
         maskClass="[mask-image:linear-gradient(90deg,transparent,#000_5%,#000_95%,transparent)]"
