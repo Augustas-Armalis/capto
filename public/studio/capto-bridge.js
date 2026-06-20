@@ -19,6 +19,15 @@
   // to Capto's Groq proxy.
   window.__captoMedia = null; // { id, file, url, meta }
 
+  // Plan + usage for the signed-in user (minutes indicator, export watermark).
+  window.__captoUser = { signedIn: false, plan: 'free', watermark: true, minutes: null };
+  async function fetchMe() {
+    try {
+      const r = await realFetch('/api/studio/me');
+      if (r.ok) { window.__captoUser = await r.json(); renderQuotaUI(); }
+    } catch { /* keep defaults */ }
+  }
+
   const LS_KEY = 'capto-studio-projects';
   const loadStore = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; } };
   const saveStore = (s) => { try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch { /* quota */ } };
@@ -184,6 +193,22 @@
     }
     ctx.restore();
   }
+  // Bottom-right "Made with Capto" mark, burned into free-tier exports.
+  function drawWatermark(ctx, W, H) {
+    const px = Math.round(Math.min(W, H) * 0.026);
+    ctx.save();
+    ctx.font = `600 ${px}px 'Inter', system-ui, sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    try { ctx.letterSpacing = '0px'; } catch {}
+    const pad = Math.round(W * 0.03);
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = px * 0.4;
+    ctx.shadowOffsetY = px * 0.06;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillText('Made with Capto', W - pad, H - pad);
+    ctx.restore();
+  }
   function drawCaptions(ctx, t, cues, s, W, H) {
     const rows = cues.reduce((m, c) => Math.max(m, (c.row || 0) + 1), 1);
     for (let r = 0; r < rows; r++) {
@@ -207,6 +232,10 @@
 
     const v = document.createElement('video');
     v.src = media.url; v.playsInline = true; v.preload = 'auto';
+    // Attach off-screen so the browser keeps it "foreground" — a detached or
+    // hidden <video> (especially audio-less clips) gets paused to save power.
+    v.style.cssText = 'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
+    document.body.appendChild(v);
     await new Promise((res, rej) => { v.onloadedmetadata = () => res(); v.onerror = () => rej(new Error('Could not load the video for export.')); });
     try { await document.fonts.load(`${style.weight || 700} 64px '${style.fontFamily}'`); await document.fonts.ready; } catch {}
 
@@ -232,8 +261,13 @@
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
 
     let raf = 0;
+    const watermark = !!(window.__captoUser && window.__captoUser.watermark);
     function frame() {
-      try { ctx.drawImage(v, 0, 0, W, H); drawCaptions(ctx, v.currentTime, cues, drawStyle, W, H); } catch {}
+      try {
+        ctx.drawImage(v, 0, 0, W, H);
+        drawCaptions(ctx, v.currentTime, cues, drawStyle, W, H);
+        if (watermark) drawWatermark(ctx, W, H);
+      } catch {}
       job.progress = dur ? Math.min(0.999, v.currentTime / dur) : 0;
       if (!v.paused && !v.ended) raf = requestAnimationFrame(frame);
     }
@@ -243,6 +277,7 @@
       v.onended = () => { try { rec.stop(); } catch {} };
       v.play().then(() => { rec.start(); frame(); }).catch(reject);
     });
+    try { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } catch {}
     const base = (media.file.name || 'video').replace(/\.[^.]+$/, '');
     downloadBlob(blob, `${base}-captioned.${extFor(mime)}`);
     return blob;
@@ -358,18 +393,64 @@
     return realFetch(input, init);
   };
 
+  function goTop(href) { return (e) => { if (e) e.preventDefault(); try { window.top.location.href = href; } catch { window.location.href = href; } }; }
+  function minutesLabel(u) {
+    if (!u || !u.minutes) return '';
+    const m = u.minutes;
+    if (m.unlimited || m.limit == null) return 'Unlimited minutes';
+    return `${m.remaining} of ${m.limit} min left`;
+  }
+  // Minutes indicator on the home hero + the watermark/quota note in the export
+  // modal. Idempotent — safe to call before and after /api/studio/me resolves.
+  function renderQuotaUI() {
+    const u = window.__captoUser || {};
+    const lbl = minutesLabel(u);
+    const canTopUp = u.plan === 'free' || u.plan === 'pro';
+
+    const actions = document.querySelector('.home-actions');
+    if (actions) {
+      let pill = document.getElementById('capto-minutes');
+      if (!pill) {
+        pill = document.createElement('button');
+        pill.id = 'capto-minutes';
+        pill.className = 'btn ghost lg';
+        actions.insertBefore(pill, actions.firstChild);
+      }
+      if (u.signedIn && lbl) {
+        pill.style.display = '';
+        pill.textContent = canTopUp ? `${lbl} · Top up` : lbl;
+        pill.onclick = canTopUp ? goTop('/billing') : null;
+      } else pill.style.display = 'none';
+    }
+
+    const tiers = document.getElementById('tiers');
+    if (tiers && tiers.parentNode) {
+      let line = document.getElementById('capto-export-quota');
+      if (!line) {
+        line = document.createElement('div');
+        line.id = 'capto-export-quota';
+        line.style.cssText = 'font-size:11.5px;color:var(--faint);margin:-4px 0 14px;line-height:1.5;';
+        tiers.parentNode.insertBefore(line, tiers.nextSibling);
+      }
+      const parts = [];
+      if (u.watermark) parts.push('Free exports include a “Made with Capto” watermark');
+      if (lbl) parts.push(lbl);
+      line.textContent = parts.join(' · ');
+      line.style.display = parts.length ? '' : 'none';
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     // Home "Settings" button jumps to Capto's account settings.
     const s = document.getElementById('homeSettings');
-    if (s) s.addEventListener('click', (e) => {
-      e.preventDefault();
-      try { window.top.location.href = '/settings'; } catch { window.location.href = '/settings'; }
-    });
+    if (s) s.addEventListener('click', goTop('/settings'));
     // The export "Save to ~/Desktop" picker + "Open folder" are desktop-only;
     // on the web the file downloads straight to the browser.
     const dest = document.getElementById('exDest');
     if (dest) dest.style.display = 'none';
     const openFolder = document.getElementById('exOpenFolder');
     if (openFolder) openFolder.style.display = 'none';
+    renderQuotaUI();
+    fetchMe();
   });
 })();
