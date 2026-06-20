@@ -590,3 +590,52 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, 'Se
 /* Active tab indicator + segmented controls use the Capto gradient (landing) */
 .tab.active::after { background: linear-gradient(90deg, #82a5ff, #8983ff 55%, #62d8ff); height: 2px; }
 .seg button.on { background: linear-gradient(120deg, #82a5ff, #8983ff); color: #0b0c14; }
+
+/* ---- Home redesign: nav bar + bigger dropzone w/ engine+language inside ---- */
+.brand { padding: 2px 4px; gap: 8px; }                 /* tighter, less spaced out */
+.brand img.brand-wm, .brand-wm { height: 25px; width: auto; max-width: 118px; object-fit: contain; }
+
+.home-view { padding-top: 26px; }
+.home-dropzone {
+  padding: 72px 28px 30px; min-height: 360px; margin: 0 0 34px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.home-dropzone .hd-inner { gap: 8px; }
+.home-dropzone .hd-icon { width: 64px; height: 64px; }
+.home-dropzone .hd-inner h2 { font-size: 22px; }
+/* engine + language inside the card, centered, clickable (card click = file picker) */
+.home-dropzone #homeTxRow {
+  pointer-events: auto; display: flex; gap: 12px; width: 100%; max-width: 480px;
+  margin-top: 24px; text-align: left;
+}
+.home-dropzone #homeTxRow label { flex: 1; min-width: 0; }
+.home-dropzone #homeTxRow label[hidden] { display: none; }
+@media (max-width: 560px) { .home-dropzone #homeTxRow { flex-direction: column; } }
+
+/* Top nav: gear + profile chip + dropdown (right side, home only) */
+.capto-nav { display: flex; align-items: center; gap: 8px; }
+.capto-gear { width: 36px; height: 36px; }
+.capto-pfp {
+  display: inline-flex; align-items: center; gap: 9px; padding: 4px 13px 4px 5px;
+  border-radius: 99px; border: 1px solid var(--line); background: var(--surface);
+  cursor: pointer; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; max-width: 200px;
+}
+.capto-pfp:hover { border-color: var(--line-2); background: var(--surface-2); }
+.capto-pfp .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capto-pfp .av {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; color: #0b0c14; background: linear-gradient(135deg, #a0c1ff, #82a5ff);
+}
+.capto-menu {
+  position: fixed; z-index: 1200; min-width: 216px; background: var(--surface-2);
+  border: 1px solid var(--line-2); border-radius: 12px; padding: 6px;
+  box-shadow: 0 16px 40px -12px rgba(0,0,0,.7); animation: slideUp .14s var(--ease);
+}
+.capto-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px;
+  background: none; border: 0; color: var(--text); text-align: left; border-radius: 8px;
+  cursor: pointer; font: inherit; font-size: 13px;
+}
+.capto-menu button:hover { background: var(--accent-soft); color: var(--accent-2); }
+.capto-menu .sep { height: 1px; background: var(--line); margin: 5px 6px; }
+.capto-menu .em { font-size: 11px; color: var(--faint); padding: 4px 11px 6px; }

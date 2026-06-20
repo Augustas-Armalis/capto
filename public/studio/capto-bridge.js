@@ -754,55 +754,99 @@
     if (m.unlimited || m.limit == null) return 'Unlimited minutes';
     return `${m.remaining} of ${m.limit} min left`;
   }
-  // Minutes indicator on the home hero + the watermark/quota note in the export
-  // modal. Idempotent — safe to call before and after /api/studio/me resolves.
+  // ── top nav (home): Capto logo left, settings gear + profile dropdown right ──
+  function toggleTheme() {
+    const next = (localStorage.getItem('subby-theme') === 'light') ? 'dark' : 'light';
+    localStorage.setItem('subby-theme', next);
+    document.body.classList.toggle('theme-light', next === 'light');
+    document.body.classList.toggle('theme-dark', next !== 'light');
+  }
+  async function signOut() {
+    try { await realFetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch {}
+    try { window.top.location.href = '/signin'; } catch { window.location.href = '/signin'; }
+  }
+  function closeProfileMenu() {
+    const m = document.getElementById('capto-menu');
+    if (m) m.remove();
+    document.removeEventListener('pointerdown', onDocDown, true);
+  }
+  function onDocDown(e) {
+    const m = document.getElementById('capto-menu');
+    const p = document.getElementById('capto-pfp');
+    if (m && !m.contains(e.target) && p && !p.contains(e.target)) closeProfileMenu();
+  }
+  function openProfileMenu(pfp) {
+    const u = window.__captoUser || {};
+    const r = pfp.getBoundingClientRect();
+    const nm = u.name || (u.email ? u.email.split('@')[0] : 'Account');
+    const menu = document.createElement('div');
+    menu.id = 'capto-menu';
+    menu.className = 'capto-menu';
+    const icUser = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/></svg>';
+    const icTheme = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor" stroke="none"/></svg>';
+    const icOut = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>';
+    menu.innerHTML =
+      `<div class="em">${escHtml(u.email || nm)}</div>` +
+      `<button data-a="profile">${icUser} Profile settings</button>` +
+      `<button data-a="theme">${icTheme} Toggle theme</button>` +
+      `<div class="sep"></div>` +
+      `<button data-a="signout">${icOut} Sign out</button>`;
+    document.body.appendChild(menu);
+    menu.style.top = (r.bottom + 8) + 'px';
+    menu.style.right = Math.max(12, window.innerWidth - r.right) + 'px';
+    menu.querySelector('[data-a="profile"]').onclick = goTop('/settings');
+    menu.querySelector('[data-a="theme"]').onclick = () => { toggleTheme(); closeProfileMenu(); };
+    menu.querySelector('[data-a="signout"]').onclick = () => { closeProfileMenu(); signOut(); };
+    setTimeout(() => document.addEventListener('pointerdown', onDocDown, true), 0);
+  }
+  let homeNavObserver = null;
+  function renderHomeNav() {
+    const topbar = document.querySelector('.topbar');
+    if (!topbar) return;
+    const u = window.__captoUser || {};
+    let nav = document.getElementById('capto-nav');
+    if (!nav) {
+      nav = document.createElement('div');
+      nav.id = 'capto-nav';
+      nav.className = 'capto-nav';
+      topbar.appendChild(nav);
+      const homeView = document.getElementById('homeView');
+      const sync = () => { nav.style.display = homeView && !homeView.hidden ? '' : 'none'; };
+      sync();
+      if (homeView && !homeNavObserver) {
+        homeNavObserver = new MutationObserver(sync);
+        homeNavObserver.observe(homeView, { attributes: true, attributeFilter: ['hidden'] });
+      }
+    }
+    if (!u.signedIn) {
+      nav.innerHTML = `<button class="btn ghost" id="capto-signin">Sign in</button>`;
+      const si = document.getElementById('capto-signin');
+      if (si) si.onclick = goTop('/signin');
+      return;
+    }
+    const nm = u.name || (u.email ? u.email.split('@')[0] : 'Account');
+    const initial = (nm.trim()[0] || 'A').toUpperCase();
+    nav.innerHTML =
+      `<button class="btn ghost icon capto-gear" id="capto-gear" title="Settings"><svg class="ic"><use href="#i-settings"/></svg></button>` +
+      `<button class="capto-pfp" id="capto-pfp"><span class="av">${initial}</span><span class="nm">${escHtml(nm)}</span></button>`;
+    const gear = document.getElementById('capto-gear');
+    if (gear) gear.onclick = goTop('/settings');
+    const pfp = document.getElementById('capto-pfp');
+    if (pfp) pfp.onclick = (e) => { e.stopPropagation(); document.getElementById('capto-menu') ? closeProfileMenu() : openProfileMenu(pfp); };
+  }
+
+  // Minutes indicator + the watermark/quota note in the export modal.
+  // Idempotent — safe to call before and after /api/studio/me resolves.
   function renderQuotaUI() {
     const u = window.__captoUser || {};
     const lbl = minutesLabel(u);
     const canTopUp = u.plan === 'free' || u.plan === 'pro';
 
-    const actions = document.querySelector('.home-actions');
-    if (actions) {
-      let pill = document.getElementById('capto-minutes');
-      if (!pill) {
-        pill = document.createElement('button');
-        pill.id = 'capto-minutes';
-        pill.className = 'btn ghost lg';
-        actions.insertBefore(pill, actions.firstChild);
-      }
-      if (u.signedIn && lbl) {
-        pill.style.display = '';
-        pill.textContent = canTopUp ? `${lbl} · ${u.plan === 'free' ? 'Upgrade' : 'Top up'}` : lbl;
-        pill.onclick = canTopUp ? goTop('/billing') : null;
-      } else pill.style.display = 'none';
+    renderHomeNav();
 
-      // Profile chip on the right — avatar + name, jumps to account settings.
-      let prof = document.getElementById('capto-profile');
-      if (!prof) {
-        prof = document.createElement('button');
-        prof.id = 'capto-profile';
-        prof.className = 'btn ghost lg';
-        prof.title = 'Account';
-        actions.appendChild(prof);
-      }
-      if (u.signedIn) {
-        const nm = u.name || (u.email ? u.email.split('@')[0] : 'Account');
-        const initial = (nm.trim()[0] || 'A').toUpperCase();
-        prof.style.display = '';
-        prof.innerHTML =
-          `<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#0b0c11;font-weight:700;font-size:11px;margin-right:6px">${initial}</span>` +
-          escHtml(nm);
-        prof.onclick = goTop('/settings');
-      } else {
-        prof.style.display = '';
-        prof.textContent = 'Sign in';
-        prof.onclick = goTop('/signin');
-      }
-    }
-
-    // Big colourful minutes card on the home, above the projects.
+    // Big colourful minutes card on the home, ABOVE the dropzone.
     const wrap = document.querySelector('.home-wrap');
-    const anchor = document.querySelector('.home-row');
+    const anchor = document.getElementById('homeDropzone');
     if (wrap && anchor) {
       let card = document.getElementById('capto-min-card');
       if (!card) {
@@ -858,9 +902,14 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    // Home "Settings" button jumps to Capto's account settings.
+    // Home "Settings" button jumps to Capto's account settings (legacy; the nav
+    // gear handles this now, but keep it wired if present).
     const s = document.getElementById('homeSettings');
     if (s) s.addEventListener('click', goTop('/settings'));
+    // The engine/language selects live INSIDE the dropzone — stop their clicks
+    // from bubbling up and triggering the file picker.
+    const tx = document.getElementById('homeTxRow');
+    if (tx) ['click', 'pointerdown', 'mousedown'].forEach((ev) => tx.addEventListener(ev, (e) => e.stopPropagation()));
     // "Open folder" (post-export reveal) is desktop-app only — never on web.
     const openFolder = document.getElementById('exOpenFolder');
     if (openFolder) openFolder.style.display = 'none';

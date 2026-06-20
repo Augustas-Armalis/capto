@@ -30,34 +30,21 @@
   <!-- HOME VIEW: project library + Quick‑start. Lives above the editor; shown when no project is open. -->
   <main class="home-view" id="homeView">
     <div class="home-wrap">
-      <div class="home-hero">
-        <div class="home-title">
-          <img class="home-wm" src="/studio/wordmark.png" alt="Capto" />
-          <div>
-            <h1>Welcome to <b>Capto</b></h1>
-            <p>Caption your videos with AI, edit them, export beautiful captioned MP4s.</p>
-          </div>
-        </div>
-        <div class="home-actions">
-          <button class="btn ghost lg" id="homeSettings"><svg class="ic"><use href="#i-settings"/></svg>Settings</button>
-        </div>
-      </div>
-
-      <!-- Big upload card on home — drag a file in, or click anywhere to pick one. -->
+      <!-- Minutes card (#capto-min-card) is injected here by the bridge, above
+           the dropzone. The big upload card — drop a file or click to pick. The
+           engine + language live inside it, centered. -->
       <div class="home-dropzone" id="homeDropzone" tabindex="0">
         <input type="file" id="homeFileInput" accept="video/*" hidden />
         <div class="hd-inner">
           <div class="hd-icon"><svg class="ic"><use href="#i-upload"/></svg></div>
           <h2>Drop a video or <span class="link">click to upload</span></h2>
-          <p>MP4 · MOV · WebM · MKV — anything ffmpeg can read. Files stay on your machine.</p>
+          <p>MP4 · MOV · WebM · MKV — files stay on your machine.</p>
         </div>
-      </div>
-      <!-- Transcription settings shown right under the dropzone, so the user
-           can pick engine + language BEFORE choosing a file. -->
-      <div class="home-tx-row">
-        <label><span>Engine</span><select id="homeEngine"></select></label>
-        <label><span>Spoken language</span><select id="homeLang"></select></label>
-        <label id="homeModelField"><span>Local model</span><select id="homeModel"></select></label>
+        <div class="home-tx-row" id="homeTxRow">
+          <label><span>Engine</span><select id="homeEngine"></select></label>
+          <label><span>Spoken language</span><select id="homeLang"></select></label>
+          <label id="homeModelField"><span>Local model</span><select id="homeModel"></select></label>
+        </div>
       </div>
 
       <div class="home-row">
