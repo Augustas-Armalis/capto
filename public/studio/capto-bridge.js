@@ -564,6 +564,46 @@
       }
     }
 
+    // Big colourful minutes card on the home, above the projects.
+    const wrap = document.querySelector('.home-wrap');
+    const anchor = document.querySelector('.home-row');
+    if (wrap && anchor) {
+      let card = document.getElementById('capto-min-card');
+      if (!card) {
+        card = document.createElement('div');
+        card.id = 'capto-min-card';
+        card.style.cssText = 'margin:0 0 26px;padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(120deg, rgba(130,165,255,.10), rgba(137,131,255,.05) 60%, rgba(98,216,255,.06));';
+        wrap.insertBefore(card, anchor);
+      }
+      const m = u.minutes;
+      if (u.signedIn && m) {
+        card.style.display = '';
+        const unlimited = m.unlimited || m.limit == null;
+        const pct = unlimited ? 12 : Math.min(100, Math.round(((m.used || 0) / Math.max(1, m.limit)) * 100));
+        const planName = (u.plan || 'free').charAt(0).toUpperCase() + (u.plan || 'free').slice(1);
+        card.innerHTML =
+          `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:11px">` +
+            `<div style="display:flex;align-items:center;gap:9px">` +
+              `<span style="font-size:13.5px;font-weight:650;color:var(--text)">Caption minutes</span>` +
+              `<span style="font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:99px;color:#0b0c14;background:linear-gradient(120deg,#a0c1ff,#8983ff)">${planName}</span>` +
+            `</div>` +
+            (canTopUp ? `<button id="capto-topup" class="btn primary sm">Top up</button>` : '') +
+          `</div>` +
+          `<div style="height:9px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden">` +
+            `<div style="height:100%;width:${pct}%;border-radius:99px;background:linear-gradient(90deg,#82a5ff,#8983ff,#62d8ff);transition:width .4s"></div>` +
+          `</div>` +
+          `<div style="margin-top:9px;font-size:12px;color:var(--muted)">` +
+            (unlimited
+              ? `Unlimited minutes on ${planName}`
+              : `<b style="color:var(--text)">${m.remaining}</b> of ${m.limit} min left · ${m.used || 0} used this month`) +
+          `</div>`;
+        const tu = document.getElementById('capto-topup');
+        if (tu) tu.onclick = goTop('/billing');
+      } else {
+        card.style.display = 'none';
+      }
+    }
+
     const tiers = document.getElementById('tiers');
     if (tiers && tiers.parentNode) {
       let line = document.getElementById('capto-export-quota');
@@ -610,6 +650,19 @@
         });
       };
       new MutationObserver(applyThumbs).observe(grid, { childList: true });
+    }
+    // "Powered by Contles" chip at the foot of the home.
+    const wrap = document.querySelector('.home-wrap');
+    if (wrap && !document.getElementById('capto-contles')) {
+      const c = document.createElement('div');
+      c.id = 'capto-contles';
+      c.style.cssText = 'margin:36px 0 8px;display:flex;justify-content:center';
+      c.innerHTML =
+        `<span style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:var(--faint);` +
+        `border:1px solid var(--line);border-radius:99px;padding:6px 13px">` +
+        `<span style="width:6px;height:6px;border-radius:50%;background:linear-gradient(120deg,#82a5ff,#62d8ff)"></span>` +
+        `Powered by Contles</span>`;
+      wrap.appendChild(c);
     }
     renderQuotaUI();
     fetchMe();

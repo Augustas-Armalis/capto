@@ -244,7 +244,9 @@ export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
           <SectionLede className="mx-auto">
             Pro at <Money eur="5.00" usd="5.83" />/mo on annual undercuts every tool that starts at <Money eur="19" usd="19" />.
           </SectionLede>
-          <div className="mt-8 flex justify-center">
+          {/* Sticky under the nav on mobile so you can switch billing without
+              scrolling back up past the stacked cards. Static on desktop. */}
+          <div className="sticky top-[64px] z-30 -mx-5 mt-8 flex justify-center border-b border-white/[0.06] bg-[var(--color-bg)]/85 py-3 backdrop-blur-md sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:py-0 sm:backdrop-blur-none">
             <Toggle annual={annual} onChange={setAnnual} />
           </div>
         </div>
