@@ -93,6 +93,170 @@
     return json({ cues: wordsToCues(data.words), language: data.language || body.language });
   }
 
+  // ───────────────────────── client-side export ─────────────────────────
+  // Subby exported via server ffmpeg. On the web we burn captions in the
+  // browser: draw each video frame + the active caption(s) onto a canvas with
+  // Subby's exact style math, capture canvas+audio with MediaRecorder, and
+  // download the result. Drives app.js's existing export-modal job flow.
+  const jobs = {}; // jobId -> { status, progress, error }
+
+  function pickExportMime() {
+    const c = ['video/mp4;codecs=h264,aac', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    for (const m of c) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+    return 'video/webm';
+  }
+  function extFor(mime) { return mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm'; }
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+  }
+  function applyCaseLocal(t, mode) {
+    if (mode === 'lower') return String(t).toLocaleLowerCase();
+    if (mode === 'upper') return String(t).toLocaleUpperCase();
+    if (mode === 'title') return String(t).replace(/\S+/g, (w) => w.charAt(0).toLocaleUpperCase() + w.slice(1).toLocaleLowerCase());
+    return t;
+  }
+  function hexALocal(hex, o) {
+    const h = String(hex || '#000000').replace('#', '');
+    return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${o})`;
+  }
+  function scaleStyle(s, k) {
+    const out = Object.assign({}, s);
+    for (const key of ['fontSize', 'letterSpacing', 'outlineWidth', 'shadowDistance', 'shadowBlur'])
+      if (typeof s[key] === 'number') out[key] = s[key] * k;
+    return out;
+  }
+  function drawWord(ctx, text, x, y, s, active) {
+    const ow = s.outlineWidth || 0;
+    const fill = active && s.highlightEnabled ? s.highlightColor : s.primaryColor;
+    ctx.save();
+    if (s.shadowEnabled) {
+      ctx.shadowColor = hexALocal(s.shadowColor, (s.shadowOpacity == null ? 60 : s.shadowOpacity) / 100);
+      ctx.shadowBlur = s.shadowBlur || 0;
+      ctx.shadowOffsetX = s.shadowDistance || 0;
+      ctx.shadowOffsetY = s.shadowDistance || 0;
+    }
+    // first paint seeds the drop shadow (outline ring if present, else the fill)
+    if (ow > 0) { ctx.fillStyle = s.outlineColor; ctx.fillText(text, x + ow, y + ow); }
+    else { ctx.fillStyle = fill; ctx.fillText(text, x, y); }
+    ctx.restore();
+    // full outline ring, then the fill on top
+    if (ow > 0) {
+      ctx.fillStyle = s.outlineColor;
+      for (const d of [[ow, 0], [-ow, 0], [0, ow], [0, -ow], [ow, ow], [-ow, -ow], [ow, -ow], [-ow, ow]]) ctx.fillText(text, x + d[0], y + d[1]);
+    }
+    ctx.fillStyle = fill;
+    ctx.fillText(text, x, y);
+  }
+  function drawCue(ctx, cue, t, s, W, H) {
+    const fontPx = s.fontSize;
+    const weight = typeof s.weight === 'number' ? s.weight : (s.bold ? 700 : 400);
+    ctx.save();
+    ctx.font = `${s.italic ? 'italic ' : ''}${weight} ${fontPx}px '${s.fontFamily}'`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    try { ctx.letterSpacing = (s.letterSpacing || 0) + 'px'; } catch {}
+    const words = (cue.words && cue.words.length) ? cue.words : [{ word: cue.text, start: cue.start, end: cue.end }];
+    let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
+    const toks = words.map((w, i) => ({ text: applyCaseLocal(w.word, s.caseMode), idx: i }));
+    for (const tk of toks) tk.w = ctx.measureText(tk.text).width;
+    const spaceW = ctx.measureText(' ').width || fontPx * 0.3;
+    const maxW = (typeof s.boxWidth === 'number' && s.boxWidth > 0) ? s.boxWidth * W : 0.92 * W;
+    const lines = []; let line = []; let lineW = 0;
+    for (const tk of toks) {
+      const add = (line.length ? spaceW : 0) + tk.w;
+      if (line.length && lineW + add > maxW) { lines.push({ items: line, w: lineW }); line = []; lineW = 0; }
+      line.push(tk); lineW += (line.length > 1 ? spaceW : 0) + tk.w;
+    }
+    if (line.length) lines.push({ items: line, w: lineW });
+    const lineH = fontPx * (typeof s.lineHeight === 'number' ? s.lineHeight : 1.12);
+    const cx = s.posX * W;
+    const rowOffset = (cue.row || 0) * (s.fontSize * 2.4 / H);
+    const cy = (s.posY - rowOffset) * H;
+    let y = cy - (lines.length * lineH) / 2 + lineH / 2;
+    for (const ln of lines) {
+      let x = cx - ln.w / 2;
+      for (const it of ln.items) { drawWord(ctx, it.text, x + it.w / 2 - it.w / 2, y, s, it.idx === aw); x += it.w + spaceW; }
+      y += lineH;
+    }
+    ctx.restore();
+  }
+  function drawCaptions(ctx, t, cues, s, W, H) {
+    const rows = cues.reduce((m, c) => Math.max(m, (c.row || 0) + 1), 1);
+    for (let r = 0; r < rows; r++) {
+      let cue = null;
+      for (const c of cues) if ((c.row || 0) === r && t >= c.start && t <= c.end) { cue = c; break; }
+      if (cue) drawCue(ctx, cue, t, s, W, H);
+    }
+  }
+  async function runExport(job, id, body) {
+    const media = window.__captoMedia;
+    if (!media || media.id !== id || !media.file) throw new Error('Video not available — re-open the clip.');
+    const cues = body.cues || [];
+    const style = body.style || {};
+    const meta = media.meta || { width: 1080, height: 1920, duration: 0 };
+    const tiers = { friend: { maxH: 720, bitrate: 2_500_000 }, high: { maxH: 1080, bitrate: 8_000_000 }, lossless: { maxH: 100000, bitrate: 14_000_000 } };
+    const cfg = tiers[body.quality] || tiers.lossless;
+    const nH = meta.height || 1080, nW = meta.width || 1080;
+    const outH = Math.min(nH, cfg.maxH);
+    const k = outH / nH;
+    const W = Math.max(2, Math.round(nW * k / 2) * 2), H = Math.max(2, Math.round(outH / 2) * 2);
+
+    const v = document.createElement('video');
+    v.src = media.url; v.playsInline = true; v.preload = 'auto';
+    await new Promise((res, rej) => { v.onloadedmetadata = () => res(); v.onerror = () => rej(new Error('Could not load the video for export.')); });
+    try { await document.fonts.load(`${style.weight || 700} 64px '${style.fontFamily}'`); await document.fonts.ready; } catch {}
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const drawStyle = scaleStyle(style, k);
+    const dur = meta.duration || v.duration || 0;
+
+    const fps = 30;
+    const cstream = canvas.captureStream(fps);
+    let audioTrack = null;
+    try {
+      const vstream = v.captureStream ? v.captureStream() : (v.mozCaptureStream ? v.mozCaptureStream() : null);
+      if (vstream) audioTrack = vstream.getAudioTracks()[0] || null;
+    } catch { /* no audio capture */ }
+    const tracks = cstream.getVideoTracks();
+    if (audioTrack) tracks.push(audioTrack);
+    const stream = new MediaStream(tracks);
+    const mime = pickExportMime();
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: cfg.bitrate });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+
+    let raf = 0;
+    function frame() {
+      try { ctx.drawImage(v, 0, 0, W, H); drawCaptions(ctx, v.currentTime, cues, drawStyle, W, H); } catch {}
+      job.progress = dur ? Math.min(0.999, v.currentTime / dur) : 0;
+      if (!v.paused && !v.ended) raf = requestAnimationFrame(frame);
+    }
+    const blob = await new Promise((resolve, reject) => {
+      rec.onstop = () => { cancelAnimationFrame(raf); resolve(new Blob(chunks, { type: mime })); };
+      rec.onerror = (e) => reject((e && e.error) || new Error('Recorder error.'));
+      v.onended = () => { try { rec.stop(); } catch {} };
+      v.play().then(() => { rec.start(); frame(); }).catch(reject);
+    });
+    const base = (media.file.name || 'video').replace(/\.[^.]+$/, '');
+    downloadBlob(blob, `${base}-captioned.${extFor(mime)}`);
+    return blob;
+  }
+  function startExportJob(id, body) {
+    const jobId = 'j_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const job = { status: 'running', progress: 0, error: null };
+    jobs[jobId] = job;
+    runExport(job, id, body)
+      .then(() => { job.status = 'done'; })
+      .catch((e) => { job.status = 'error'; job.error = (e && e.message) || 'Export failed.'; });
+    return jobId;
+  }
+
   window.fetch = function (input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
@@ -154,8 +318,11 @@
         if (window.__captoMedia && window.__captoMedia.url) return realFetch(window.__captoMedia.url);
         return Promise.resolve(new Response('', { status: 404 }));
       }
-      if (sub === '/export' && method === 'POST')
-        return Promise.resolve(json({ error: 'Web export is being finalized — your project is saved. Coming next.' }, 501));
+      if (sub === '/export' && method === 'POST') {
+        let parsed = {}; try { parsed = JSON.parse(init.body); } catch {}
+        try { return Promise.resolve(json({ jobId: startExportJob(id, parsed) })); }
+        catch (e) { return Promise.resolve(json({ error: (e && e.message) || 'Export failed.' }, 500)); }
+      }
 
       if (sub === '' && method === 'GET') {
         const p = store[id];
@@ -175,20 +342,34 @@
       }
     }
 
-    // desktop-only endpoints (jobs/download/folder pickers) — not on web.
-    if (/^\/api\/(jobs|download|pick-folder|reveal)/.test(path))
+    // export job polling — the browser export auto-downloads on completion.
+    const jm = path.match(/^\/api\/jobs\/([^/]+)$/);
+    if (jm) {
+      const job = jobs[jm[1]];
+      if (!job) return Promise.resolve(json({ status: 'error', error: 'Job expired.' }));
+      return Promise.resolve(json({ status: job.status, progress: job.progress, error: job.error }));
+    }
+
+    // desktop-only endpoints (download/folder pickers) — not on web.
+    if (/^\/api\/(download|pick-folder|reveal)/.test(path))
       return Promise.resolve(json({ error: 'unavailable' }, 501));
 
     // anything else under /api — let it hit Capto directly (carries cookies).
     return realFetch(input, init);
   };
 
-  // The home "Settings" button jumps to Capto's account settings.
   document.addEventListener('DOMContentLoaded', () => {
+    // Home "Settings" button jumps to Capto's account settings.
     const s = document.getElementById('homeSettings');
     if (s) s.addEventListener('click', (e) => {
       e.preventDefault();
       try { window.top.location.href = '/settings'; } catch { window.location.href = '/settings'; }
     });
+    // The export "Save to ~/Desktop" picker + "Open folder" are desktop-only;
+    // on the web the file downloads straight to the browser.
+    const dest = document.getElementById('exDest');
+    if (dest) dest.style.display = 'none';
+    const openFolder = document.getElementById('exOpenFolder');
+    if (openFolder) openFolder.style.display = 'none';
   });
 })();
