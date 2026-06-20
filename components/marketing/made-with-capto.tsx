@@ -1,32 +1,12 @@
-import fs from "node:fs";
-import path from "node:path";
 import { Container } from "@/components/ui/container";
 import { SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
 import { Marquee } from "./marquee";
 import { VideoReel } from "./video-reel";
+import { CAROUSEL_VIDEOS } from "./carousel-manifest";
 
-// Real creator clips, auto-discovered from /public/videos at build time. Drop
-// any .mp4/.webm/.mov in there and they appear in the reel automatically. Until
-// then we show the styled placeholders below.
-function getVideos(): string[] {
-  try {
-    const dir = path.join(process.cwd(), "public", "videos");
-    const all = fs
-      .readdirSync(dir)
-      .filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f) && !f.startsWith("."));
-    // Prefer the optimized "carousel" clips; never the raw transcoded sources
-    // (they're huge and not meant for autoplay). Order numerically (2 before 10).
-    const carousel = all.filter((f) => /carousel/i.test(f));
-    const pick = (carousel.length ? carousel : all.filter((f) => !/original|transcoded|source/i.test(f)));
-    return pick.sort((a, b) => {
-      const na = parseInt((a.match(/\d+/) || ["0"])[0], 10);
-      const nb = parseInt((b.match(/\d+/) || ["0"])[0], 10);
-      return na - nb || a.localeCompare(b);
-    });
-  } catch {
-    return [];
-  }
-}
+// The clip list is baked in at build time (scripts/gen-carousel.mjs scans
+// /public/videos) because the Cloudflare Worker has no filesystem at runtime.
+// Drop clips in /public/videos and they appear on the next build.
 
 // Placeholder reel cards until real creator clips land.
 const REELS = [
@@ -55,7 +35,7 @@ function Reel({ tag, line, hot, bg, accent }: (typeof REELS)[number]) {
 }
 
 export function MadeWithCapto() {
-  const videos = getVideos();
+  const videos = CAROUSEL_VIDEOS;
   const items = videos.length
     ? videos.map((v) => <VideoReel key={v} src={v} />)
     : REELS.map((r, i) => <Reel key={i} {...r} />);

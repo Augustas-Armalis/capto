@@ -5,6 +5,9 @@
   "description": "Capto — AI captions for short-form video. SaaS web platform.",
   "scripts": {
     "dev": "next dev --turbo",
+    "gen:carousel": "node scripts/gen-carousel.mjs",
+    "prebuild": "node scripts/gen-carousel.mjs",
+    "predev": "node scripts/gen-carousel.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -13,9 +16,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "cf:build": "opennextjs-cloudflare build",
+    "cf:build": "node scripts/gen-carousel.mjs && opennextjs-cloudflare build",
     "cf:preview": "opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare build && wrangler deploy"
+    "cf:deploy": "node scripts/gen-carousel.mjs && opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
