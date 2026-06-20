@@ -17,9 +17,10 @@ type Plan = "free" | "pro" | "ultra";
 export default async function EditorRoute({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string }>;
+  searchParams: Promise<{ project?: string; lang?: string }>;
 }) {
-  const { project: projectId } = await searchParams;
+  const { project: projectId, lang } = await searchParams;
+  const initialLanguage = typeof lang === "string" && /^[a-z]{2}$/.test(lang) ? lang : undefined;
 
   let plan: Plan = "free";
   let initialProject: InitialProject | null = null;
@@ -54,5 +55,5 @@ export default async function EditorRoute({
     }
   }
 
-  return <EditorShell plan={plan} initialProject={initialProject} />;
+  return <EditorShell plan={plan} initialProject={initialProject} initialLanguage={initialLanguage} />;
 }

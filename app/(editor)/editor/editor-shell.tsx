@@ -79,9 +79,11 @@ const LANGS = [
 export function EditorShell({
   plan = "free",
   initialProject = null,
+  initialLanguage,
 }: {
   plan?: Plan;
   initialProject?: InitialProject | null;
+  initialLanguage?: string;
 }) {
   const [isNarrow, setIsNarrow] = React.useState(false);
 
@@ -92,17 +94,21 @@ export function EditorShell({
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  return <Editor plan={plan} initialProject={initialProject} isNarrow={isNarrow} />;
+  return (
+    <Editor plan={plan} initialProject={initialProject} isNarrow={isNarrow} initialLanguage={initialLanguage} />
+  );
 }
 
 function Editor({
   plan,
   initialProject,
   isNarrow,
+  initialLanguage,
 }: {
   plan: Plan;
   initialProject: InitialProject | null;
   isNarrow: boolean;
+  initialLanguage?: string;
 }) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -117,7 +123,9 @@ function Editor({
   const [presetId, setPresetId] = React.useState(initialProject?.state?.presetId ?? "inter-bold");
   const [pos, setPos] = React.useState<Pos>(initialProject?.state?.pos ?? { x: 0.5, y: 0.82 });
   const [anim, setAnim] = React.useState<CaptionAnim>(initialProject?.state?.anim ?? "pop");
-  const [language, setLanguage] = React.useState(initialProject?.state?.language ?? "auto");
+  const [language, setLanguage] = React.useState(
+    initialProject?.state?.language ?? initialLanguage ?? "auto",
+  );
 
   const [projectId, setProjectId] = React.useState<string | null>(initialProject?.id ?? null);
   const [projectName, setProjectName] = React.useState(initialProject?.name ?? "Untitled project");
