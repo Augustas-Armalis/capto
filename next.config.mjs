@@ -63,8 +63,10 @@ const nextConfig = {
         source: '/((?!api|editor|studio|dashboard|settings|billing|welcome).*)',
         headers: [
           {
+            // Tiny edge cache so deploys show almost immediately (the long
+            // stale-while-revalidate window was making changes look stuck).
             key: 'Cache-Control',
-            value: 'public, max-age=0, s-maxage=120, stale-while-revalidate=604800',
+            value: 'public, max-age=0, s-maxage=10, stale-while-revalidate=30',
           },
         ],
       },
