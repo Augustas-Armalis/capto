@@ -33,12 +33,12 @@ import {
   KeyRound,
   Undo2,
   Redo2,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import { PoweredByContles } from "@/components/marketing/powered-by-contles";
-import { PRESETS, getPreset } from "@/lib/caption-presets";
+import { PRESETS, getPreset, type CaptionPreset, type CaseMode, type HighlightMode } from "@/lib/caption-presets";
 import {
   drawCaption,
   drawWatermark,
@@ -67,6 +67,7 @@ export type InitialProject = {
     videoName?: string;
     durationSec?: number;
     presetId?: string;
+    styleOverride?: Partial<CaptionPreset>;
     pos?: Pos;
     language?: string;
     cues?: Cue[];
@@ -139,6 +140,11 @@ function Editor({
 
   const [cues, setCues] = React.useState<Cue[]>(initialProject?.state?.cues ?? []);
   const [presetId, setPresetId] = React.useState(initialProject?.state?.presetId ?? "inter-bold");
+  // Per-field tweaks layered on top of the chosen preset (font, colours, size,
+  // case, shadow, outline…). Selecting a new preset clears these.
+  const [styleOverride, setStyleOverride] = React.useState<Partial<CaptionPreset>>(
+    initialProject?.state?.styleOverride ?? {},
+  );
   const [pos, setPos] = React.useState<Pos>(initialProject?.state?.pos ?? { x: 0.5, y: 0.82 });
   const [anim, setAnim] = React.useState<CaptionAnim>(initialProject?.state?.anim ?? "pop");
   const [language, setLanguage] = React.useState(
@@ -181,7 +187,44 @@ function Editor({
 
   const isFree = plan === "free";
   const FREE_STYLE_LIMIT = 4;
-  const preset = getPreset(presetId);
+  // Effective preset = base preset with the user's per-field tweaks merged in.
+  // Used for BOTH the live canvas preview and the export, so WYSIWYG holds.
+  const basePreset = getPreset(presetId);
+  const preset = React.useMemo<CaptionPreset>(
+    () => ({ ...basePreset, ...styleOverride }),
+    [basePreset, styleOverride],
+  );
+  // Picking a preset replaces the style; tweaks layer back on after.
+  const choosePreset = React.useCallback((id: string) => {
+    setPresetId(id);
+    setStyleOverride({});
+  }, []);
+  const patchStyle = React.useCallback(
+    (patch: Partial<CaptionPreset>) => setStyleOverride((o) => ({ ...o, ...patch })),
+    [],
+  );
+  const resetStyle = React.useCallback(() => setStyleOverride({}), []);
+  const styleDirty = Object.keys(styleOverride).length > 0;
+  // Apply a saved custom style (preset + tweaks) in one shot.
+  const applyStyle = React.useCallback((id: string, override: Partial<CaptionPreset>) => {
+    setPresetId(id);
+    setStyleOverride(override);
+  }, []);
+  // On a brand-new project (no saved state), seed from the user's default style.
+  const seededDefault = React.useRef(false);
+  React.useEffect(() => {
+    if (seededDefault.current || initialProject?.state) return;
+    seededDefault.current = true;
+    try {
+      const raw = localStorage.getItem("capto:defaultStyle");
+      if (!raw) return;
+      const d = JSON.parse(raw) as { presetId?: string; override?: Partial<CaptionPreset> };
+      if (d.presetId) setPresetId(d.presetId);
+      if (d.override) setStyleOverride(d.override);
+    } catch {
+      /* ignore malformed local default */
+    }
+  }, [initialProject]);
 
   // Re-chunk the current cues into one word per cue (popular punchy look). Pure
   // client transform — no re-transcription needed.
@@ -576,6 +619,7 @@ function Editor({
     videoName: fileObj?.name ?? expectedName,
     durationSec: meta?.dur,
     presetId,
+    styleOverride,
     pos,
     anim,
     language,
@@ -945,8 +989,13 @@ function Editor({
             )}
             {mobileTab === "style" && (
               <StylePanel
+                advanced={false}
                 presetId={presetId}
-                onPreset={setPresetId}
+                onPreset={choosePreset}
+                preset={preset}
+                onPatch={patchStyle}
+                onResetStyle={resetStyle}
+                styleDirty={styleDirty}
                 pos={pos}
                 onPos={setPos}
                 anim={anim}
@@ -1085,9 +1134,6 @@ function Editor({
                 </div>
               </>
             )}
-          </div>
-          <div className="hidden lg:block">
-            <PoweredByContles variant="chip" />
           </div>
         </div>
       </div>
@@ -1250,8 +1296,15 @@ function Editor({
             )}
             {tab === "style" && (
               <StylePanel
+                advanced
                 presetId={presetId}
-                onPreset={setPresetId}
+                onPreset={choosePreset}
+                preset={preset}
+                styleOverride={styleOverride}
+                onPatch={patchStyle}
+                onResetStyle={resetStyle}
+                onApplyStyle={applyStyle}
+                styleDirty={styleDirty}
                 pos={pos}
                 onPos={setPos}
                 anim={anim}
@@ -1815,9 +1868,196 @@ function EditorSettingsPanel({
   );
 }
 
+// Curated caption fonts (loaded in the editor layout so the canvas can render
+// them faithfully). Mirrors the original Subby font set.
+const FONT_OPTIONS: { value: string; label: string }[] = [
+  { value: '"DM Sans", system-ui, sans-serif', label: "DM Sans" },
+  { value: '"Inter", system-ui, sans-serif', label: "Inter" },
+  { value: '"Poppins", system-ui, sans-serif', label: "Poppins" },
+  { value: '"Montserrat", system-ui, sans-serif', label: "Montserrat" },
+  { value: '"Oswald", system-ui, sans-serif', label: "Oswald" },
+  { value: '"Bebas Neue", system-ui, sans-serif', label: "Bebas Neue" },
+  { value: '"Anton", system-ui, sans-serif', label: "Anton" },
+  { value: '"Archivo Black", system-ui, sans-serif', label: "Archivo Black" },
+  { value: '"Lato", system-ui, sans-serif', label: "Lato" },
+];
+
+// Colour palette (mirrors the original Subby swatches).
+const CAPTION_SWATCHES = ["#FFFFFF", "#111319", "#FFE36E", "#7C6CFF", "#46D39A", "#FF6B81", "#54C7FC", "#FF8FD0"];
+
+const CASE_OPTIONS: { value: CaseMode; label: string }[] = [
+  { value: "none", label: "Aa" },
+  { value: "upper", label: "AA" },
+  { value: "lower", label: "aa" },
+  { value: "title", label: "Title" },
+];
+
+const HIGHLIGHT_OPTIONS: { value: HighlightMode; label: string }[] = [
+  { value: "color", label: "Color" },
+  { value: "box", label: "Box" },
+  { value: "glow", label: "Glow" },
+  { value: "underline", label: "Underline" },
+];
+
+const WEIGHT_OPTIONS: { value: number; label: string }[] = [
+  { value: 500, label: "Medium" },
+  { value: 700, label: "Bold" },
+  { value: 800, label: "Heavy" },
+  { value: 900, label: "Black" },
+];
+
+// Swatch row + native colour picker for choosing any caption colour.
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (c: string) => void;
+}) {
+  const hex = /^#([0-9a-f]{6})$/i.test(value) ? value : "#ffffff";
+  return (
+    <div>
+      <label className="eyebrow mb-2 block">{label}</label>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {CAPTION_SWATCHES.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            aria-label={`${label} ${c}`}
+            className={cn(
+              "size-6 rounded-md border transition",
+              value.toLowerCase() === c.toLowerCase()
+                ? "border-white ring-2 ring-[var(--color-brand)]"
+                : "border-white/15 hover:border-white/40",
+            )}
+            style={{ background: c }}
+          />
+        ))}
+        <label className="relative size-6 cursor-pointer overflow-hidden rounded-md border border-white/15 hover:border-white/40">
+          <input
+            type="color"
+            value={hex}
+            onChange={(e) => onChange(e.target.value)}
+            className="absolute -inset-2 cursor-pointer"
+            aria-label={`${label} custom colour`}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+type SavedStyle = { id: string; name: string; presetId: string; override: Partial<CaptionPreset> };
+
+// Custom-preset shelf: save the current look, re-apply it later, or make it the
+// default for new projects. Persisted in localStorage (per browser).
+function SavedStyles({
+  presetId,
+  override,
+  onApply,
+}: {
+  presetId: string;
+  override: Partial<CaptionPreset>;
+  onApply: (id: string, override: Partial<CaptionPreset>) => void;
+}) {
+  const [list, setList] = React.useState<SavedStyle[]>([]);
+  const [name, setName] = React.useState("");
+  const [savedDefault, setSavedDefault] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem("capto:customStyles");
+      if (raw) setList(JSON.parse(raw) as SavedStyle[]);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const persist = (next: SavedStyle[]) => {
+    setList(next);
+    try {
+      localStorage.setItem("capto:customStyles", JSON.stringify(next));
+    } catch {
+      /* ignore quota */
+    }
+  };
+  const save = () => {
+    const n = name.trim() || `Style ${list.length + 1}`;
+    const id = `cs_${Date.now().toString(36)}`;
+    persist([...list, { id, name: n, presetId, override }]);
+    setName("");
+  };
+  const remove = (id: string) => persist(list.filter((s) => s.id !== id));
+  const makeDefault = () => {
+    try {
+      localStorage.setItem("capto:defaultStyle", JSON.stringify({ presetId, override }));
+      setSavedDefault(true);
+      setTimeout(() => setSavedDefault(false), 1600);
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <div className="border-t border-white/[0.06] pt-6">
+      <label className="eyebrow mb-2 block">My styles</label>
+      {list.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {list.map((s) => (
+            <span
+              key={s.id}
+              className="group inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.03] py-1 pl-3 pr-1.5 text-xs text-[var(--color-fg-muted)] transition-colors hover:border-white/20 hover:text-white"
+            >
+              <button onClick={() => onApply(s.presetId, s.override)} className="font-medium">
+                {s.name}
+              </button>
+              <button
+                onClick={() => remove(s.id)}
+                aria-label={`Delete ${s.name}`}
+                className="rounded-full p-0.5 text-[var(--color-fg-subtle)] hover:bg-white/10 hover:text-white"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-1.5">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          placeholder="Name this style"
+          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-white/[0.08] bg-white/[0.02] px-3 py-1.5 text-xs text-white placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]/60 focus:outline-none"
+        />
+        <button
+          onClick={save}
+          className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-white/25"
+        >
+          <Save className="size-3.5" /> Save
+        </button>
+      </div>
+      <button
+        onClick={makeDefault}
+        className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-fg-muted)] transition-colors hover:text-white"
+      >
+        {savedDefault ? <Check className="size-3 text-[var(--color-success)]" /> : <Sparkles className="size-3" />}
+        {savedDefault ? "Saved as default" : "Set as default for new projects"}
+      </button>
+    </div>
+  );
+}
+
 function StylePanel({
+  advanced,
   presetId,
   onPreset,
+  preset,
+  styleOverride,
+  onPatch,
+  onResetStyle,
+  onApplyStyle,
+  styleDirty,
   pos,
   onPos,
   anim,
@@ -1827,8 +2067,15 @@ function StylePanel({
   thumbnail,
   onSetThumbnail,
 }: {
+  advanced: boolean;
   presetId: string;
   onPreset: (id: string) => void;
+  preset: CaptionPreset;
+  styleOverride?: Partial<CaptionPreset>;
+  onPatch: (patch: Partial<CaptionPreset>) => void;
+  onResetStyle: () => void;
+  onApplyStyle?: (id: string, override: Partial<CaptionPreset>) => void;
+  styleDirty: boolean;
   pos: Pos;
   onPos: (p: Pos) => void;
   anim: CaptionAnim;
@@ -1839,6 +2086,9 @@ function StylePanel({
   onSetThumbnail: () => void;
 }) {
   const isFreeTier = freeLimit !== null;
+  const fontValue =
+    FONT_OPTIONS.find((f) => f.value === preset.fontFamily)?.value ?? FONT_OPTIONS[0].value;
+  const showAccent = preset.highlightMode !== "color";
   return (
     <div>
       <label className="eyebrow mb-2 block">Caption style</label>
@@ -1887,6 +2137,211 @@ function StylePanel({
           Unlock every style + custom colors with Pro
         </button>
       )}
+
+      {/* Full customization (desktop). Free tier gets a locked teaser; Pro/Ultra
+          get the complete font/colour/size/case/shadow/outline controls. */}
+      {advanced &&
+        (isFreeTier ? (
+          <div className="mt-6">
+            <label className="eyebrow mb-2 block">Customize</label>
+            <button
+              onClick={onLocked}
+              className="flex w-full items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] px-3 py-2.5 text-xs font-medium text-white transition-colors hover:border-[var(--color-brand)]/60"
+            >
+              <Sparkles className="size-3.5 text-[var(--color-brand)]" />
+              Fonts, colors, size &amp; outline — unlock with Pro
+            </button>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-6 border-t border-white/[0.06] pt-6">
+            <div className="flex items-center justify-between">
+              <label className="eyebrow">Customize</label>
+              {styleDirty && (
+                <button
+                  onClick={onResetStyle}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-fg-muted)] transition-colors hover:text-white"
+                >
+                  <RotateCcw className="size-3" />
+                  Reset to preset
+                </button>
+              )}
+            </div>
+
+            {/* Font family */}
+            <div>
+              <label className="eyebrow mb-2 block">Font</label>
+              <Combobox
+                value={fontValue}
+                onChange={(v) => onPatch({ fontFamily: v })}
+                options={FONT_OPTIONS}
+                ariaLabel="Caption font"
+              />
+            </div>
+
+            {/* Weight */}
+            <div>
+              <label className="eyebrow mb-2 block">Weight</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {WEIGHT_OPTIONS.map((w) => (
+                  <button
+                    key={w.value}
+                    onClick={() => onPatch({ fontWeight: w.value })}
+                    style={{ fontWeight: w.value }}
+                    className={cn(
+                      "rounded-[var(--radius-sm)] border px-1 py-1.5 text-xs transition-colors",
+                      preset.fontWeight === w.value
+                        ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-white"
+                        : "border-white/[0.08] bg-white/[0.02] text-[var(--color-fg-muted)] hover:border-white/20 hover:text-white",
+                    )}
+                  >
+                    {w.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Case */}
+            <div>
+              <label className="eyebrow mb-2 block">Case</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {CASE_OPTIONS.map((c) => (
+                  <button
+                    key={c.value}
+                    onClick={() => onPatch({ caseMode: c.value })}
+                    className={cn(
+                      "rounded-[var(--radius-sm)] border px-1 py-1.5 text-xs font-semibold transition-colors",
+                      preset.caseMode === c.value
+                        ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-white"
+                        : "border-white/[0.08] bg-white/[0.02] text-[var(--color-fg-muted)] hover:border-white/20 hover:text-white",
+                    )}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Size */}
+            <div>
+              <label htmlFor="cap-size" className="eyebrow mb-2 block">
+                Size
+              </label>
+              <input
+                id="cap-size"
+                type="range"
+                min={0.04}
+                max={0.12}
+                step={0.002}
+                value={preset.sizeRatio}
+                aria-label="Caption size"
+                onChange={(e) => onPatch({ sizeRatio: parseFloat(e.target.value) })}
+                className="w-full accent-[var(--color-brand)]"
+              />
+              <div className="mt-1 flex justify-between text-[10px] text-[var(--color-fg-subtle)]">
+                <span>Small</span>
+                <span>Large</span>
+              </div>
+            </div>
+
+            {/* Letter spacing */}
+            <div>
+              <label htmlFor="cap-track" className="eyebrow mb-2 block">
+                Letter spacing
+              </label>
+              <input
+                id="cap-track"
+                type="range"
+                min={-0.08}
+                max={0.12}
+                step={0.005}
+                value={preset.tracking}
+                aria-label="Letter spacing"
+                onChange={(e) => onPatch({ tracking: parseFloat(e.target.value) })}
+                className="w-full accent-[var(--color-brand)]"
+              />
+            </div>
+
+            {/* Colours */}
+            <ColorField label="Text color" value={preset.fill} onChange={(c) => onPatch({ fill: c })} />
+            <ColorField
+              label="Active word color"
+              value={preset.highlightFill}
+              onChange={(c) => onPatch({ highlightFill: c })}
+            />
+
+            {/* Highlight mode */}
+            <div>
+              <label className="eyebrow mb-2 block">Active word</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {HIGHLIGHT_OPTIONS.map((h) => (
+                  <button
+                    key={h.value}
+                    onClick={() => onPatch({ highlightMode: h.value })}
+                    className={cn(
+                      "rounded-[var(--radius-sm)] border px-1 py-1.5 text-[11px] transition-colors",
+                      preset.highlightMode === h.value
+                        ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-white"
+                        : "border-white/[0.08] bg-white/[0.02] text-[var(--color-fg-muted)] hover:border-white/20 hover:text-white",
+                    )}
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {showAccent && (
+              <ColorField
+                label="Accent color"
+                value={preset.accent || "#7c5cff"}
+                onChange={(c) => onPatch({ accent: c })}
+              />
+            )}
+
+            {/* Shadow */}
+            <label className="flex cursor-pointer items-center justify-between">
+              <span className="eyebrow">Drop shadow</span>
+              <input
+                type="checkbox"
+                checked={!!preset.shadow}
+                onChange={(e) => onPatch({ shadow: e.target.checked })}
+                className="size-4 accent-[var(--color-brand)]"
+                aria-label="Drop shadow"
+              />
+            </label>
+
+            {/* Outline */}
+            <div>
+              <label htmlFor="cap-outline" className="eyebrow mb-2 block">
+                Outline
+              </label>
+              <input
+                id="cap-outline"
+                type="range"
+                min={0}
+                max={0.12}
+                step={0.005}
+                value={preset.outline ?? 0}
+                aria-label="Caption outline width"
+                onChange={(e) => onPatch({ outline: parseFloat(e.target.value) })}
+                className="w-full accent-[var(--color-brand)]"
+              />
+              {(preset.outline ?? 0) > 0 && (
+                <div className="mt-2">
+                  <ColorField
+                    label="Outline color"
+                    value={preset.outlineColor || "#000000"}
+                    onChange={(c) => onPatch({ outlineColor: c })}
+                  />
+                </div>
+              )}
+            </div>
+
+            {onApplyStyle && (
+              <SavedStyles presetId={presetId} override={styleOverride ?? {}} onApply={onApplyStyle} />
+            )}
+          </div>
+        ))}
 
       {/* Animation — premium */}
       <div className="mb-2 mt-6 flex items-center gap-2">

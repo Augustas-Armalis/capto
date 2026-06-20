@@ -231,6 +231,16 @@ function drawWord(
     ctx.shadowOffsetY = 0;
   }
 
+  // Text outline / stroke (drawn under the fill, inherits the readability shadow).
+  const outline = preset.outline ?? 0;
+  if (outline > 0) {
+    ctx.lineWidth = px * outline;
+    ctx.strokeStyle = preset.outlineColor || "#000000";
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeText(text, x, y);
+  }
+
   ctx.fillStyle = active ? preset.highlightFill : preset.fill;
   ctx.fillText(text, x, y);
 

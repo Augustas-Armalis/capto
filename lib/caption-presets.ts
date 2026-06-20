@@ -25,6 +25,10 @@ export type CaptionPreset = {
   sizeRatio: number;
   /** drop shadow behind the text */
   shadow: boolean;
+  /** text outline / stroke width as a fraction of font size (0 = none) */
+  outline?: number;
+  /** outline colour (defaults to black) */
+  outlineColor?: string;
   /** show one word at a time, swapped in place */
   single?: boolean;
   /** rounded box (pill) when highlightMode === "box" */

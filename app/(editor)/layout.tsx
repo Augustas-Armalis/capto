@@ -11,5 +11,17 @@ export default async function EditorLayout({ children }: { children: React.React
   if (isConfigured.auth() && isConfigured.db() && !session?.user) {
     redirect("/signin");
   }
-  return <div className="min-h-screen bg-[var(--color-bg)]">{children}</div>;
+  return (
+    <div className="min-h-screen bg-[var(--color-bg)]">
+      {/* Display fonts for the caption Style tab (canvas renders these directly,
+          so they must be loadable). Mirrors the original Subby font set. */}
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&family=Lato:wght@400;700;900&family=Montserrat:wght@400;600;700;800;900&family=Oswald:wght@400;600;700&family=Poppins:wght@400;500;600;700;800&display=swap"
+      />
+      {children}
+    </div>
+  );
 }

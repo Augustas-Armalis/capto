@@ -58,6 +58,23 @@ export async function exportCaptionedVideo(opts: ExportOpts): Promise<ExportResu
   const duration = video.duration || 0;
   if (!duration || !isFinite(duration)) throw new Error("Video has no readable duration.");
 
+  // Make sure the chosen caption font is actually loaded before we paint frames,
+  // otherwise the export silently falls back to a system font.
+  try {
+    const fam = (preset.fontFamily.split(",")[0] || "").replace(/["']/g, "").trim();
+    if (fam && typeof document !== "undefined" && "fonts" in document) {
+      await Promise.race([
+        Promise.all([
+          document.fonts.load(`${preset.fontWeight} 64px "${fam}"`),
+          document.fonts.ready,
+        ]),
+        new Promise((r) => setTimeout(r, 2500)),
+      ]);
+    }
+  } catch {
+    /* font loading is best-effort; fall back to system font if it fails */
+  }
+
   // Output size: native aspect, long edge capped.
   let w = video.videoWidth || 1080;
   let h = video.videoHeight || 1920;
