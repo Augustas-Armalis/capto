@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { env } from "@/lib/env";
 import { POSTS, allPostSlugs } from "@/lib/blog";
 import { allCompareSlugs } from "@/lib/compare";
+import { vsSlugs, COMPARE_TO_VS } from "@/lib/vs";
 import { allToolSlugs } from "@/lib/tools";
 import { allStyleSlugs } from "@/lib/styles";
 
@@ -39,9 +40,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     return isNaN(parsed.getTime()) ? CONTENT_DATE : parsed;
   };
   const blog = allPostSlugs().map((s) => at(`/blog/${s}`, 0.6, "monthly", postDate(s)));
-  const compare = allCompareSlugs().map((s) => at(`/compare/${s}`, 0.8));
+  const compare = allCompareSlugs()
+    .filter((s) => !COMPARE_TO_VS[s]) // the big four redirect to /vs
+    .map((s) => at(`/compare/${s}`, 0.8));
+  const vs = vsSlugs().map((s) => at(`/vs/${s}`, 0.9));
   const tools = allToolSlugs().map((s) => at(`/tools/${s}`, 0.8));
   const styles = allStyleSlugs().map((s) => at(`/styles/${s}`, 0.7));
 
-  return [...staticPages, ...tools, ...styles, ...compare, ...blog];
+  return [...staticPages, ...vs, ...tools, ...styles, ...compare, ...blog];
 }

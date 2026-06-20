@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Check, X, Minus } from "lucide-react";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
@@ -9,9 +9,14 @@ import { RelatedGrid } from "@/components/marketing/related-grid";
 import { Container } from "@/components/ui/container";
 import { JsonLd, breadcrumbLd } from "@/components/seo/json-ld";
 import { COMPARES, getCompare, allCompareSlugs, type CompareRow } from "@/lib/compare";
+import { COMPARE_TO_VS } from "@/lib/vs";
+// The big four now live as richer head-to-heads at /vs — one canonical URL each.
+const REDIRECT_MAP = COMPARE_TO_VS;
 
 export function generateStaticParams() {
-  return allCompareSlugs().map((slug) => ({ slug }));
+  return allCompareSlugs()
+    .filter((slug) => !REDIRECT_MAP[slug])
+    .map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -29,6 +34,7 @@ function Cell({ value }: { value: CompareRow["capto"] }) {
 
 export default async function ComparePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  if (REDIRECT_MAP[slug]) redirect(`/vs/${REDIRECT_MAP[slug]}`);
   const c = getCompare(slug);
   if (!c) notFound();
 
