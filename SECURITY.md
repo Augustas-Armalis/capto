@@ -131,6 +131,32 @@ After any secret change, redeploy so the running Worker picks it up:
 npm run cf:deploy
 ```
 
+### Enabling the premium AI engines (optional)
+
+Capto runs on the house **Groq** key today (Whisper). The other engines are
+optional — set their key as a Worker secret and they light up automatically as
+managed (paid-tier) options; the "Auto" engine starts load-balancing toward
+whichever scores best. Until then, users can always plug in their own key in
+Settings.
+
+```bash
+# Deepgram Nova-3 (premium STT) — console.deepgram.com
+printf '%s' '<DEEPGRAM_KEY>' | npx wrangler secret put DEEPGRAM_API_KEY
+
+# OpenAI Whisper (alt STT) — platform.openai.com/api-keys
+printf '%s' '<OPENAI_KEY>' | npx wrangler secret put OPENAI_API_KEY
+
+# Gemini 2.5 Flash — powers Translate + Emoji for Pro/Ultra — aistudio.google.com/apikey
+printf '%s' '<GEMINI_KEY>' | npx wrangler secret put GEMINI_API_KEY
+
+npm run cf:deploy   # redeploy to pick them up
+```
+
+> Operating cost note: Groq Whisper is ~$0.0001–0.0004 / audio-minute, so even a
+> heavy free user costs a fraction of a cent. The cost lever is **volume**, which
+> is why Free is hard-capped (5 AI runs/mo) and Pro soft-capped (300/mo). Deepgram
+> and Gemini are pay-as-you-go; they only bill when those engines actually run.
+
 Then **revoke the old keys** in each provider dashboard. For the Cloudflare API
 token: delete it from the Cloudflare dashboard (My Profile → API Tokens) — do
 this together, last, since it's the token used to manage the Worker itself.
