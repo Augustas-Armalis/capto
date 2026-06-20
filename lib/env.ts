@@ -15,9 +15,13 @@ export const env = {
   stripeWebhookSecret: read("STRIPE_WEBHOOK_SECRET"),
   stripePublishable: read("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"),
   encryptionKey: read("ENCRYPTION_KEY"),
-  // House Groq key. /api/transcribe uses it ONLY as a fallback when the user
-  // hasn't supplied their own key. Optional; leave unset for strict BYOK.
+  // House AI keys. /api/transcribe uses these for managed (paid-tier) AI and as
+  // the free-tier allowance. Groq is the always-on default; the others are
+  // optional — when unset, those engines are simply offered as BYOK-only.
   houseGroqKey: read("GROQ_API_KEY"),
+  houseOpenaiKey: read("OPENAI_API_KEY"),
+  houseDeepgramKey: read("DEEPGRAM_API_KEY"),
+  houseGeminiKey: read("GEMINI_API_KEY"),
   // Resend transactional email (verification codes). Optional: when unset, email
   // verification is skipped so the app still works without it.
   resendApiKey: read("RESEND_API_KEY"),
@@ -32,4 +36,19 @@ export const isConfigured = {
   stripe: () => env.stripeSecret.startsWith("sk_"),
   auth: () => env.authSecret.length >= 16,
   email: () => env.resendApiKey.startsWith("re_"),
+  gemini: () => env.houseGeminiKey.length > 10,
 };
+
+/** Which providers have a usable HOUSE key configured right now. */
+export function houseKeyFor(provider: "groq" | "openai" | "deepgram" | "gemini"): string {
+  switch (provider) {
+    case "groq":
+      return env.houseGroqKey;
+    case "openai":
+      return env.houseOpenaiKey;
+    case "deepgram":
+      return env.houseDeepgramKey;
+    case "gemini":
+      return env.houseGeminiKey;
+  }
+}

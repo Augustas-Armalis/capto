@@ -17,6 +17,7 @@ export default async function OnboardingPage() {
   // shows until a password is set, even across sessions).
   let needsPassword = false;
   let needsEmailVerify = false;
+  let plan: "free" | "pro" | "ultra" = "free";
   if (isConfigured.db() && session?.user?.id) {
     const db = getDb();
     const [cred] = await db
@@ -28,15 +29,14 @@ export default async function OnboardingPage() {
       .limit(1);
     needsPassword = !cred;
 
+    const [u] = await db
+      .select({ verified: userTable.emailVerified, plan: userTable.plan })
+      .from(userTable)
+      .where(eq(userTable.id, session.user.id))
+      .limit(1);
+    if (u?.plan) plan = u.plan;
     // Require email verification only when an email provider is configured.
-    if (isConfigured.email()) {
-      const [u] = await db
-        .select({ verified: userTable.emailVerified })
-        .from(userTable)
-        .where(eq(userTable.id, session.user.id))
-        .limit(1);
-      needsEmailVerify = !!u && !u.verified;
-    }
+    if (isConfigured.email()) needsEmailVerify = !!u && !u.verified;
   }
 
   return (
@@ -44,6 +44,7 @@ export default async function OnboardingPage() {
       firstName={firstName}
       needsPassword={needsPassword}
       needsEmailVerify={needsEmailVerify}
+      plan={plan}
     />
   );
 }

@@ -39,7 +39,7 @@ export const PLANS: Plan[] = [
       "Every caption style & highlight preset",
       "Real timeline editing, full word-level control",
       "3 captioned exports / month",
-      "Bring your own Groq API key",
+      "5 AI caption runs/mo on us — or unlimited with your own key",
       "SRT / VTT subtitle file export",
     ],
     limits: ["Capto watermark on exports", "Compressed export · 2 min per video", "No Magic Clips or brand kit"],

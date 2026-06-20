@@ -21,6 +21,8 @@ import {
   Crown,
   Gem,
   Send,
+  Smile,
+  Languages,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -124,6 +126,18 @@ function Editor({
   const [tab, setTab] = React.useState<"captions" | "style">("captions");
   const [mobileTab, setMobileTab] = React.useState<"style" | "captions" | "export">("captions");
   const [friendMB, setFriendMB] = React.useState(8);
+  // Which AI engine produced the current captions, + a snapshot of its raw
+  // output. On save we diff this against the edited captions to feed the
+  // learning loop (accuracy per engine + the user's learned vocabulary).
+  const [engine, setEngine] = React.useState<{
+    provider: string;
+    model: string;
+    label: string;
+    managed: boolean;
+  } | null>(null);
+  const aiOriginalRef = React.useRef<string>("");
+  const [enhancing, setEnhancing] = React.useState<null | "translate" | "emoji">(null);
+  const [targetLang, setTargetLang] = React.useState("es");
 
   const [transcribing, setTranscribing] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
@@ -266,12 +280,26 @@ function Editor({
       fd.append("file", fileObj, fileObj.name);
       fd.append("language", language);
       const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-      const data = (await res.json()) as { words?: Word[]; error?: string; detail?: string };
-      if (!res.ok) throw new Error(data.error || "Transcription failed.");
+      const data = (await res.json()) as {
+        words?: Word[];
+        text?: string;
+        engine?: { provider: string; model: string; label: string; managed: boolean };
+        error?: string;
+        detail?: string;
+        code?: string;
+      };
+      if (!res.ok) {
+        // Out of the monthly free allowance → nudge to upgrade.
+        if (data.code === "cap_reached" && isFree) setUpgradeOpen(true);
+        throw new Error(data.error || "Transcription failed.");
+      }
       const words = data.words || [];
       if (!words.length) throw new Error("No speech detected in this clip.");
       const c = wordsToCues(words, { totalDuration: meta?.dur ?? Infinity });
       setCues(c);
+      // Snapshot the raw AI output for the learning loop on save.
+      aiOriginalRef.current = data.text || c.map((x) => x.text).join(" ");
+      if (data.engine) setEngine(data.engine);
       setTab("captions");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Transcription failed.");
@@ -386,10 +414,49 @@ function Editor({
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+
+      // Learning loop: tell the server how much the user changed the AI output.
+      // Best-effort, fire-and-forget — never blocks the save.
+      if (engine && aiOriginalRef.current && cues.length) {
+        fetch("/api/ai/feedback", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            provider: engine.provider,
+            model: engine.model,
+            originalText: aiOriginalRef.current,
+            finalText: cues.map((c) => c.text).join(" "),
+          }),
+        }).catch(() => {});
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not save the project.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── premium caption enhancement (Gemini) ────────────────────────────────
+  const runEnhance = async (action: "translate" | "emoji") => {
+    if (!cues.length || enhancing) return;
+    setErr(null);
+    setEnhancing(action);
+    try {
+      const res = await fetch("/api/ai/enhance", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, targetLang, cues }),
+      });
+      const data = (await res.json()) as { cues?: Cue[]; error?: string; code?: string };
+      if (!res.ok) {
+        if (data.code === "upgrade") setUpgradeOpen(true);
+        throw new Error(data.error || "Enhancement failed.");
+      }
+      if (Array.isArray(data.cues) && data.cues.length) setCues(data.cues);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Enhancement failed.");
+    } finally {
+      setEnhancing(null);
     }
   };
 
@@ -617,6 +684,12 @@ function Editor({
                 onEdit={editCueText}
                 onDelete={deleteCue}
                 onWordByWord={wordByWord}
+                engineLabel={engine?.label ?? null}
+                enhancing={enhancing}
+                onTranslate={() => runEnhance("translate")}
+                onEmoji={() => runEnhance("emoji")}
+                targetLang={targetLang}
+                onTargetLang={setTargetLang}
               />
             )}
             {mobileTab === "style" && (
@@ -802,6 +875,12 @@ function Editor({
                 onEdit={editCueText}
                 onDelete={deleteCue}
                 onWordByWord={wordByWord}
+                engineLabel={engine?.label ?? null}
+                enhancing={enhancing}
+                onTranslate={() => runEnhance("translate")}
+                onEmoji={() => runEnhance("emoji")}
+                targetLang={targetLang}
+                onTargetLang={setTargetLang}
               />
             ) : (
               <StylePanel
@@ -960,6 +1039,12 @@ function CaptionsPanel({
   onEdit,
   onDelete,
   onWordByWord,
+  engineLabel,
+  enhancing,
+  onTranslate,
+  onEmoji,
+  targetLang,
+  onTargetLang,
 }: {
   cues: Cue[];
   activeIdx: number;
@@ -972,6 +1057,12 @@ function CaptionsPanel({
   onEdit: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onWordByWord: () => void;
+  engineLabel: string | null;
+  enhancing: null | "translate" | "emoji";
+  onTranslate: () => void;
+  onEmoji: () => void;
+  targetLang: string;
+  onTargetLang: (l: string) => void;
 }) {
   if (!hasVideo) {
     return (
@@ -1008,8 +1099,8 @@ function CaptionsPanel({
           )}
         </Button>
         <p className="mt-3 text-xs text-[var(--color-fg-subtle)] leading-relaxed">
-          Powered by Whisper large-v3 on Groq. Uses your key from Settings, or our managed key.
-          Best with clips under a couple of minutes.
+          Capto picks the best AI engine automatically (Whisper, Deepgram &amp; more) — change it in
+          Settings, or plug in your own key. Best with clips under a couple of minutes.
         </p>
       </div>
     );
@@ -1017,8 +1108,14 @@ function CaptionsPanel({
 
   return (
     <div className="space-y-1.5">
+      {engineLabel && (
+        <p className="mb-2 inline-flex items-center gap-1.5 text-[11px] text-[var(--color-fg-subtle)]">
+          <Sparkles className="size-3 text-[var(--color-brand)]" />
+          Captioned with {engineLabel}
+        </p>
+      )}
       {/* Quick caption actions */}
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
           onClick={onWordByWord}
           className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white"
@@ -1032,6 +1129,37 @@ function CaptionsPanel({
         >
           <ListVideo className="size-3.5" />
           Regenerate
+        </button>
+        <button
+          onClick={onEmoji}
+          disabled={!!enhancing}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:border-white/25 hover:text-white disabled:opacity-60"
+        >
+          <Smile className="size-3.5" />
+          {enhancing === "emoji" ? "Adding…" : "Add emoji"}
+        </button>
+      </div>
+      {/* Translate (premium) */}
+      <div className="mb-3 flex items-center gap-2">
+        <select
+          value={targetLang}
+          onChange={(e) => onTargetLang(e.target.value)}
+          aria-label="Translation language"
+          className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-white outline-none focus:border-white/25"
+        >
+          {LANGS.filter(([v]) => v !== "auto").map(([v, l]) => (
+            <option key={v} value={v} className="bg-[var(--color-bg-elev)]">
+              {l}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={onTranslate}
+          disabled={!!enhancing}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-[var(--color-brand)]/60 disabled:opacity-60"
+        >
+          <Languages className="size-3.5 text-[var(--color-brand)]" />
+          {enhancing === "translate" ? "Translating…" : "Translate"}
         </button>
       </div>
       {cues.map((c, i) => (

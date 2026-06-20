@@ -13,16 +13,26 @@ export default async function SettingsPage() {
   let plan: "free" | "pro" | "ultra" = "free";
   let subscriptionStatus: string | null = null;
   let image: string | null = session?.user?.image ?? null;
+  let aiProvider = "auto";
+  let aiUseOwnKey = false;
   if (isConfigured.db() && session?.user?.id) {
     const db = getDb();
     const [u] = await db
-      .select({ plan: userTable.plan, status: userTable.subscriptionStatus, image: userTable.image })
+      .select({
+        plan: userTable.plan,
+        status: userTable.subscriptionStatus,
+        image: userTable.image,
+        aiProvider: userTable.aiProvider,
+        aiUseOwnKey: userTable.aiUseOwnKey,
+      })
       .from(userTable)
       .where(eq(userTable.id, session.user.id))
       .limit(1);
     if (u?.plan) plan = u.plan;
     subscriptionStatus = u?.status ?? null;
     image = u?.image ?? image;
+    aiProvider = u?.aiProvider ?? "auto";
+    aiUseOwnKey = u?.aiUseOwnKey ?? false;
   }
   return (
     <SettingsClient
@@ -31,6 +41,8 @@ export default async function SettingsPage() {
       image={image}
       plan={plan}
       subscriptionStatus={subscriptionStatus}
+      aiProvider={aiProvider}
+      aiUseOwnKey={aiUseOwnKey}
     />
   );
 }

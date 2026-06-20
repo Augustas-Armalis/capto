@@ -117,6 +117,24 @@ export function wordsToCues(words: Word[], opts: ChunkOpts = {}): Cue[] {
   });
 }
 
+/** Evenly distribute a new caption text across an existing [start,end] span. */
+export function evenWords(text: string, start: number, end: number): Word[] {
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (!parts.length) return [];
+  const span = Math.max(0.001, end - start);
+  return parts.map((w, i) => ({
+    word: w,
+    start: start + (span * i) / parts.length,
+    end: start + (span * (i + 1)) / parts.length,
+  }));
+}
+
+/** Rebuild a cue with new text, keeping its timing window. */
+export function retimeCue(cue: Cue, newText: string): Cue {
+  const clean = newText.replace(/\s+/g, " ").trim();
+  return { ...cue, text: clean, words: evenWords(clean, cue.start, cue.end) };
+}
+
 /** Which cue (if any) is active at time t. */
 export function activeCueIndex(cues: Cue[], t: number): number {
   for (let i = 0; i < cues.length; i++) {

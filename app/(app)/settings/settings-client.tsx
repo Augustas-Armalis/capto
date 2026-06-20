@@ -2,13 +2,33 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Save, CheckCircle2, Trash2, Check, Crown, ArrowRight, Camera, X } from "lucide-react";
+import {
+  KeyRound,
+  Save,
+  CheckCircle2,
+  Trash2,
+  Check,
+  Crown,
+  ArrowRight,
+  Camera,
+  X,
+  Cpu,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { STT_MODELS, PROVIDER_LABEL, type AiProvider } from "@/lib/ai/models";
 
-type ApiKeyMeta = { provider: "groq" | "openai"; label: string | null; lastUsedAt: string | null };
+type Provider = AiProvider;
+type ApiKeyMeta = { provider: Provider; label: string | null; lastUsedAt: string | null };
 type Plan = "free" | "pro" | "ultra";
+
+const PROVIDERS: { id: Provider; name: string; placeholder: string; hint: string }[] = [
+  { id: "groq", name: "Groq", placeholder: "gsk_…", hint: "Recommended · fast & free tier" },
+  { id: "openai", name: "OpenAI", placeholder: "sk-…", hint: "Whisper, pay-per-use" },
+  { id: "deepgram", name: "Deepgram", placeholder: "Token…", hint: "Nova-3 · premium accuracy" },
+  { id: "gemini", name: "Gemini", placeholder: "AIza…", hint: "Powers translate & emoji" },
+];
 
 export function SettingsClient({
   name,
@@ -16,37 +36,50 @@ export function SettingsClient({
   image = null,
   plan = "free",
   subscriptionStatus,
+  aiProvider = "auto",
+  aiUseOwnKey = false,
 }: {
   name: string;
   email: string;
   image?: string | null;
   plan?: Plan;
   subscriptionStatus?: string | null;
+  aiProvider?: string;
+  aiUseOwnKey?: boolean;
 }) {
   const router = useRouter();
   const avatarInputRef = React.useRef<HTMLInputElement | null>(null);
   const [avatar, setAvatar] = React.useState<string | null>(image);
   const [avatarSaving, setAvatarSaving] = React.useState(false);
   const [avatarErr, setAvatarErr] = React.useState<string | null>(null);
-  const [groqKey, setGroqKey] = React.useState("");
-  const [openaiKey, setOpenaiKey] = React.useState("");
+
+  const [keyInputs, setKeyInputs] = React.useState<Record<Provider, string>>({
+    groq: "",
+    openai: "",
+    deepgram: "",
+    gemini: "",
+  });
   const [meta, setMeta] = React.useState<ApiKeyMeta[]>([]);
-  const [saving, setSaving] = React.useState<null | "groq" | "openai">(null);
-  const [savedAt, setSavedAt] = React.useState<{ groq?: number; openai?: number }>({});
+  const [saving, setSaving] = React.useState<Provider | null>(null);
+  const [savedAt, setSavedAt] = React.useState<Partial<Record<Provider, number>>>({});
+
+  // AI engine preference
+  const [engine, setEngine] = React.useState(aiProvider);
+  const [useOwn, setUseOwn] = React.useState(aiUseOwnKey);
+  const [engineSaving, setEngineSaving] = React.useState(false);
+  const [engineSaved, setEngineSaved] = React.useState(false);
+  const [usage, setUsage] = React.useState<{ used: number; limit: number | null; unlimited: boolean } | null>(null);
 
   // Profile name
   const [displayName, setDisplayName] = React.useState(name);
   const [nameSaving, setNameSaving] = React.useState(false);
   const [nameSaved, setNameSaved] = React.useState(false);
 
-  // Delete account
   const [deleting, setDeleting] = React.useState(false);
 
   React.useEffect(() => {
-    fetch("/api/user/api-keys")
-      .then((r) => r.json())
-      .then((j) => setMeta(j.keys || []))
-      .catch(() => {});
+    fetch("/api/user/api-keys").then((r) => r.json()).then((j) => setMeta(j.keys || [])).catch(() => {});
+    fetch("/api/usage/ai").then((r) => r.json()).then(setUsage).catch(() => {});
   }, []);
 
   async function saveName() {
@@ -68,8 +101,24 @@ export function SettingsClient({
     }
   }
 
-  // Resize the chosen image to a 256px square JPEG data URL (small enough to
-  // store inline in the user row), then save it.
+  async function saveEngine() {
+    setEngineSaving(true);
+    setEngineSaved(false);
+    try {
+      const r = await fetch("/api/account/ai-prefs", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ aiProvider: engine, aiUseOwnKey: useOwn }),
+      });
+      if (!r.ok) throw new Error();
+      setEngineSaved(true);
+      setTimeout(() => setEngineSaved(false), 2500);
+      router.refresh();
+    } finally {
+      setEngineSaving(false);
+    }
+  }
+
   async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -91,7 +140,6 @@ export function SettingsClient({
           c.height = size;
           const ctx = c.getContext("2d");
           if (!ctx) return reject(new Error("no canvas"));
-          // Cover-crop to a centered square.
           const s = Math.min(img.width, img.height);
           const sx = (img.width - s) / 2;
           const sy = (img.height - s) / 2;
@@ -156,8 +204,8 @@ export function SettingsClient({
     }
   }
 
-  async function saveKey(provider: "groq" | "openai") {
-    const key = provider === "groq" ? groqKey : openaiKey;
+  async function saveKey(provider: Provider) {
+    const key = keyInputs[provider];
     if (!key.trim()) return;
     setSaving(provider);
     try {
@@ -166,10 +214,13 @@ export function SettingsClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ provider, key: key.trim() }),
       });
-      if (!r.ok) throw new Error();
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        alert(j.error || "Could not save that key.");
+        return;
+      }
       setSavedAt((s) => ({ ...s, [provider]: Date.now() }));
-      if (provider === "groq") setGroqKey("");
-      else setOpenaiKey("");
+      setKeyInputs((s) => ({ ...s, [provider]: "" }));
       const list = await fetch("/api/user/api-keys").then((r) => r.json());
       setMeta(list.keys || []);
     } finally {
@@ -177,15 +228,14 @@ export function SettingsClient({
     }
   }
 
-  async function deleteKey(provider: "groq" | "openai") {
-    if (!confirm(`Delete your ${provider.toUpperCase()} key? This can't be undone.`)) return;
+  async function deleteKey(provider: Provider) {
+    if (!confirm(`Delete your ${PROVIDER_LABEL[provider]} key? This can't be undone.`)) return;
     await fetch(`/api/user/api-keys?provider=${provider}`, { method: "DELETE" });
     const list = await fetch("/api/user/api-keys").then((r) => r.json());
     setMeta(list.keys || []);
   }
 
-  const hasGroq = meta.some((m) => m.provider === "groq");
-  const hasOpenai = meta.some((m) => m.provider === "openai");
+  const has = (p: Provider) => meta.some((m) => m.provider === p);
   const planLabel = plan === "free" ? "Free" : plan === "pro" ? "Pro" : "Ultra";
 
   return (
@@ -225,7 +275,6 @@ export function SettingsClient({
       <section className="mt-6 rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
         <h2 className="text-lg font-semibold">Profile</h2>
 
-        {/* Avatar */}
         <div className="mt-5 flex items-center gap-5">
           <div className="relative">
             <div className="flex size-20 items-center justify-center overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-bg)]">
@@ -262,13 +311,7 @@ export function SettingsClient({
             <p className="mt-2 text-xs text-[var(--color-fg-subtle)]">PNG or JPG. We crop it to a square.</p>
             {avatarErr && <p className="mt-1 text-xs text-[var(--color-danger)]">{avatarErr}</p>}
           </div>
-          <input
-            ref={avatarInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={onPickAvatar}
-          />
+          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={onPickAvatar} />
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -291,13 +334,88 @@ export function SettingsClient({
         </p>
       </section>
 
+      {/* AI engine */}
+      <section className="mt-6 rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+              <Cpu className="size-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold">AI engine</h2>
+              <p className="text-sm text-[var(--color-fg-muted)]">
+                {plan === "free"
+                  ? "Free uses our managed AI within your monthly allowance — or plug in your own key for more."
+                  : "Runs on our managed AI by default. Switch to your own key any time."}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {usage && (
+          <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[var(--color-fg-muted)]">AI captions this month</span>
+              <span className="mono tnum text-white">
+                {usage.unlimited || usage.limit === null ? `${usage.used} · Unlimited` : `${usage.used} / ${usage.limit}`}
+              </span>
+            </div>
+            {!usage.unlimited && usage.limit !== null && (
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-[var(--color-brand)] transition-[width]"
+                  style={{ width: `${Math.min(100, (usage.used / Math.max(1, usage.limit)) * 100)}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label htmlFor="engine" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">Model</label>
+            <select
+              id="engine"
+              value={engine}
+              onChange={(e) => setEngine(e.target.value)}
+              className="w-full rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-white/25"
+            >
+              <option value="auto" className="bg-[var(--color-bg-elev)]">Auto — best engine (improves over time)</option>
+              {STT_MODELS.map((m) => (
+                <option key={m.id} value={m.id} className="bg-[var(--color-bg-elev)]">
+                  {m.label}
+                  {m.minPlan !== "free" ? ` · ${m.minPlan === "pro" ? "Pro" : "Ultra"}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <label className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={useOwn}
+                onChange={(e) => setUseOwn(e.target.checked)}
+                className="size-4 accent-[var(--color-brand)]"
+              />
+              <span className="text-white">Use my own key when available</span>
+            </label>
+          </div>
+        </div>
+        <div className="mt-4">
+          <Button onClick={saveEngine} loading={engineSaving} size="md" variant="secondary">
+            {engineSaved ? <Check className="size-4 text-[var(--color-success)]" /> : <Save className="size-4" />}
+            Save engine
+          </Button>
+        </div>
+      </section>
+
       {/* API keys */}
       <section id="api-keys" className="mt-6 rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">API keys</h2>
+            <h2 className="text-lg font-semibold">Your API keys</h2>
             <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-              Encrypted with AES-256-GCM before storage. Used only when you transcribe. Optional — we provide a managed key.
+              Encrypted with AES-256-GCM before storage. Optional — paid plans get managed AI. Bring your own to run on your account.
             </p>
           </div>
           <Badge variant="outline">
@@ -306,84 +424,48 @@ export function SettingsClient({
           </Badge>
         </div>
 
-        <div className="mt-6 space-y-5">
-          {/* Groq */}
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold">Groq</div>
-                <div className="text-xs text-[var(--color-fg-subtle)]">Recommended, fast & free tier</div>
-              </div>
-              {hasGroq && (
-                <div className="flex items-center gap-2">
-                  <Badge variant="brand">
-                    <CheckCircle2 className="size-3" />
-                    Connected
-                  </Badge>
-                  <button
-                    onClick={() => deleteKey("groq")}
-                    aria-label="Delete Groq key"
-                    className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elev)] hover:text-[var(--color-danger)]"
-                  >
-                    <Trash2 className="size-3.5" aria-hidden />
-                  </button>
+        <div className="mt-6 space-y-4">
+          {PROVIDERS.map((p) => (
+            <div key={p.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold">{p.name}</div>
+                  <div className="text-xs text-[var(--color-fg-subtle)]">{p.hint}</div>
                 </div>
+                {has(p.id) && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="brand">
+                      <CheckCircle2 className="size-3" />
+                      Connected
+                    </Badge>
+                    <button
+                      onClick={() => deleteKey(p.id)}
+                      aria-label={`Delete ${p.name} key`}
+                      className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elev)] hover:text-[var(--color-danger)]"
+                    >
+                      <Trash2 className="size-3.5" aria-hidden />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 flex gap-2">
+                <Input
+                  placeholder={has(p.id) ? "Replace existing key…" : p.placeholder}
+                  value={keyInputs[p.id]}
+                  onChange={(e) => setKeyInputs((s) => ({ ...s, [p.id]: e.target.value }))}
+                  className="font-mono text-sm"
+                  autoComplete="off"
+                />
+                <Button onClick={() => saveKey(p.id)} loading={saving === p.id} disabled={!keyInputs[p.id].trim()}>
+                  <Save className="size-4" />
+                  Save
+                </Button>
+              </div>
+              {savedAt[p.id] && Date.now() - (savedAt[p.id] as number) < 4000 && (
+                <p className="mt-2 text-xs text-[var(--color-brand)]">Saved.</p>
               )}
             </div>
-            <div className="mt-4 flex gap-2">
-              <Input
-                placeholder={hasGroq ? "Replace existing key…" : "gsk_…"}
-                value={groqKey}
-                onChange={(e) => setGroqKey(e.target.value)}
-                className="font-mono text-sm"
-                autoComplete="off"
-              />
-              <Button onClick={() => saveKey("groq")} loading={saving === "groq"} disabled={!groqKey.trim()}>
-                <Save className="size-4" />
-                Save
-              </Button>
-            </div>
-            {savedAt.groq && Date.now() - savedAt.groq < 4000 && <p className="mt-2 text-xs text-[var(--color-brand)]">Saved.</p>}
-          </div>
-
-          {/* OpenAI */}
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold">OpenAI</div>
-                <div className="text-xs text-[var(--color-fg-subtle)]">Optional, pay-per-use Whisper</div>
-              </div>
-              {hasOpenai && (
-                <div className="flex items-center gap-2">
-                  <Badge variant="brand">
-                    <CheckCircle2 className="size-3" />
-                    Connected
-                  </Badge>
-                  <button
-                    onClick={() => deleteKey("openai")}
-                    aria-label="Delete OpenAI key"
-                    className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elev)] hover:text-[var(--color-danger)]"
-                  >
-                    <Trash2 className="size-3.5" aria-hidden />
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <Input
-                placeholder={hasOpenai ? "Replace existing key…" : "sk-…"}
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                className="font-mono text-sm"
-                autoComplete="off"
-              />
-              <Button onClick={() => saveKey("openai")} loading={saving === "openai"} disabled={!openaiKey.trim()}>
-                <Save className="size-4" />
-                Save
-              </Button>
-            </div>
-            {savedAt.openai && Date.now() - savedAt.openai < 4000 && <p className="mt-2 text-xs text-[var(--color-brand)]">Saved.</p>}
-          </div>
+          ))}
         </div>
       </section>
 

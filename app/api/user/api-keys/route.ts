@@ -38,7 +38,7 @@ export async function GET() {
 }
 
 const PostSchema = z.object({
-  provider: z.enum(["groq", "openai"]),
+  provider: z.enum(["groq", "openai", "deepgram", "gemini"]),
   key: z.string().min(10).max(512),
   label: z.string().max(80).optional(),
 });
@@ -61,6 +61,7 @@ export async function POST(req: Request) {
   if (provider === "openai" && !key.startsWith("sk-")) {
     return NextResponse.json({ error: "OpenAI keys start with sk-." }, { status: 400 });
   }
+  // Deepgram and Gemini keys have no stable public prefix — accept as-is.
 
   const encrypted = encrypt(key);
   const db = getDb();
@@ -89,14 +90,19 @@ export async function DELETE(req: Request) {
 
   const url = new URL(req.url);
   const provider = url.searchParams.get("provider");
-  if (provider !== "groq" && provider !== "openai") {
-    return NextResponse.json({ error: "provider must be groq or openai" }, { status: 400 });
+  if (!provider || !["groq", "openai", "deepgram", "gemini"].includes(provider)) {
+    return NextResponse.json({ error: "unknown provider" }, { status: 400 });
   }
 
   const db = getDb();
   await db
     .delete(userApiKey)
-    .where(and(eq(userApiKey.userId, session.user.id), eq(userApiKey.provider, provider)));
+    .where(
+      and(
+        eq(userApiKey.userId, session.user.id),
+        eq(userApiKey.provider, provider as "groq" | "openai" | "deepgram" | "gemini"),
+      ),
+    );
 
   return NextResponse.json({ ok: true });
 }

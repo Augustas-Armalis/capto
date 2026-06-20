@@ -2,6 +2,7 @@ import {
   boolean,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -24,6 +25,13 @@ export const user = pgTable("user", {
   subscriptionStatus: text("subscription_status"),
   monthlyExportsUsed: integer("monthly_exports_used").notNull().default(0),
   monthlyResetAt: timestamp("monthly_reset_at").notNull().defaultNow(),
+  // Monthly AI transcription budget (separate window from exports).
+  monthlyTranscriptionsUsed: integer("monthly_transcriptions_used").notNull().default(0),
+  transcriptionsResetAt: timestamp("transcriptions_reset_at").notNull().defaultNow(),
+  // AI engine preference. "auto" = Capto picks the best-performing available
+  // engine. aiUseOwnKey forces the user's own BYOK key/provider when set.
+  aiProvider: text("ai_provider").notNull().default("auto"),
+  aiUseOwnKey: boolean("ai_use_own_key").notNull().default(false),
   onboardedAt: timestamp("onboarded_at"),
 });
 
@@ -69,7 +77,7 @@ export const userApiKey = pgTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-    provider: text("provider", { enum: ["groq", "openai"] }).notNull(),
+    provider: text("provider", { enum: ["groq", "openai", "deepgram", "gemini"] }).notNull(),
     encryptedKey: text("encrypted_key").notNull(),
     label: text("label"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -129,6 +137,37 @@ export const apiRateLimit = pgTable("api_rate_limit", {
   count: integer("count").notNull().default(0),
   resetAt: timestamp("reset_at").notNull(),
 });
+
+// ─── AI learning: per-engine quality metrics ─────────────────────────
+// The always-on feedback loop. Every transcription bumps `runs`/`words`; when a
+// user edits the AI output we bump `editedWords`. accuracy = 1 - edited/words,
+// which lets the "auto" engine prefer whichever model people correct the least.
+export const aiMetric = pgTable(
+  "ai_metric",
+  {
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    runs: integer("runs").notNull().default(0),
+    words: integer("words").notNull().default(0),
+    editedWords: integer("edited_words").notNull().default(0),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.provider, t.model] }) }),
+);
+
+// ─── AI learning: per-user custom vocabulary ─────────────────────────
+// Proper nouns / brand terms the user repeatedly fixes by hand. Fed back into
+// the transcription prompt so the SAME user's future clips get them right.
+export const userVocabulary = pgTable(
+  "user_vocabulary",
+  {
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    term: text("term").notNull(),
+    weight: integer("weight").notNull().default(1),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.term] }) }),
+);
 
 export type User = typeof user.$inferSelect;
 export type Project = typeof project.$inferSelect;

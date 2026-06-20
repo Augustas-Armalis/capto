@@ -13,13 +13,20 @@ export function OnboardingClient({
   firstName,
   needsPassword = false,
   needsEmailVerify = false,
+  plan = "free",
 }: {
   firstName: string;
   needsPassword?: boolean;
   needsEmailVerify?: boolean;
+  plan?: "free" | "pro" | "ultra";
 }) {
   const router = useRouter();
-  const STEPS = [needsPassword ? "Set password" : "Welcome", "Connect your AI", "You're set"] as const;
+  // Paid plans run on managed AI by default, so the BYOK step is free-only.
+  const showKeyStep = plan === "free";
+  const doneStep = showKeyStep ? 2 : 1;
+  const STEPS: string[] = showKeyStep
+    ? [needsPassword ? "Set password" : "Welcome", "Connect your AI", "You're set"]
+    : [needsPassword ? "Set password" : "Welcome", "You're set"];
   const [emailDone, setEmailDone] = React.useState(!needsEmailVerify);
   const [step, setStep] = React.useState(0);
   const [groqKey, setGroqKey] = React.useState("");
@@ -214,18 +221,19 @@ export function OnboardingClient({
             </div>
           )}
 
-          {step === 1 && (
+          {step === 1 && showKeyStep && (
             <div className="fade-up">
               <Badge variant="outline">
                 <KeyRound className="size-3" />
-                Step 2 of 3
+                Step 2 of 3 · optional
               </Badge>
               <h1 className="heading mt-4 text-4xl ">
-                Paste your Groq API key.
+                Want unlimited AI captions?
               </h1>
               <p className="mt-3 text-[var(--color-fg-muted)] leading-relaxed">
-                Groq's free tier handles thousands of minutes of transcription each month, most
-                creators never hit the limit. We encrypt your key before it touches our database.
+                Free includes a monthly allowance of captions on our managed AI — enough to try
+                everything. Add your own free Groq key for unlimited transcription. We encrypt it
+                before it touches our database. You can always do this later in Settings.
               </p>
 
               <a
@@ -290,7 +298,7 @@ export function OnboardingClient({
             </div>
           )}
 
-          {step === 2 && (
+          {step === doneStep && (
             <div className="fade-up text-center py-6">
               <div className="mx-auto inline-flex size-16 items-center justify-center rounded-full bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
                 <Check className="size-8" />
