@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { STT_MODELS, PROVIDER_LABEL, PLAN_RANK, type AiProvider } from "@/lib/ai/models";
+import { TeamSection } from "@/components/app/team-section";
 
 type Provider = AiProvider;
 type ApiKeyMeta = { provider: Provider; label: string | null; lastUsedAt: string | null };
@@ -420,6 +421,9 @@ export function SettingsClient({
           </Button>
         </div>
       </section>
+
+      {/* Team workspace (Ultra) */}
+      <TeamSection />
 
       {/* API keys */}
       <section id="api-keys" className="mt-6 rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">

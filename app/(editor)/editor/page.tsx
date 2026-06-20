@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { EditorShell, type InitialProject } from "./editor-shell";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, project, user } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
+import { getUserTeam } from "@/lib/team";
 
 export const metadata: Metadata = {
   title: "Editor",
@@ -37,10 +38,14 @@ export default async function EditorRoute({
       if (u?.plan) plan = u.plan;
 
       if (projectId) {
+        const teamCtx = await getUserTeam(session.user.id);
+        const scope = teamCtx
+          ? or(eq(project.userId, session.user.id), eq(project.teamId, teamCtx.teamId))
+          : eq(project.userId, session.user.id);
         const [row] = await db
           .select()
           .from(project)
-          .where(and(eq(project.id, projectId), eq(project.userId, session.user.id)))
+          .where(and(eq(project.id, projectId), scope))
           .limit(1);
         if (row) {
           let state: InitialProject["state"] = null;

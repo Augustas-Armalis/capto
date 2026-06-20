@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, or } from "drizzle-orm";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, project } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
+import { getUserTeam } from "@/lib/team";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,11 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const db = getDb();
+  // Own projects + any in the user's shared team workspace.
+  const teamCtx = await getUserTeam(session.user.id);
+  const where = teamCtx
+    ? or(eq(project.userId, session.user.id), eq(project.teamId, teamCtx.teamId))
+    : eq(project.userId, session.user.id);
   const rows = await db
     .select({
       id: project.id,
@@ -26,7 +32,7 @@ export async function GET() {
       thumbnailUrl: project.thumbnailUrl,
     })
     .from(project)
-    .where(eq(project.userId, session.user.id))
+    .where(where)
     .orderBy(desc(project.updatedAt))
     .limit(60);
 
@@ -55,7 +61,11 @@ export async function POST(req: Request) {
       ? body.thumbnail
       : null;
 
-  await db.insert(project).values({ id, userId: session.user.id, name, durationSec, state, thumbnailUrl });
+  // Stamp the team so it lands in the shared workspace (null = personal).
+  const teamCtx = await getUserTeam(session.user.id);
+  await db
+    .insert(project)
+    .values({ id, userId: session.user.id, teamId: teamCtx?.teamId ?? null, name, durationSec, state, thumbnailUrl });
 
   return NextResponse.json({ id, name });
 }

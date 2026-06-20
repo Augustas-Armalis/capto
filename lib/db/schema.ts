@@ -90,10 +90,45 @@ export const userApiKey = pgTable(
   }),
 );
 
+// ─── Teams (Ultra) — shared workspace + seats ────────────────────────
+export const team = pgTable("team", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default("My team"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const teamMember = pgTable(
+  "team_member",
+  {
+    teamId: text("team_id").notNull().references(() => team.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["owner", "member"] }).notNull().default("member"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.teamId, t.userId] }),
+    // A user belongs to at most one team — enforced at the DB so a concurrent
+    // double-accept can't create two memberships.
+    oneTeamPerUser: uniqueIndex("team_member_user_unique").on(t.userId),
+  }),
+);
+
+export const teamInvite = pgTable("team_invite", {
+  id: text("id").primaryKey(),
+  teamId: text("team_id").notNull().references(() => team.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  acceptedAt: timestamp("accepted_at"),
+});
+
 // ─── Project metadata (the videos a user has worked on) ──────────────
 export const project = pgTable("project", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  // When set, the project belongs to a shared team workspace (Ultra).
+  teamId: text("team_id").references(() => team.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   thumbnailUrl: text("thumbnail_url"),
   durationSec: integer("duration_sec"),

@@ -22,6 +22,20 @@
       "when": 1781942308893,
       "tag": "0002_wandering_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781942792007,
+      "tag": "0003_old_stardust",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781943321726,
+      "tag": "0004_giant_romulus",
+      "breakpoints": true
     }
   ]
 }

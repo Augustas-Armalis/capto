@@ -1,30 +1,32 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or, type SQL } from "drizzle-orm";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, project } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
+import { getUserTeam } from "@/lib/team";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-async function ownedProjectId(id: string) {
+// Access condition: the project is the user's own OR lives in their shared team
+// workspace. Used for every read/write so the rule is enforced in one place.
+async function projectAccess(id: string): Promise<{ db: ReturnType<typeof getDb>; where: SQL } | null> {
   const session = await getCurrentSession();
   if (!session?.user?.id) return null;
-  return { db: getDb(), userId: session.user.id, id };
+  const teamCtx = await getUserTeam(session.user.id);
+  const owns = eq(project.userId, session.user.id);
+  const scope = teamCtx ? or(owns, eq(project.teamId, teamCtx.teamId))! : owns;
+  return { db: getDb(), where: and(eq(project.id, id), scope)! };
 }
 
 export async function GET(_req: Request, ctx: Ctx) {
   if (!isConfigured.db()) return NextResponse.json({ error: "Not configured." }, { status: 503 });
   const { id } = await ctx.params;
-  const ctxv = await ownedProjectId(id);
+  const ctxv = await projectAccess(id);
   if (!ctxv) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [row] = await ctxv.db
-    .select()
-    .from(project)
-    .where(and(eq(project.id, id), eq(project.userId, ctxv.userId)))
-    .limit(1);
+  const [row] = await ctxv.db.select().from(project).where(ctxv.where).limit(1);
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({ project: row });
@@ -33,7 +35,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 export async function PUT(req: Request, ctx: Ctx) {
   if (!isConfigured.db()) return NextResponse.json({ error: "Not configured." }, { status: 503 });
   const { id } = await ctx.params;
-  const ctxv = await ownedProjectId(id);
+  const ctxv = await projectAccess(id);
   if (!ctxv) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as
@@ -52,10 +54,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   )
     patch.thumbnailUrl = body.thumbnail;
 
-  await ctxv.db
-    .update(project)
-    .set(patch)
-    .where(and(eq(project.id, id), eq(project.userId, ctxv.userId)));
+  await ctxv.db.update(project).set(patch).where(ctxv.where);
 
   return NextResponse.json({ ok: true });
 }
@@ -63,12 +62,10 @@ export async function PUT(req: Request, ctx: Ctx) {
 export async function DELETE(_req: Request, ctx: Ctx) {
   if (!isConfigured.db()) return NextResponse.json({ error: "Not configured." }, { status: 503 });
   const { id } = await ctx.params;
-  const ctxv = await ownedProjectId(id);
+  const ctxv = await projectAccess(id);
   if (!ctxv) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  await ctxv.db
-    .delete(project)
-    .where(and(eq(project.id, id), eq(project.userId, ctxv.userId)));
+  await ctxv.db.delete(project).where(ctxv.where);
 
   return NextResponse.json({ ok: true });
 }

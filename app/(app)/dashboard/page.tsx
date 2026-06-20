@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, or } from "drizzle-orm";
+import { getUserTeam } from "@/lib/team";
 import { Sparkles, ArrowRight, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,10 @@ export default async function DashboardPage() {
     const db = getDb();
     const [meRow] = await db.select({ plan: user.plan }).from(user).where(eq(user.id, u.id)).limit(1);
     if (meRow?.plan) plan = meRow.plan;
+    const teamCtx = await getUserTeam(u.id);
+    const pWhere = teamCtx
+      ? or(eq(project.userId, u.id), eq(project.teamId, teamCtx.teamId))
+      : eq(project.userId, u.id);
     const rows = await db
       .select({
         id: project.id,
@@ -36,7 +41,7 @@ export default async function DashboardPage() {
         thumbnail: project.thumbnailUrl,
       })
       .from(project)
-      .where(eq(project.userId, u.id))
+      .where(pWhere)
       .orderBy(desc(project.updatedAt))
       .limit(24);
     projects = rows.map((r) => ({ ...r, updatedAt: new Date(r.updatedAt).toISOString() }));

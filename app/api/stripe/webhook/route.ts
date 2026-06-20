@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { getStripe } from "@/lib/stripe";
-import { getDb, user as userTable } from "@/lib/db";
+import { getDb, user as userTable, team } from "@/lib/db";
 import { env, isConfigured } from "@/lib/env";
 import { planFromPriceId } from "@/lib/billing";
 import type { PlanId } from "@/lib/pricing";
@@ -47,6 +47,14 @@ export async function POST(req: Request) {
   };
   const custId = (c: string | { id: string } | null | undefined) =>
     typeof c === "string" ? c : c?.id ?? null;
+
+  // When a user is no longer on Ultra, dissolve any team they own. FK cascades
+  // remove memberships and (project.team_id ON DELETE SET NULL) revert shared
+  // projects to their creators — so shared access never outlives the entitlement.
+  const teardownTeamIfNotUltra = async (userId: string | null, plan: PlanId) => {
+    if (!userId || plan === "ultra") return;
+    await db.delete(team).where(eq(team.ownerId, userId)).catch(() => {});
+  };
 
   // Final fallback for an EXISTING-email guest purchase: if neither metadata nor
   // a linked customer resolves the user, match the paying email. Signature is
@@ -96,6 +104,7 @@ export async function POST(req: Request) {
           .update(userTable)
           .set({ plan, stripeSubscriptionId: sub.id, subscriptionStatus: sub.status })
           .where(eq(userTable.id, userId));
+        await teardownTeamIfNotUltra(userId, plan);
       }
       break;
     }
@@ -107,6 +116,7 @@ export async function POST(req: Request) {
           .update(userTable)
           .set({ plan: "free", subscriptionStatus: "canceled" })
           .where(eq(userTable.id, userId));
+        await teardownTeamIfNotUltra(userId, "free");
       }
       break;
     }

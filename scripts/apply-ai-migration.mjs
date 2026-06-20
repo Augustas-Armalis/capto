@@ -40,6 +40,29 @@ const statements = [
      "updated_at" timestamp NOT NULL DEFAULT now(),
      CONSTRAINT "user_vocabulary_user_id_term_pk" PRIMARY KEY ("user_id","term")
    )`,
+  `CREATE TABLE IF NOT EXISTS "team" (
+     "id" text PRIMARY KEY,
+     "owner_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+     "name" text NOT NULL DEFAULT 'My team',
+     "created_at" timestamp NOT NULL DEFAULT now()
+   )`,
+  `CREATE TABLE IF NOT EXISTS "team_member" (
+     "team_id" text NOT NULL REFERENCES "team"("id") ON DELETE CASCADE,
+     "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+     "role" text NOT NULL DEFAULT 'member',
+     "created_at" timestamp NOT NULL DEFAULT now(),
+     CONSTRAINT "team_member_team_id_user_id_pk" PRIMARY KEY ("team_id","user_id")
+   )`,
+  `CREATE TABLE IF NOT EXISTS "team_invite" (
+     "id" text PRIMARY KEY,
+     "team_id" text NOT NULL REFERENCES "team"("id") ON DELETE CASCADE,
+     "email" text NOT NULL,
+     "token" text NOT NULL UNIQUE,
+     "created_at" timestamp NOT NULL DEFAULT now(),
+     "accepted_at" timestamp
+   )`,
+  `ALTER TABLE "project" ADD COLUMN IF NOT EXISTS "team_id" text REFERENCES "team"("id") ON DELETE SET NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "team_member_user_unique" ON "team_member" ("user_id")`,
 ];
 
 for (const stmt of statements) {
