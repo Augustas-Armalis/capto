@@ -83,9 +83,29 @@ export function FeatureIcon({ text }: { text: string }) {
   return <Check className={cls} strokeWidth={2} />;
 }
 
-export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
+export function PricingTable({
+  withChrome = true,
+  currentPlan,
+  onPlanClick,
+}: {
+  withChrome?: boolean;
+  /** Signed-in user's plan — marks the matching card "Current plan". */
+  currentPlan?: string;
+  /** When set (in-app billing), buttons call this (account-linked checkout)
+   *  instead of the guest checkout used on the marketing site. */
+  onPlanClick?: (planId: string, interval: "monthly" | "annual") => void;
+}) {
   const [annual, setAnnual] = React.useState(false);
   const [loadingPlan, setLoadingPlan] = React.useState<string | null>(null);
+
+  function handleClick(planId: string) {
+    setLoadingPlan(planId);
+    if (onPlanClick) {
+      onPlanClick(planId, annual ? "annual" : "monthly");
+      return;
+    }
+    startCheckout(planId);
+  }
 
   // Pay-first: go straight to Stripe Checkout (collects email + card), then
   // /welcome creates and signs into the account. Falls back to signup if
@@ -192,19 +212,29 @@ export function PricingTable({ withChrome = true }: { withChrome?: boolean }) {
               </>
             )}
 
-            {isFree ? (
-              <Button href="/signup" variant="primary" size="lg" className="mt-6 w-full">
-                {plan.cta}
+            {currentPlan === plan.id ? (
+              <Button disabled variant="outline" size="lg" className="mt-6 w-full">
+                Current plan
               </Button>
+            ) : isFree ? (
+              onPlanClick ? (
+                <Button disabled variant="outline" size="lg" className="mt-6 w-full">
+                  Free
+                </Button>
+              ) : (
+                <Button href="/signup" variant="primary" size="lg" className="mt-6 w-full">
+                  {plan.cta}
+                </Button>
+              )
             ) : (
               <Button
-                onClick={() => startCheckout(plan.id)}
+                onClick={() => handleClick(plan.id)}
                 loading={loadingPlan === plan.id}
                 variant={isUltra ? "magic" : "primary"}
                 size="lg"
                 className="mt-6 w-full"
               >
-                {plan.cta}
+                {onPlanClick && currentPlan && currentPlan !== "free" ? `Switch to ${plan.name}` : plan.cta}
               </Button>
             )}
 

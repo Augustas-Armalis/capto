@@ -4,7 +4,7 @@ import * as React from "react";
 import { ArrowRight, Check, Crown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FeatureIcon } from "@/components/marketing/pricing-table";
+import { PricingTable } from "@/components/marketing/pricing-table";
 import { PLANS, getPlan, type PlanId } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
@@ -182,68 +182,12 @@ export function BillingClient({
         </div>
       )}
 
-      {/* upgrade options */}
+      {/* upgrade options — same boxes/slider/prices as the landing page,
+          wired to the account-linked checkout, with the current plan marked. */}
       {plan !== "ultra" && (
-        <div className="mt-8">
-          <div className="flex items-center justify-between">
-            <h2 className="heading text-lg">{isPaid ? "Upgrade" : "Choose a plan"}</h2>
-            <div className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-1">
-              {(["monthly", "annual"] as Interval[]).map((iv) => (
-                <button
-                  key={iv}
-                  onClick={() => setInterval(iv)}
-                  className={cn(
-                    "rounded-[var(--radius-pill)] px-3 py-1 text-xs font-medium capitalize transition-colors",
-                    interval === iv ? "bg-[var(--color-bg-soft)] text-[var(--color-fg)]" : "text-[var(--color-fg-muted)]",
-                  )}
-                >
-                  {iv}
-                  {iv === "annual" && <span className="mono ml-1 text-[10px] text-[var(--color-brand)]">−17%</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            {upgradeTargets.map((p) => {
-              const price = interval === "annual" ? p.priceAnnualMonthly : p.priceMonthly;
-              return (
-                <div
-                  key={p.id}
-                  className={cn(
-                    "flex flex-col rounded-[var(--radius-xl)] border p-6",
-                    p.highlight ? "border-[var(--color-brand)]/50" : "border-[var(--color-border)]",
-                    "bg-[var(--color-bg-elev)]",
-                  )}
-                >
-                  <div className="flex items-baseline justify-between">
-                    <h3 className="heading text-lg">{p.name}</h3>
-                    <span className="display text-2xl tnum">€{price.toFixed(2)}<span className="text-xs text-[var(--color-fg-subtle)]">/mo</span></span>
-                  </div>
-                  <p className="mt-1 text-sm text-[var(--color-fg-muted)]">{p.tagline}</p>
-                  <ul className="mt-4 flex-1 space-y-2">
-                    {p.features.slice(0, 6).map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-[var(--color-fg-muted)]">
-                        <FeatureIcon text={f} />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    onClick={() => startCheckout(p.id, interval)}
-                    loading={loading === p.id}
-                    disabled={!stripeReady}
-                    size="lg"
-                    variant={p.highlight ? "primary" : "secondary"}
-                    className="mt-6"
-                  >
-                    {isPaid ? `Switch to ${p.name}` : p.cta}
-                    <ArrowRight className="size-4" />
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
+        <div className="mt-10">
+          <h2 className="heading mb-2 text-lg">{isPaid ? "Upgrade your plan" : "Choose a plan"}</h2>
+          <PricingTable withChrome={false} currentPlan={plan} onPlanClick={(id, iv) => startCheckout(id as PlanId, iv)} />
         </div>
       )}
     </div>

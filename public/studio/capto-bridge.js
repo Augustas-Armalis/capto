@@ -772,7 +772,7 @@
       }
       if (u.signedIn && lbl) {
         pill.style.display = '';
-        pill.textContent = canTopUp ? `${lbl} · Top up` : lbl;
+        pill.textContent = canTopUp ? `${lbl} · ${u.plan === 'free' ? 'Upgrade' : 'Top up'}` : lbl;
         pill.onclick = canTopUp ? goTop('/billing') : null;
       } else pill.style.display = 'none';
 
@@ -823,7 +823,7 @@
               `<span style="font-size:13.5px;font-weight:650;color:var(--text)">Caption minutes</span>` +
               `<span style="font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:99px;color:#0b0c14;background:linear-gradient(120deg,#a0c1ff,#8983ff)">${planName}</span>` +
             `</div>` +
-            (canTopUp ? `<button id="capto-topup" class="btn primary sm">Top up</button>` : '') +
+            (canTopUp ? `<button id="capto-topup" class="btn primary sm">${u.plan === 'free' ? 'Upgrade' : 'Top up'}</button>` : '') +
           `</div>` +
           `<div style="height:9px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden">` +
             `<div style="height:100%;width:${pct}%;border-radius:99px;background:linear-gradient(90deg,#82a5ff,#8983ff,#62d8ff);transition:width .4s"></div>` +
