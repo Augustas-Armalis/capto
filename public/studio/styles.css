@@ -78,12 +78,12 @@ body {
 .btn:hover { background: var(--surface-2); border-color: var(--line-2); }
 .btn:active { transform: scale(.98); }
 .btn.primary {
-  color: #1a1a1f; font-weight: 600;
-  background: linear-gradient(180deg, #a0c1ff, #82a5ff);
-  border: 1px solid rgba(255,255,255,.12);
-  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 4px 14px -8px rgba(130,165,255,.55);
+  color: #0b0c14; font-weight: 650;
+  background: linear-gradient(120deg, #a0c1ff, #82a5ff 45%, #8983ff 72%, #62d8ff);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 1px 0 rgba(255,255,255,.28) inset, 0 6px 18px -8px rgba(130,165,255,.65);
 }
-.btn.primary:hover { filter: brightness(1.05); box-shadow: 0 1px 0 rgba(255,255,255,.3) inset, 0 6px 18px -6px rgba(130,165,255,.7); }
+.btn.primary:hover { filter: brightness(1.06) saturate(1.05); box-shadow: 0 1px 0 rgba(255,255,255,.32) inset, 0 8px 22px -6px rgba(137,131,255,.8); }
 .btn.danger { color: #fff; background: linear-gradient(180deg, #fb7185, #e74c5e); border-color: rgba(255,255,255,.1); }
 .dlg-actions .btn.danger { color: #fff; }
 .dlg-actions .btn.primary.danger { background: linear-gradient(180deg, #fb7185, #e74c5e); color: #fff; }

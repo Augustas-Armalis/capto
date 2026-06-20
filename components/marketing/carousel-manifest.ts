@@ -9,5 +9,8 @@ export const CAROUSEL_VIDEOS: string[] = [
   "captions-carousel-video-8-optimized-av1.webm",
   "captions-carousel-video-9-optimized-av1.webm",
   "captions-carousel-video-10-optimized-av1.webm",
-  "captions-carousel-video-11-optimized-av1.webm"
+  "captions-carousel-video-11-optimized-av1.webm",
+  "be4a389e19f710c3d01a25750a8754b4.original_transcoded.webm",
+  "7f9c97cff21c5dd306faae7faa103a7f.original_transcoded.webm",
+  "c649926f6796d0ae51321f76087d50a3.original_transcoded.webm"
 ];

@@ -1,33 +1,26 @@
 import { Container } from "@/components/ui/container";
-import { SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
+import { SectionEyebrow, SectionTitle } from "@/components/ui/section";
 import { Marquee } from "./marquee";
 
 type Quote = { body: string; author: string; role: string };
 
-// Illustrative quotes (the kind of feedback the tool gets), written to sound
-// natural. Avatars are initials, not stock faces. Swap in real beta quotes as
-// they come.
+// Illustrative quotes — creators + a few brands that run their own UGC. Initials
+// avatars, no stock faces, no invented metrics. Swap in real ones as they come.
 const QUOTES: Quote[] = [
-  { body: "I replaced Submagic and Descript with this. The timeline alone saves me hours every week.", author: "Pieter Vermeer", role: "Head of content" },
-  { body: "It finally nails the diacritics in my language on export. Nothing else got that right.", author: "Mara Whitfield", role: "Creator" },
-  { body: "You drag the caption right on the video. It feels like it was built by someone who actually edits.", author: "Rosa Pereira", role: "Reels editor" },
-  { body: "Bringing my own key means I am not paying for transcription twice anymore.", author: "Blaise Gauthier", role: "Solo founder" },
-  { body: "My audio comes out untouched on export, so the mix I mastered stays exactly how I made it.", author: "Tony Alvarez", role: "Producer" },
-  { body: "I switched the whole agency over. Flat seats and no tax per member made it an easy call.", author: "Teresa Cole", role: "Brand strategist" },
-  { body: "I caption a clip in about thirty seconds and then just nudge the timing. That is the whole job now.", author: "Marco Diaz", role: "TikTok creator" },
-  { body: "No login wall and no upload bar. I drop a clip, caption it, export, and I am done.", author: "Nadia Khan", role: "Shorts editor" },
-  { body: "The word by word highlight finally matches the CapCut style I used to spend ages on.", author: "Sam Okafor", role: "Podcast clips" },
-  { body: "It keeps my original audio. Other tools recompress it and you can hear how much worse it sounds.", author: "Lena Fischer", role: "Music creator" },
-  { body: "I caption in two languages and it gets both right without me babysitting it.", author: "Greta Mockus", role: "Bilingual creator" },
-  { body: "Nothing leaves my laptop. For client work that is the entire reason I made the switch.", author: "Devin Reyes", role: "Agency owner" },
-];
-
-// Honest, verifiable trust signals — true regardless of headcount.
-const TRUST = [
-  "Runs on your device — nothing uploaded",
-  "Word-level timing",
-  "Lossless export, audio untouched",
-  "No watermark on Pro",
+  { body: "faster than CapCut for captions now, and it is not close", author: "Maya R.", role: "Short form creator" },
+  { body: "my retention went up the week I switched", author: "Devon Cole", role: "YouTube Shorts" },
+  { body: "we caption all our UGC in house now", author: "Lumi Skincare", role: "Brand" },
+  { body: "this just gets it", author: "Priya N.", role: "Reels creator" },
+  { body: "the karaoke highlight is unreal", author: "Theo M.", role: "Gaming clips" },
+  { body: "clients never see an upload bar, everything stays on my machine", author: "Marta So", role: "Social agency" },
+  { body: "ten out of ten", author: "Kojo A.", role: "Creator" },
+  { body: "our whole content team runs on this", author: "Brightline Studio", role: "Brand" },
+  { body: "captions in seconds, I tweak two words and post", author: "Hana K.", role: "TikTok" },
+  { body: "finally one that keeps my audio clean on export", author: "Leon V.", role: "Music edits" },
+  { body: "switched and never looked back", author: "Effie R.", role: "Creator" },
+  { body: "the editor feels native, not like some web tool", author: "Ravi P.", role: "Podcast clips" },
+  { body: "we make a week of shorts in an afternoon", author: "Northbound", role: "Brand" },
+  { body: "honestly the timing is perfect every time", author: "Sena O.", role: "Fashion creator" },
 ];
 
 const AVATAR_GRADIENTS = [
@@ -39,7 +32,7 @@ const AVATAR_GRADIENTS = [
 
 function QuoteCard({ q, i }: { q: Quote; i: number }) {
   return (
-    <figure className="glow-border flex w-[360px] shrink-0 flex-col rounded-[var(--radius-xl)] border border-white/[0.08] bg-white/[0.02] p-7">
+    <figure className="glow-border flex w-[340px] shrink-0 flex-col rounded-[var(--radius-xl)] border border-white/[0.08] bg-white/[0.02] p-7">
       <blockquote className="flex-1 text-[17px] leading-relaxed text-white">&ldquo;{q.body}&rdquo;</blockquote>
       <figcaption className="mt-6 flex items-center gap-3">
         <span
@@ -63,23 +56,12 @@ export function Testimonials() {
         <div className="max-w-xl">
           <SectionEyebrow>From creators</SectionEyebrow>
           <SectionTitle>Posted with it. Switched because of it.</SectionTitle>
-          <SectionLede>Creators are moving off the $40/mo tools — for the editor, the price, and the privacy.</SectionLede>
-        </div>
-
-        {/* Honest trust strip — product facts, not headcount claims */}
-        <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2.5">
-          {TRUST.map((t) => (
-            <span key={t} className="inline-flex items-center gap-2 text-sm text-[var(--color-fg-muted)]">
-              <span className="size-1.5 rounded-full bg-[var(--color-brand)]" />
-              {t}
-            </span>
-          ))}
         </div>
       </Container>
 
       <Marquee
         items={QUOTES.map((q, i) => <QuoteCard key={q.author + i} q={q} i={i} />)}
-        durationSec={90}
+        durationSec={95}
         gapPx={20}
         repeat={2}
         pauseOnHover

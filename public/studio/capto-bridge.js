@@ -67,7 +67,8 @@
   // Capto's /api/transcribe returns flat word timings; Subby wants grouped cues.
   // Break into caption lines on pauses / max words / max chars (punchy chunks).
   function wordsToCues(words) {
-    const MAXW = 7, MAXGAP = 0.6, MAXCHARS = 42;
+    // Punchy 2–3 word captions by default — clean, fast, easy to read on phones.
+    const MAXW = 3, MAXGAP = 0.5, MAXCHARS = 24;
     const out = [];
     let cur = null;
     for (const w of words || []) {

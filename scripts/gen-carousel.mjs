@@ -8,17 +8,19 @@ const root = process.cwd();
 const dir = path.join(root, "public", "videos");
 let files = [];
 try {
-  const all = fs
+  // Every clip in /public/videos goes in the reel. Numbered "carousel" clips
+  // first (in order), then anything else.
+  files = fs
     .readdirSync(dir)
-    .filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f) && !f.startsWith("."));
-  const carousel = all.filter((f) => /carousel/i.test(f));
-  files = (carousel.length ? carousel : all.filter((f) => !/original|transcoded|source/i.test(f))).sort(
-    (a, b) => {
+    .filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f) && !f.startsWith("."))
+    .sort((a, b) => {
+      const ca = /carousel/i.test(a) ? 0 : 1;
+      const cb = /carousel/i.test(b) ? 0 : 1;
+      if (ca !== cb) return ca - cb;
       const na = parseInt((a.match(/\d+/) || ["0"])[0], 10);
       const nb = parseInt((b.match(/\d+/) || ["0"])[0], 10);
       return na - nb || a.localeCompare(b);
-    },
-  );
+    });
 } catch {
   files = [];
 }
