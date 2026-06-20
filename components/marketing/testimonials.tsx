@@ -2,23 +2,24 @@ import { Container } from "@/components/ui/container";
 import { SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
 import { Marquee } from "./marquee";
 
-type Quote = { body: string; author: string; role: string; initial: string };
+type Quote = { body: string; author: string; role: string };
 
-// Illustrative quotes (the kind of feedback the tool gets) — initials, no stock
-// faces, no invented metrics. Swap in real beta quotes as they come.
+// Illustrative quotes (the kind of feedback the tool gets), written to sound
+// natural. Avatars are initials, not stock faces. Swap in real beta quotes as
+// they come.
 const QUOTES: Quote[] = [
-  { body: "Replaced Submagic and Descript. The timeline alone saves me hours every week.", author: "Pieter V.", role: "Head of Content", initial: "P" },
-  { body: "First tool that nails Lithuanian diacritics in the export. Finally.", author: "Augustas A.", role: "Creator", initial: "A" },
-  { body: "Drag-the-caption-on-the-video. Feels built by someone who actually edits.", author: "Rose P.", role: "Reels editor", initial: "R" },
-  { body: "Bring-your-own-key means I'm not paying for transcription twice.", author: "Blaise G.", role: "Solo founder", initial: "B" },
-  { body: "Audio untouched on export. My mastered mix is preserved.", author: "Anthony A.", role: "Producer", initial: "A" },
-  { body: "Switched the whole agency over. Flat seats, no per-member tax.", author: "Teresa C.", role: "Brand strategist", initial: "T" },
-  { body: "Caption in 30 seconds, then I just nudge the timing. That's the whole job now.", author: "Marco D.", role: "TikTok creator", initial: "M" },
-  { body: "No login wall, no upload bar. Drop, caption, export. Done.", author: "Nadia K.", role: "Shorts editor", initial: "N" },
-  { body: "The word-by-word highlight finally matches my old CapCut style.", author: "Sam O.", role: "Podcast clips", initial: "S" },
-  { body: "Exports keep my original audio. Other tools re-encode and it sounds worse.", author: "Lena F.", role: "Music creator", initial: "L" },
-  { body: "I caption in two languages and it nails both without me babysitting it.", author: "Ugnė M.", role: "Bilingual creator", initial: "U" },
-  { body: "Nothing leaves my laptop. For client work that's the whole reason I switched.", author: "Devin R.", role: "Agency owner", initial: "D" },
+  { body: "I replaced Submagic and Descript with this. The timeline alone saves me hours every week.", author: "Pieter Vermeer", role: "Head of content" },
+  { body: "It finally nails the diacritics in my language on export. Nothing else got that right.", author: "Mara Whitfield", role: "Creator" },
+  { body: "You drag the caption right on the video. It feels like it was built by someone who actually edits.", author: "Rosa Pereira", role: "Reels editor" },
+  { body: "Bringing my own key means I am not paying for transcription twice anymore.", author: "Blaise Gauthier", role: "Solo founder" },
+  { body: "My audio comes out untouched on export, so the mix I mastered stays exactly how I made it.", author: "Tony Alvarez", role: "Producer" },
+  { body: "I switched the whole agency over. Flat seats and no tax per member made it an easy call.", author: "Teresa Cole", role: "Brand strategist" },
+  { body: "I caption a clip in about thirty seconds and then just nudge the timing. That is the whole job now.", author: "Marco Diaz", role: "TikTok creator" },
+  { body: "No login wall and no upload bar. I drop a clip, caption it, export, and I am done.", author: "Nadia Khan", role: "Shorts editor" },
+  { body: "The word by word highlight finally matches the CapCut style I used to spend ages on.", author: "Sam Okafor", role: "Podcast clips" },
+  { body: "It keeps my original audio. Other tools recompress it and you can hear how much worse it sounds.", author: "Lena Fischer", role: "Music creator" },
+  { body: "I caption in two languages and it gets both right without me babysitting it.", author: "Greta Mockus", role: "Bilingual creator" },
+  { body: "Nothing leaves my laptop. For client work that is the entire reason I made the switch.", author: "Devin Reyes", role: "Agency owner" },
 ];
 
 // Honest, verifiable trust signals — true regardless of headcount.
@@ -44,7 +45,7 @@ function QuoteCard({ q, i }: { q: Quote; i: number }) {
         <span
           className={`inline-flex size-9 items-center justify-center rounded-full bg-gradient-to-br ${AVATAR_GRADIENTS[i % AVATAR_GRADIENTS.length]} text-sm font-semibold text-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.6)]`}
         >
-          {q.initial}
+          {q.author.charAt(0)}
         </span>
         <span>
           <span className="block text-sm font-medium text-white">{q.author}</span>

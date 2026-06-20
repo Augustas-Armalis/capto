@@ -3,6 +3,7 @@ import path from "node:path";
 import { Container } from "@/components/ui/container";
 import { SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
 import { Marquee } from "./marquee";
+import { VideoReel } from "./video-reel";
 
 // Real creator clips, auto-discovered from /public/videos at build time. Drop
 // any .mp4/.webm/.mov in there and they appear in the reel automatically. Until
@@ -41,23 +42,6 @@ function Reel({ tag, line, hot, bg, accent }: (typeof REELS)[number]) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function VideoReel({ src }: { src: string }) {
-  return (
-    <div className="relative h-[360px] w-[208px] shrink-0 overflow-hidden rounded-[var(--radius-lg)] border border-white/[0.08] bg-black">
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <video
-        src={`/videos/${src}`}
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        className="absolute inset-0 size-full object-cover"
-      />
     </div>
   );
 }
