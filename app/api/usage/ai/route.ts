@@ -7,15 +7,16 @@ export const runtime = "nodejs";
 
 // Current month's AI transcription usage for the signed-in user (for the UI).
 export async function GET() {
-  if (!isConfigured.db()) {
-    return NextResponse.json({ plan: "free", used: 0, limit: null, remaining: null, unlimited: true });
-  }
+  const fallback = {
+    plan: "free",
+    usedMinutes: 0,
+    limitMinutes: 15,
+    remainingMinutes: 15,
+    unlimited: false,
+  };
+  if (!isConfigured.db()) return NextResponse.json(fallback);
   const session = await getCurrentSession();
-  if (!session?.user?.id) {
-    return NextResponse.json({ plan: "free", used: 0, limit: null, remaining: null, unlimited: true });
-  }
+  if (!session?.user?.id) return NextResponse.json(fallback);
   const usage = await readTranscriptionUsage(session.user.id);
-  return NextResponse.json(
-    usage ?? { plan: "free", used: 0, limit: 5, remaining: 5, unlimited: false },
-  );
+  return NextResponse.json(usage ?? fallback);
 }

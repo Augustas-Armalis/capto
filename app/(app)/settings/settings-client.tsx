@@ -68,7 +68,11 @@ export function SettingsClient({
   const [useOwn, setUseOwn] = React.useState(aiUseOwnKey);
   const [engineSaving, setEngineSaving] = React.useState(false);
   const [engineSaved, setEngineSaved] = React.useState(false);
-  const [usage, setUsage] = React.useState<{ used: number; limit: number | null; unlimited: boolean } | null>(null);
+  const [usage, setUsage] = React.useState<{
+    usedMinutes: number;
+    limitMinutes: number | null;
+    unlimited: boolean;
+  } | null>(null);
 
   // Profile name
   const [displayName, setDisplayName] = React.useState(name);
@@ -355,16 +359,18 @@ export function SettingsClient({
         {usage && (
           <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-[var(--color-fg-muted)]">AI captions this month</span>
+              <span className="text-[var(--color-fg-muted)]">AI source minutes this month</span>
               <span className="mono tnum text-white">
-                {usage.unlimited || usage.limit === null ? `${usage.used} · Unlimited` : `${usage.used} / ${usage.limit}`}
+                {usage.unlimited || usage.limitMinutes === null
+                  ? `${usage.usedMinutes} min · Unlimited`
+                  : `${usage.usedMinutes} / ${usage.limitMinutes} min`}
               </span>
             </div>
-            {!usage.unlimited && usage.limit !== null && (
+            {!usage.unlimited && usage.limitMinutes !== null && (
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full bg-[var(--color-brand)] transition-[width]"
-                  style={{ width: `${Math.min(100, (usage.used / Math.max(1, usage.limit)) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (usage.usedMinutes / Math.max(1, usage.limitMinutes)) * 100)}%` }}
                 />
               </div>
             )}

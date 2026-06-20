@@ -4,15 +4,15 @@
 import { neon } from "@neondatabase/serverless";
 import { env, isConfigured } from "./env";
 import type { PlanId } from "./pricing";
-import { transcriptionLimit, isUnlimitedTranscriptions, PLAN_LIMITS } from "./plan-limits";
+import { transcribeMinuteLimit, isUnlimitedTranscription, PLAN_LIMITS } from "./plan-limits";
 
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type TranscriptionUsage = {
   plan: PlanId;
-  used: number;
-  limit: number | null; // null = unlimited (display)
-  remaining: number | null;
+  usedMinutes: number;
+  limitMinutes: number | null; // null = unlimited (display)
+  remainingMinutes: number | null;
   unlimited: boolean;
 };
 
@@ -20,55 +20,63 @@ function db() {
   return neon(env.databaseUrl);
 }
 
-/** Read transcription usage without mutating (safe in renders). */
+/** Read transcription usage (in minutes) without mutating (safe in renders). */
 export async function readTranscriptionUsage(userId: string): Promise<TranscriptionUsage | null> {
   if (!isConfigured.db()) return null;
   const sql = db();
   const rows = (await sql`
     SELECT plan,
            CASE WHEN now() - transcriptions_reset_at > ${`${MONTH_MS} milliseconds`}::interval
-                THEN 0 ELSE monthly_transcriptions_used END AS used
+                THEN 0 ELSE monthly_transcribe_seconds END AS secs
     FROM "user" WHERE id = ${userId} LIMIT 1
-  `) as { plan: PlanId; used: number }[];
+  `) as { plan: PlanId; secs: number }[];
   if (!rows.length) return null;
   const plan = rows[0].plan;
-  const used = rows[0].used;
-  const unlimited = isUnlimitedTranscriptions(plan);
-  const limit = unlimited ? null : PLAN_LIMITS[plan].transcriptions;
+  const usedMinutes = Math.round((rows[0].secs || 0) / 60);
+  const unlimited = isUnlimitedTranscription(plan);
+  const limitMinutes = unlimited ? null : PLAN_LIMITS[plan].minutes;
   return {
     plan,
-    used,
-    limit,
-    remaining: limit === null ? null : Math.max(0, limit - used),
+    usedMinutes,
+    limitMinutes,
+    remainingMinutes: limitMinutes === null ? null : Math.max(0, limitMinutes - usedMinutes),
     unlimited,
   };
 }
 
 /**
- * Atomically consume one transcription against the monthly cap. Returns
- * { allowed:false } when the user is over their plan's house-AI budget.
- * Skipped entirely for BYOK (the caller passes countsAgainstCap=false).
+ * Atomically add `seconds` of source audio to the monthly budget. Returns
+ * { allowed:false } when the user is ALREADY over their plan's house-AI minute
+ * budget (we let the in-progress clip finish rather than reject mid-budget).
+ * Skipped entirely for BYOK (caller only invokes this for managed usage).
  */
-export async function consumeTranscription(
+export async function consumeTranscribeSeconds(
   userId: string,
   plan: PlanId,
-): Promise<{ allowed: boolean; used: number; limit: number | null }> {
-  if (!isConfigured.db()) return { allowed: true, used: 0, limit: null };
-  const cap = transcriptionLimit(plan); // numeric ceiling (safety cap for ultra)
+  seconds: number,
+): Promise<{ allowed: boolean; usedMinutes: number; limitMinutes: number | null }> {
+  if (!isConfigured.db()) return { allowed: true, usedMinutes: 0, limitMinutes: null };
+  const capSecs = transcribeMinuteLimit(plan) * 60; // numeric ceiling (safety cap for ultra)
+  const add = Math.max(1, Math.round(seconds || 0));
   const sql = db();
   const months = `${MONTH_MS} milliseconds`;
   const rows = (await sql`
     UPDATE "user" u SET
-      monthly_transcriptions_used = (CASE WHEN now() - u.transcriptions_reset_at > ${months}::interval THEN 0 ELSE u.monthly_transcriptions_used END) + 1,
+      monthly_transcribe_seconds = (CASE WHEN now() - u.transcriptions_reset_at > ${months}::interval THEN 0 ELSE u.monthly_transcribe_seconds END) + ${add},
       transcriptions_reset_at = CASE WHEN now() - u.transcriptions_reset_at > ${months}::interval THEN now() ELSE u.transcriptions_reset_at END
     WHERE u.id = ${userId}
-      AND (CASE WHEN now() - u.transcriptions_reset_at > ${months}::interval THEN 0 ELSE u.monthly_transcriptions_used END) < ${cap}
-    RETURNING u.monthly_transcriptions_used AS used
-  `) as { used: number }[];
+      AND (CASE WHEN now() - u.transcriptions_reset_at > ${months}::interval THEN 0 ELSE u.monthly_transcribe_seconds END) < ${capSecs}
+    RETURNING u.monthly_transcribe_seconds AS secs
+  `) as { secs: number }[];
+  const unlimited = isUnlimitedTranscription(plan);
   if (!rows.length) {
-    return { allowed: false, used: cap, limit: isUnlimitedTranscriptions(plan) ? null : cap };
+    return { allowed: false, usedMinutes: Math.round(capSecs / 60), limitMinutes: unlimited ? null : Math.round(capSecs / 60) };
   }
-  return { allowed: true, used: rows[0].used, limit: isUnlimitedTranscriptions(plan) ? null : cap };
+  return {
+    allowed: true,
+    usedMinutes: Math.round(rows[0].secs / 60),
+    limitMinutes: unlimited ? null : transcribeMinuteLimit(plan),
+  };
 }
 
 // ─── AI learning loop ────────────────────────────────────────────────

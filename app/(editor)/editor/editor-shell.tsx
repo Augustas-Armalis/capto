@@ -292,6 +292,7 @@ function Editor({
       const fd = new FormData();
       fd.append("file", fileObj, fileObj.name);
       fd.append("language", language);
+      if (meta?.dur) fd.append("durationSec", String(Math.round(meta.dur)));
       const res = await fetch("/api/transcribe", { method: "POST", body: fd, signal: ctrl.signal });
       const data = (await res.json()) as {
         words?: Word[];

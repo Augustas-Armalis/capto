@@ -20,6 +20,7 @@ function exec(stmt) {
 
 const statements = [
   `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "monthly_transcriptions_used" integer NOT NULL DEFAULT 0`,
+  `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "monthly_transcribe_seconds" integer NOT NULL DEFAULT 0`,
   `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "transcriptions_reset_at" timestamp NOT NULL DEFAULT now()`,
   `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "ai_provider" text NOT NULL DEFAULT 'auto'`,
   `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "ai_use_own_key" boolean NOT NULL DEFAULT false`,

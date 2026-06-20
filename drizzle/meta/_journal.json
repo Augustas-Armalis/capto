@@ -15,6 +15,13 @@
       "when": 1781937850378,
       "tag": "0001_confused_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781942308893,
+      "tag": "0002_wandering_king_cobra",
+      "breakpoints": true
     }
   ]
 }

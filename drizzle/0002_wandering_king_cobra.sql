@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "monthly_transcribe_seconds" integer DEFAULT 0 NOT NULL;

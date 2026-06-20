@@ -6,7 +6,7 @@ import { isConfigured, houseKeyFor } from "@/lib/env";
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
 import { resolveEngine, resolveByokEngine, type ResolvedEngine } from "@/lib/ai/select";
 import { runTranscription, TranscribeError } from "@/lib/ai/transcribe";
-import { consumeTranscription, recordRun, topVocabulary } from "@/lib/usage";
+import { consumeTranscribeSeconds, recordRun, topVocabulary } from "@/lib/usage";
 import { STT_MODELS, getModel } from "@/lib/ai/models";
 import type { PlanId } from "@/lib/pricing";
 
@@ -38,6 +38,7 @@ export async function POST(req: Request) {
   }
   const language = (inForm?.get("language") as string) || "auto";
   const requestedModel = (inForm?.get("model") as string) || "";
+  const durationSec = Math.max(1, Math.round(Number(inForm?.get("durationSec")) || 60));
 
   // ── resolve the signed-in user (guarded) ───────────────────────────────
   let plan: PlanId = "free";
@@ -83,10 +84,10 @@ export async function POST(req: Request) {
     try {
       const engine = await resolveEngine(userId, plan, prefs);
       if (engine?.isHouse) {
-        const consumed = await consumeTranscription(userId, plan).catch(() => ({
+        const consumed = await consumeTranscribeSeconds(userId, plan, durationSec).catch(() => ({
           allowed: true,
-          used: 0,
-          limit: null,
+          usedMinutes: 0,
+          limitMinutes: null as number | null,
         }));
         if (consumed.allowed) {
           active = engine;
@@ -98,11 +99,11 @@ export async function POST(req: Request) {
               {
                 error:
                   plan === "free"
-                    ? "You've used your free AI captions this month. Add your own free Groq key in Settings, or upgrade for more."
-                    : "You've reached this month's transcription limit.",
+                    ? "You've used your free AI minutes this month. Add your own free Groq key in Settings, or upgrade for more."
+                    : "You've reached this month's transcription minutes.",
                 code: "cap_reached",
                 plan,
-                limit: consumed.limit,
+                limit: consumed.limitMinutes,
               },
               { status: 402 },
             );

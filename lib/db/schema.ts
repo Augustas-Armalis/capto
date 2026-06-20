@@ -25,8 +25,10 @@ export const user = pgTable("user", {
   subscriptionStatus: text("subscription_status"),
   monthlyExportsUsed: integer("monthly_exports_used").notNull().default(0),
   monthlyResetAt: timestamp("monthly_reset_at").notNull().defaultNow(),
-  // Monthly AI transcription budget (separate window from exports).
+  // Monthly AI transcription budget (separate window from exports). Metered in
+  // SECONDS of source audio (matches the "source minutes / month" pricing).
   monthlyTranscriptionsUsed: integer("monthly_transcriptions_used").notNull().default(0),
+  monthlyTranscribeSeconds: integer("monthly_transcribe_seconds").notNull().default(0),
   transcriptionsResetAt: timestamp("transcriptions_reset_at").notNull().defaultNow(),
   // AI engine preference. "auto" = Capto picks the best-performing available
   // engine. aiUseOwnKey forces the user's own BYOK key/provider when set.
