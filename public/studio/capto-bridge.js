@@ -265,6 +265,36 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 15000);
   }
+  const supportsSavePicker = typeof window.showSaveFilePicker === 'function';
+  // Desktop: the user picks the save location up front (File System Access);
+  // we write the finished export straight there. Mobile / unsupported: a normal
+  // download (lands in the gallery / Downloads).
+  async function saveBlob(blob, name) {
+    const h = window.__captoSaveHandle;
+    if (h) {
+      try {
+        const w = await h.createWritable();
+        await w.write(blob);
+        await w.close();
+        window.__captoSaveHandle = null;
+        return;
+      } catch { /* user revoked / error → fall back to download */ }
+    }
+    downloadBlob(blob, name);
+  }
+  async function chooseSaveLocation() {
+    if (!supportsSavePicker) return;
+    const base = ((window.__captoMedia && window.__captoMedia.file && window.__captoMedia.file.name) || 'video').replace(/\.[^.]+$/, '');
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: `${base}-captioned.mp4`,
+        types: [{ description: 'Video', accept: { 'video/mp4': ['.mp4'], 'video/webm': ['.webm'] } }],
+      });
+      window.__captoSaveHandle = handle;
+      const p = document.getElementById('exPath');
+      if (p) { p.textContent = handle.name; p.title = handle.name; }
+    } catch { /* cancelled */ }
+  }
   function applyCaseLocal(t, mode) {
     if (mode === 'lower') return String(t).toLocaleLowerCase();
     if (mode === 'upper') return String(t).toLocaleUpperCase();
@@ -375,7 +405,8 @@
     if (quality === 'lossless') return { maxH: nH, fps: 30, videoBitrate: 16000000 };
     const res = parseInt(getVal('capto-res', '1080'), 10) || 1080; // "custom" (middle tier)
     const fps = parseInt(getVal('capto-fps', '30'), 10) || 30;
-    const mbps = clampNum(getVal('capto-bitrate', 8), 1, 50);
+    const bsel = getVal('capto-bitrate-sel', '10');
+    const mbps = bsel === 'custom' ? clampNum(getVal('capto-bitrate', 10), 1, 50) : (parseInt(bsel, 10) || 10);
     return { maxH: Math.min(nH, res), fps, videoBitrate: Math.round(mbps * 1000000) };
   }
 
@@ -391,6 +422,7 @@
     document.querySelectorAll('#tiers .tier').forEach((t) => {
       const locked = free && (t.dataset.q === 'friend' || t.dataset.q === 'lossless');
       t.style.opacity = locked ? '.45' : '';
+      t.style.pointerEvents = locked ? 'none' : '';
       let badge = t.querySelector('.capto-prolock');
       if (locked && !badge) {
         badge = document.createElement('span');
@@ -417,11 +449,21 @@
         `<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">` +
         `<label style="font-size:12px;color:var(--muted)">Resolution <select id="capto-res" ${lock} style="${sel}"><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></label>` +
         `<label style="font-size:12px;color:var(--muted)">FPS <select id="capto-fps" ${lock} style="${sel}"><option value="24">24</option><option value="30" selected>30</option><option value="60">60</option></select></label>` +
-        `<label style="font-size:12px;color:var(--muted)">Bitrate <input id="capto-bitrate" type="number" min="1" max="50" value="8" style="width:74px"> Mbps</label>` +
+        `<label style="font-size:12px;color:var(--muted)">Bitrate <select id="capto-bitrate-sel" style="${sel}">` +
+          `<option value="3">Lower</option>` +
+          `<option value="6">Medium</option>` +
+          `<option value="10" selected>High</option>` +
+          `<option value="20" ${free ? 'disabled' : ''}>Highest${free ? ' (Pro)' : ''}</option>` +
+          `<option value="custom">Custom…</option>` +
+        `</select></label>` +
+        `<span id="capto-bitrate-custom" style="display:none;font-size:12px;color:var(--muted)"><input id="capto-bitrate" type="number" min="1" max="50" value="10" style="width:74px"> Mbps</span>` +
         `</div>` +
-        (free ? `<div style="margin-top:9px;font-size:11px;color:var(--faint)">Free is capped at 1080p / 30fps. <span style="color:var(--accent-2);cursor:pointer" id="capto-up">Upgrade</span> for send-to-friend, lossless and 60fps.</div>` : '');
+        (free ? `<div style="margin-top:9px;font-size:11px;color:var(--faint)">Free is capped at 1080p / 30fps. <span style="color:var(--accent-2);cursor:pointer" id="capto-up">Upgrade</span> for send-to-friend, lossless, 60fps and highest bitrate.</div>` : '');
       const up = document.getElementById('capto-up');
       if (up) up.onclick = goTop('/billing');
+      const bsel = document.getElementById('capto-bitrate-sel');
+      const bcustom = document.getElementById('capto-bitrate-custom');
+      if (bsel && bcustom) bsel.onchange = () => { bcustom.style.display = bsel.value === 'custom' ? 'inline' : 'none'; };
     }
   }
   function setupExportOptions() {
@@ -496,7 +538,7 @@
     });
     try { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } catch {}
     const base = (media.file.name || 'video').replace(/\.[^.]+$/, '');
-    downloadBlob(blob, `${base}-captioned.${extFor(mime)}`);
+    await saveBlob(blob, `${base}-captioned.${extFor(mime)}`);
     return blob;
   }
   function startExportJob(id, body) {
@@ -738,12 +780,24 @@
     // Home "Settings" button jumps to Capto's account settings.
     const s = document.getElementById('homeSettings');
     if (s) s.addEventListener('click', goTop('/settings'));
-    // The export "Save to ~/Desktop" picker + "Open folder" are desktop-only;
-    // on the web the file downloads straight to the browser.
-    const dest = document.getElementById('exDest');
-    if (dest) dest.style.display = 'none';
+    // "Open folder" (post-export reveal) is desktop-app only — never on web.
     const openFolder = document.getElementById('exOpenFolder');
     if (openFolder) openFolder.style.display = 'none';
+    // Save-location row: on desktop (File System Access) let the user choose
+    // where to save BEFORE exporting; on mobile / unsupported, hide it (the file
+    // just downloads to the gallery / Downloads).
+    const dest = document.getElementById('exDest');
+    const chooseBtn = document.getElementById('exChooseDir');
+    const pathEl = document.getElementById('exPath');
+    if (dest) {
+      if (supportsSavePicker) {
+        dest.style.display = '';
+        if (pathEl) { pathEl.textContent = 'Ask on export'; pathEl.title = ''; }
+        if (chooseBtn) { chooseBtn.textContent = 'Choose location…'; chooseBtn.onclick = chooseSaveLocation; }
+      } else {
+        dest.style.display = 'none';
+      }
+    }
     // When a reopened project's video can't load (no local file), offer relink.
     const vid = document.getElementById('video');
     if (vid) vid.addEventListener('error', () => {
