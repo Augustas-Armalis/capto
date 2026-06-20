@@ -88,7 +88,14 @@ export function EditorShell({
   const [isNarrow, setIsNarrow] = React.useState(false);
 
   React.useEffect(() => {
-    const check = () => setIsNarrow(window.innerWidth < 1024);
+    // Mobile layout is for actual phones only — a touch device with a small
+    // screen. A computer (fine pointer) ALWAYS gets the full desktop editor,
+    // regardless of window width / devtools, so it never flips to "mobile".
+    const check = () => {
+      const coarse = window.matchMedia("(pointer: coarse)").matches;
+      const noHover = window.matchMedia("(hover: none)").matches;
+      setIsNarrow((coarse || noHover) && window.innerWidth < 1024);
+    };
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
@@ -904,7 +911,7 @@ function Editor({
         </div>
 
         {/* sidebar */}
-        <aside className="hidden w-[340px] shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-bg-elev)]/40 lg:flex">
+        <aside className="flex w-[340px] shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-bg-elev)]/40">
           {/* tabs */}
           <div className="flex shrink-0 items-center gap-1 border-b border-[var(--color-border)] p-2">
             <TabBtn active={tab === "captions"} onClick={() => setTab("captions")} icon={<ListVideo className="size-4" />}>
