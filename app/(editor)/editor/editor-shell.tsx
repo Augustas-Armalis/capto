@@ -445,6 +445,30 @@ function Editor({
 
   const deleteCue = (id: string) => setCues((prev) => prev.filter((c) => c.id !== id));
 
+  // The currently-selected cue on the timeline (highlighted, scrolled to).
+  const [selCueId, setSelCueId] = React.useState<string | null>(null);
+
+  // Retime a cue from the timeline (drag to move / resize edges). Word timings
+  // are scaled into the new span so karaoke stays in sync.
+  const updateCueTime = React.useCallback((id: string, start: number, end: number) => {
+    setCues((prev) =>
+      prev
+        .map((c) => {
+          if (c.id !== id) return c;
+          const oldSpan = Math.max(0.001, c.end - c.start);
+          const newSpan = Math.max(0.05, end - start);
+          const k = newSpan / oldSpan;
+          const words = c.words.map((w) => ({
+            word: w.word,
+            start: start + (w.start - c.start) * k,
+            end: start + (w.end - c.start) * k,
+          }));
+          return { ...c, start, end, words };
+        })
+        .sort((a, b) => a.start - b.start),
+    );
+  }, []);
+
   // Insert a blank caption at the current playhead (original Subby's "Add caption").
   const addCueAtPlayhead = () => {
     const t = videoRef.current?.currentTime ?? time;
@@ -1126,7 +1150,14 @@ function Editor({
                   time={time}
                   cues={cues}
                   activeIdx={activeIdx}
+                  selId={selCueId}
                   onSeek={seek}
+                  onSelect={(id, start) => {
+                    setSelCueId(id);
+                    seek(start);
+                    setTab("captions");
+                  }}
+                  onUpdateCue={updateCueTime}
                 />
                 <button
                   onClick={addCueAtPlayhead}
@@ -1316,46 +1347,133 @@ function Dropzone({
   );
 }
 
+// Interactive timeline (ported from the original Subby): cue blocks you can drag
+// to retime, with left/right handles to resize start/end. Click empty to scrub,
+// click a block to select + seek. Clamped to neighbours so cues can't overlap.
 function Timeline({
   dur,
   time,
   cues,
   activeIdx,
+  selId,
   onSeek,
+  onSelect,
+  onUpdateCue,
 }: {
   dur: number;
   time: number;
   cues: Cue[];
   activeIdx: number;
+  selId: string | null;
   onSeek: (t: number) => void;
+  onSelect: (id: string, start: number) => void;
+  onUpdateCue: (id: string, start: number, end: number) => void;
 }) {
   const ref = React.useRef<HTMLDivElement | null>(null);
-  const pct = dur > 0 ? (time / dur) * 100 : 0;
-  const onClick = (e: React.MouseEvent) => {
+  const D = dur || 0;
+  const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
+  const pct = D > 0 ? (time / D) * 100 : 0;
+
+  const xToT = (clientX: number) => {
     const el = ref.current;
-    if (!el || dur <= 0) return;
+    if (!el) return 0;
     const r = el.getBoundingClientRect();
-    onSeek(((e.clientX - r.left) / r.width) * dur);
+    return clamp((clientX - r.left) / r.width, 0, 1) * D;
   };
+
+  // Scrub when pressing empty track (blocks stop propagation).
+  const onTrackDown = (e: React.PointerEvent) => {
+    if (D <= 0) return;
+    onSeek(xToT(e.clientX));
+    const mv = (ev: PointerEvent) => onSeek(xToT(ev.clientX));
+    const up = () => {
+      window.removeEventListener("pointermove", mv);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", mv);
+    window.addEventListener("pointerup", up);
+  };
+
+  // Drag a block (move) or its edge (resize), clamped to neighbours.
+  const startBlock = (e: React.PointerEvent, cue: Cue, mode: "move" | "l" | "r") => {
+    if (D <= 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    onSelect(cue.id, cue.start);
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const startX = e.clientX;
+    const s0 = cue.start, e0 = cue.end, len = e0 - s0;
+    const sorted = [...cues].sort((a, b) => a.start - b.start);
+    const idx = sorted.findIndex((c) => c.id === cue.id);
+    const lo = idx > 0 ? sorted[idx - 1].end : 0;
+    const hi = idx < sorted.length - 1 ? sorted[idx + 1].start : D;
+    const mv = (ev: PointerEvent) => {
+      const dt = ((ev.clientX - startX) / rect.width) * D;
+      let ns = s0, ne = e0;
+      if (mode === "move") {
+        ns = clamp(s0 + dt, lo, hi - len);
+        ne = ns + len;
+      } else if (mode === "l") {
+        ns = clamp(s0 + dt, lo, e0 - 0.1);
+      } else {
+        ne = clamp(e0 + dt, s0 + 0.1, hi);
+      }
+      onUpdateCue(cue.id, ns, ne);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", mv);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", mv);
+    window.addEventListener("pointerup", up);
+  };
+
   return (
     <div
       ref={ref}
-      onClick={onClick}
-      className="relative h-9 flex-1 cursor-pointer overflow-hidden rounded-[var(--radius-sm)] border border-white/[0.07] bg-black/40"
+      onPointerDown={onTrackDown}
+      className="relative h-14 flex-1 cursor-pointer touch-none overflow-hidden rounded-[var(--radius-sm)] border border-white/[0.07] bg-black/40"
     >
-      {dur > 0 &&
-        cues.map((c, i) => (
-          <div
-            key={c.id}
-            className={cn(
-              "absolute top-1.5 bottom-1.5 rounded-[3px] transition-colors",
-              i === activeIdx ? "bg-magic" : "bg-white/15",
-            )}
-            style={{ left: `${(c.start / dur) * 100}%`, width: `${Math.max(0.5, ((c.end - c.start) / dur) * 100)}%` }}
-          />
-        ))}
+      {D > 0 &&
+        cues.map((c, i) => {
+          const left = (c.start / D) * 100;
+          const w = Math.max(1.2, ((c.end - c.start) / D) * 100);
+          const isSel = c.id === selId;
+          const isActive = i === activeIdx;
+          return (
+            <div
+              key={c.id}
+              data-block
+              onPointerDown={(e) => startBlock(e, c, "move")}
+              title={c.text}
+              style={{ left: `${left}%`, width: `${w}%` }}
+              className={cn(
+                "group absolute top-1.5 bottom-1.5 flex cursor-grab items-center overflow-hidden rounded-[4px] border active:cursor-grabbing",
+                isSel
+                  ? "border-white bg-magic"
+                  : isActive
+                    ? "border-[var(--color-brand)] bg-[var(--color-brand)]/35"
+                    : "border-white/10 bg-white/15 hover:bg-white/25",
+              )}
+            >
+              <div
+                onPointerDown={(e) => startBlock(e, c, "l")}
+                className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-ew-resize hover:bg-white/50"
+              />
+              <span className="pointer-events-none truncate px-2 text-[9px] font-medium text-white/90">
+                {c.text}
+              </span>
+              <div
+                onPointerDown={(e) => startBlock(e, c, "r")}
+                className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-ew-resize hover:bg-white/50"
+              />
+            </div>
+          );
+        })}
       <div
-        className="absolute top-0 bottom-0 w-px bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+        className="pointer-events-none absolute top-0 bottom-0 w-px bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"
         style={{ left: `${pct}%` }}
       />
     </div>
