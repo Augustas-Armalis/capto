@@ -30,12 +30,17 @@ export async function PUT(req: Request) {
       patch.image = null;
     } else if (
       typeof body.image === "string" &&
-      body.image.startsWith("data:image/") &&
+      // Raster formats only — reject data:image/svg+xml (SVG can carry script,
+      // an XSS/exfil vector since this endpoint is public).
+      /^data:image\/(jpeg|png|webp);base64,/.test(body.image) &&
       body.image.length < 200_000
     ) {
       patch.image = body.image;
     } else {
-      return NextResponse.json({ error: "Image must be a small (<190KB) data URL." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Image must be a small (<190KB) JPEG, PNG, or WebP." },
+        { status: 400 },
+      );
     }
   }
 

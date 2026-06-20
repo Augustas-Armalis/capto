@@ -138,6 +138,7 @@ function Editor({
   const aiOriginalRef = React.useRef<string>("");
   const [enhancing, setEnhancing] = React.useState<null | "translate" | "emoji">(null);
   const [targetLang, setTargetLang] = React.useState("es");
+  const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
 
   const [transcribing, setTranscribing] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
@@ -528,6 +529,13 @@ function Editor({
       const base = (projectName || "capto").replace(/[^\w-]+/g, "-").toLowerCase();
       downloadBlob(blob, `${base}-captioned.${ext}`);
     } catch (e) {
+      // The export was reserved before rendering — refund it so a failed or
+      // cancelled render doesn't burn the user's monthly quota.
+      fetch("/api/usage/export", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refund: true }),
+      }).catch(() => {});
       if (!(e instanceof DOMException && e.name === "AbortError"))
         setErr(e instanceof Error ? e.message : "Export failed.");
     } finally {
@@ -755,16 +763,37 @@ function Editor({
               {saved ? "Saved" : "Save"}
             </Button>
           )}
-          <Button
-            onClick={() => runExport()}
-            variant="primary"
-            size="sm"
-            disabled={!cues.length || exporting}
-            loading={exporting}
-          >
-            <Download className="size-4" />
-            {exporting ? `Exporting ${exportPct}%` : "Export"}
-          </Button>
+          <div className="relative">
+            <Button
+              onClick={() => setExportMenuOpen((o) => !o)}
+              variant="primary"
+              size="sm"
+              disabled={!cues.length || exporting}
+              loading={exporting}
+            >
+              <Download className="size-4" />
+              {exporting ? `Exporting ${exportPct}%` : "Export"}
+            </Button>
+            {exportMenuOpen && !exporting && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setExportMenuOpen(false)} />
+                <div className="absolute right-0 z-50 mt-2 w-80 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-3 shadow-[var(--shadow-pop)]">
+                  <MobileExportPanel
+                    isFree={isFree}
+                    hasCues={cues.length > 0}
+                    exporting={exporting}
+                    exportPct={exportPct}
+                    friendMB={friendMB}
+                    onFriendMB={setFriendMB}
+                    onExport={(q) => {
+                      setExportMenuOpen(false);
+                      runExport(q, friendMB);
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
           <div className="hidden lg:block">
             <PoweredByContles variant="chip" />
           </div>

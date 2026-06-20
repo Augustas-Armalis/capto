@@ -48,15 +48,35 @@ export async function POST(req: Request) {
   const custId = (c: string | { id: string } | null | undefined) =>
     typeof c === "string" ? c : c?.id ?? null;
 
+  // Final fallback for an EXISTING-email guest purchase: if neither metadata nor
+  // a linked customer resolves the user, match the paying email. Signature is
+  // already verified, so this is trusted. Closes the gap where a guest pays with
+  // an existing email but never lands on /welcome to stamp the subscription.
+  const userByEmail = async (email: string | null | undefined): Promise<string | null> => {
+    const e = (email || "").toLowerCase().trim();
+    if (!e) return null;
+    const [row] = await db.select({ id: userTable.id }).from(userTable).where(eq(userTable.email, e)).limit(1);
+    return row?.id ?? null;
+  };
+
   switch (event.type) {
     case "checkout.session.completed": {
       const cs = event.data.object as Stripe.Checkout.Session;
       const plan = isPlan(cs.metadata?.plan) ? (cs.metadata!.plan as PlanId) : "pro";
-      const userId = cs.metadata?.userId || (await userByCustomer(custId(cs.customer)));
+      const userId =
+        cs.metadata?.userId ||
+        (await userByCustomer(custId(cs.customer))) ||
+        (await userByEmail(cs.customer_details?.email));
       if (userId && cs.mode === "subscription" && typeof cs.subscription === "string") {
         await db
           .update(userTable)
-          .set({ plan, stripeSubscriptionId: cs.subscription, subscriptionStatus: "active" })
+          .set({
+            plan,
+            // Link the Stripe customer so every future event reconciles directly.
+            stripeCustomerId: custId(cs.customer) || undefined,
+            stripeSubscriptionId: cs.subscription,
+            subscriptionStatus: "active",
+          })
           .where(eq(userTable.id, userId));
       }
       break;

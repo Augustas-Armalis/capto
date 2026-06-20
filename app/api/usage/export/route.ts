@@ -64,13 +64,25 @@ export async function GET() {
 
 // Consume one export. Single atomic statement handles month-rollover, the free
 // cap, and the increment, so concurrent requests can't exceed the cap.
-export async function POST() {
+// Body { refund: true } gives back a reserved export when a render fails/cancels.
+export async function POST(req: Request) {
   const session = await getCurrentSession();
   if (!isConfigured.db() || !session?.user?.id) {
     return NextResponse.json({ allowed: true, watermark: true });
   }
 
   const sql = neon(env.databaseUrl);
+
+  const body = (await req.json().catch(() => null)) as { refund?: boolean } | null;
+  if (body?.refund) {
+    // Give back one export (floor 0). A failed/cancelled render must not burn quota.
+    await sql`
+      UPDATE "user" SET monthly_exports_used = GREATEST(0, monthly_exports_used - 1)
+      WHERE id = ${session.user.id}
+    `;
+    return NextResponse.json({ refunded: true });
+  }
+
   const months = `${MONTH_MS} milliseconds`;
   const cap = FREE_MONTHLY_EXPORTS;
   const rows = (await sql`
