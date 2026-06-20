@@ -56,6 +56,18 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Marketing pages: short edge cache so a deploy shows within ~2 min
+        // instead of being pinned for a year (the prior s-maxage default made
+        // landing changes look like they never shipped).
+        source: '/((?!api|editor|studio|dashboard|settings|billing|welcome).*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, s-maxage=120, stale-while-revalidate=604800',
+          },
+        ],
+      },
     ];
   },
 };

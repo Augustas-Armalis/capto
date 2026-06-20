@@ -36,8 +36,9 @@ function Reel({ tag, line, hot, bg, accent }: (typeof REELS)[number]) {
 
 export function MadeWithCapto() {
   const videos = CAROUSEL_VIDEOS;
-  const items = videos.length
-    ? videos.map((v) => <VideoReel key={v} src={v} />)
+  const hasVideos = videos.length > 0;
+  const items = hasVideos
+    ? videos.map((v, i) => <VideoReel key={v} src={v} index={i} />)
     : REELS.map((r, i) => <Reel key={i} {...r} />);
 
   return (
@@ -52,9 +53,11 @@ export function MadeWithCapto() {
 
       <Marquee
         items={items}
-        durationSec={80}
+        durationSec={hasVideos ? 70 : 80}
         gapPx={16}
-        repeat={videos.length && videos.length < 4 ? 4 : 3}
+        // Videos are heavy — keep DOM copies low (one group of clips, mirrored
+        // for the seamless loop). Placeholders are cheap, so repeat more.
+        repeat={hasVideos ? (videos.length < 5 ? 2 : 1) : 3}
         pauseOnHover
         className="mt-12"
         maskClass="[mask-image:linear-gradient(90deg,transparent,#000_5%,#000_95%,transparent)]"
