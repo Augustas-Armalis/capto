@@ -1,14 +1,15 @@
-"use client";
-
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
  * Seam-free infinite marquee. Two identical groups, translate -50%, so the loop
- * never jumps. `repeat` widens one group past the viewport for big screens.
- * Pause is JS-controlled via animation-play-state (only ever pauses/resumes —
- * it can never reset the track to its start, which is what caused the prior
- * "jumps back to the beginning" glitch on hover).
+ * never jumps.
+ *
+ * IMPORTANT: this is 100% CSS-driven — NO React state. Hover-pause uses the
+ * `.marquee-paused:hover` rule in globals.css. A previous version paused via
+ * React state, which re-rendered the component and remounted every child on
+ * hover — that reloaded the <video> reels (black-out / disappear / glitch).
+ * Keeping it stateless means children mount exactly once.
  */
 export function Marquee({
   items,
@@ -27,38 +28,22 @@ export function Marquee({
   className?: string;
   maskClass?: string;
 }) {
-  const [paused, setPaused] = React.useState(false);
   const oneGroup = Array.from({ length: repeat }).flatMap(() => items);
+  const groupStyle: React.CSSProperties = { gap: `${gapPx}px`, paddingInlineEnd: `${gapPx}px` };
 
-  const Group = ({ hidden }: { hidden?: boolean }) => (
-    <div
-      aria-hidden={hidden}
-      className="flex shrink-0 items-stretch"
-      style={{ gap: `${gapPx}px`, paddingInlineEnd: `${gapPx}px` }}
-    >
-      {oneGroup.map((node, i) => (
-        <React.Fragment key={i}>{node}</React.Fragment>
-      ))}
-    </div>
-  );
-
-  // Hover pauses only the SCROLL — never the videos (pausing + resuming a
-  // <video> reloads it and replays from black, which looked broken on hover).
   return (
-    <div
-      className={cn("overflow-hidden", maskClass, className)}
-      onPointerEnter={pauseOnHover ? () => setPaused(true) : undefined}
-      onPointerLeave={pauseOnHover ? () => setPaused(false) : undefined}
-    >
-      <div
-        className="marquee-track flex w-max"
-        style={{
-          animationDuration: `${durationSec}s`,
-          animationPlayState: paused ? "paused" : "running",
-        }}
-      >
-        <Group />
-        <Group hidden />
+    <div className={cn("overflow-hidden", pauseOnHover && "marquee-paused", maskClass, className)}>
+      <div className="marquee-track flex w-max" style={{ animationDuration: `${durationSec}s` }}>
+        <div className="flex shrink-0 items-stretch" style={groupStyle}>
+          {oneGroup.map((node, i) => (
+            <React.Fragment key={`a${i}`}>{node}</React.Fragment>
+          ))}
+        </div>
+        <div className="flex shrink-0 items-stretch" style={groupStyle} aria-hidden>
+          {oneGroup.map((node, i) => (
+            <React.Fragment key={`b${i}`}>{node}</React.Fragment>
+          ))}
+        </div>
       </div>
     </div>
   );
