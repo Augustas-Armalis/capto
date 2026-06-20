@@ -539,4 +539,17 @@ body.theme-light .toast { background: #fff; }
   .upload-settings { grid-template-columns: 1fr; }
   .upload-overlay { position: absolute; }
   .topbar-actions .btn span { display: none; }
+
+  /* Phone editor: keep it simple. Captions + Style tabs only, drop the
+     power-user timeline tools + canvas zoom, and grow touch targets. Desktop
+     (>860px) is completely unaffected — this lives only in the media query. */
+  .tabs .tab[data-tab="script"], .tabs .tab[data-tab="settings"] { display: none; }
+  .tabs .tab { font-size: 14px; padding: 12px 6px; }
+  .tl-tools .zoom, .tl-tools .toggle-mini { display: none; }
+  .canvas-tools { display: none; }
+  .tl-addrow { display: none; }
+  .btn.sm { padding: 9px 13px; font-size: 13px; }
+  .cue textarea { font-size: 16px; }            /* avoids iOS zoom-on-focus */
+  .home-hero { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .home-tx-row { grid-template-columns: 1fr 1fr; }
 }
