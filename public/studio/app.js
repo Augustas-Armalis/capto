@@ -91,7 +91,7 @@ const el = {};
 // TypeError that halts the whole script and silently kills every handler below it.
 for (const k of Object.keys(el)) {
   if (!el[k]) {
-    console.warn('[Subby] missing element #' + k + ' — using a safe stub');
+    console.warn('[Capto] missing element #' + k + ' — using a safe stub');
     el[k] = document.createElement('div');
   }
 }
@@ -276,7 +276,7 @@ async function uploadFile(file) {
 }
 function resetUpload() {
   $('.dz-inner', el.dropzone).innerHTML = `<img class="dz-logo" src="/studio/logo.svg"><h1>Caption your video</h1>
-    <p>Drop a clip or choose a file — Subby auto‑captions it with AI. Everything stays on your machine.</p>
+    <p>Drop a clip or choose a file — Capto auto‑captions it with AI. Everything stays on your machine.</p>
     <button class="btn primary lg" id="pickBtn">Choose a video</button>`;
   $('#pickBtn').onclick = () => el.fileInput.click();
 }
@@ -608,7 +608,7 @@ function renderStylePanel() {
       <div class="chips" id="preset-chips"></div>
       <div style="display:flex; gap:6px; margin-top:9px">
         <button class="btn ghost sm" id="savePreset">＋ Save preset</button>
-        <button class="btn ghost sm" id="resetDefault" title="Forget the saved default style — fresh videos will use Subby's built-in defaults again">⟲ Reset default</button>
+        <button class="btn ghost sm" id="resetDefault" title="Forget the saved default style — fresh videos will use Capto's built-in defaults again">⟲ Reset default</button>
       </div>
       <p class="hint-line">Your current style is auto‑saved and applied to every new video. Click a preset to switch instantly.</p>
     </div>
@@ -711,7 +711,7 @@ function renderStylePanel() {
   renderPresetChips();
   $('#savePreset').onclick = async () => { const name = await promptDialog('Save current style as preset', ''); if (!name) return; const p = customPresets(); p[name] = snapshotStyle(); saveCustomPresets(p); renderPresetChips(); toast('Preset saved'); };
   const resetBtn = $('#resetDefault');
-  if (resetBtn) resetBtn.onclick = () => { clearDefaultStyle(); toast('Saved default cleared — next new video will use Subby defaults'); };
+  if (resetBtn) resetBtn.onclick = () => { clearDefaultStyle(); toast('Saved default cleared — next new video will use Capto defaults'); };
 }
 function syncSwatch() { $$('#sw-color .swatch').forEach((sw) => sw.classList.toggle('on', sw.dataset.c.toLowerCase() === (state.style.primaryColor || '').toLowerCase())); $('#st-color').value = state.style.primaryColor; }
 function rng(sel, key, valSel, fmt) {
@@ -1780,7 +1780,7 @@ var toastTimer; function toast(msg, err) { el.toast.textContent = msg; el.toast.
 const dlgEls = { back: document.getElementById('dlg'), title: document.getElementById('dlgTitle'), body: document.getElementById('dlgBody'), input: document.getElementById('dlgInput'), ok: document.getElementById('dlgOk'), cancel: document.getElementById('dlgCancel') };
 function dialog(opts) {
   return new Promise((resolve) => {
-    dlgEls.title.textContent = opts.title || 'Subby';
+    dlgEls.title.textContent = opts.title || 'Capto';
     dlgEls.body.textContent = opts.body || '';
     dlgEls.body.style.display = opts.body ? '' : 'none';
     const wantInput = typeof opts.input !== 'undefined';

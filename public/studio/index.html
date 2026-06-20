@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>Subby — caption your videos</title>
+  <title>Capto — caption your videos</title>
   <link rel="icon" href="/studio/logo.svg" />
   <link rel="stylesheet" href="/studio/styles.css" />
 </head>
@@ -17,7 +17,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <button class="topbar-back btn ghost icon" id="backHome" title="Back to home" hidden><svg class="ic"><use href="#i-chevron-left"/></svg></button>
-      <button class="brand" id="brandHome" title="Home"><img src="/studio/logo.svg" alt="Subby" /><span class="name">Subby</span></button>
+      <button class="brand" id="brandHome" title="Home"><img src="/studio/logo.svg" alt="Capto" /><span class="name">Capto</span></button>
       <button class="project-name" id="projectName" title="Click to rename" hidden></button>
     </div>
     <div class="topbar-actions" id="topActions" hidden>
@@ -34,7 +34,7 @@
         <div class="home-title">
           <img src="/studio/logo.svg" alt="" />
           <div>
-            <h1>Welcome to <b>Subby</b></h1>
+            <h1>Welcome to <b>Capto</b></h1>
             <p>Caption your videos with AI, edit them, export beautiful captioned MP4s.</p>
           </div>
         </div>
@@ -225,7 +225,7 @@
         <div class="dz-inner">
           <img class="dz-logo" src="/studio/logo.svg" alt="" />
           <h1>Caption your video</h1>
-          <p>Drop a clip or choose a file — Subby auto‑captions it with AI. Everything stays on your machine.</p>
+          <p>Drop a clip or choose a file — Capto auto‑captions it with AI. Everything stays on your machine.</p>
           <button class="btn primary lg" id="pickBtn">Choose a video</button>
           <input type="file" id="fileInput" accept="video/*" hidden />
         </div>
@@ -274,7 +274,7 @@
   <!-- Reusable in-app dialog: replaces browser confirm()/prompt(). -->
   <div class="dlg-backdrop" id="dlg" hidden>
     <div class="dlg">
-      <h3 id="dlgTitle">Subby</h3>
+      <h3 id="dlgTitle">Capto</h3>
       <p id="dlgBody" class="dlg-body"></p>
       <input type="text" id="dlgInput" hidden />
       <div class="dlg-actions">
@@ -284,7 +284,7 @@
     </div>
   </div>
 
-  <!-- Capto web bridge: reroutes Subby's /api/* data layer to Capto's
+  <!-- Capto web bridge: reroutes Capto's /api/* data layer to Capto's
        client-side model (local video, Groq transcription, browser export).
        MUST load before app.js so the fetch override is in place at init(). -->
   <script src="/studio/capto-bridge.js"></script>

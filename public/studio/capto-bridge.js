@@ -50,7 +50,7 @@
       outlineWidth: 0, outlineColor: '#000000',
       shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
       shadowDistance: Math.max(2, Math.round(H * 0.0025)), shadowBlur: Math.max(2, Math.round(H * 0.0035)),
-      highlightEnabled: false, highlightColor: '#C4B5FD', highlightScale: 100,
+      highlightEnabled: false, highlightColor: '#A0C1FF', highlightScale: 100,
       posX: 0.5, posY: 0.82, entrance: 'none', exit: 'none', animMs: 180,
     };
   }
