@@ -394,6 +394,7 @@
   };
 
   function goTop(href) { return (e) => { if (e) e.preventDefault(); try { window.top.location.href = href; } catch { window.location.href = href; } }; }
+  function escHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function minutesLabel(u) {
     if (!u || !u.minutes) return '';
     const m = u.minutes;
@@ -421,6 +422,29 @@
         pill.textContent = canTopUp ? `${lbl} · Top up` : lbl;
         pill.onclick = canTopUp ? goTop('/billing') : null;
       } else pill.style.display = 'none';
+
+      // Profile chip on the right — avatar + name, jumps to account settings.
+      let prof = document.getElementById('capto-profile');
+      if (!prof) {
+        prof = document.createElement('button');
+        prof.id = 'capto-profile';
+        prof.className = 'btn ghost lg';
+        prof.title = 'Account';
+        actions.appendChild(prof);
+      }
+      if (u.signedIn) {
+        const nm = u.name || (u.email ? u.email.split('@')[0] : 'Account');
+        const initial = (nm.trim()[0] || 'A').toUpperCase();
+        prof.style.display = '';
+        prof.innerHTML =
+          `<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#0b0c11;font-weight:700;font-size:11px;margin-right:6px">${initial}</span>` +
+          escHtml(nm);
+        prof.onclick = goTop('/settings');
+      } else {
+        prof.style.display = '';
+        prof.textContent = 'Sign in';
+        prof.onclick = goTop('/signin');
+      }
     }
 
     const tiers = document.getElementById('tiers');
