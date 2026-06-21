@@ -49,6 +49,11 @@ export async function POST() {
   try {
     const stripe = getStripe();
     const coupon = await ensureCoupon(stripe);
+    // "Stay" must also cancel any pending DOWNGRADE schedule, otherwise the user
+    // would still be silently moved to the lower plan at period end.
+    const existing = await stripe.subscriptions.retrieve(row.subId);
+    const schedId = typeof existing.schedule === "string" ? existing.schedule : existing.schedule?.id || null;
+    if (schedId) { try { await stripe.subscriptionSchedules.release(schedId); } catch {} }
     await stripe.subscriptions.update(row.subId, {
       cancel_at_period_end: false,
       discounts: [{ coupon }],

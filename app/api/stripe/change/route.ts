@@ -40,11 +40,26 @@ export async function POST(req: Request) {
   if (!row?.subId) {
     return NextResponse.json({ error: "No active subscription — use checkout." }, { status: 400 });
   }
-  if (target === current) return NextResponse.json({ ok: true, effective: "none" });
 
   try {
     const stripe = getStripe();
     const sub = await stripe.subscriptions.retrieve(row.subId);
+    const scheduleId = typeof sub.schedule === "string" ? sub.schedule : sub.schedule?.id || null;
+    // Detach any pending schedule (a previously-scheduled downgrade), leaving the
+    // subscription on its current price. Used to retarget or to "keep" the plan.
+    const releaseSchedule = async () => {
+      if (scheduleId) { try { await stripe.subscriptionSchedules.release(scheduleId); } catch {} }
+    };
+
+    // Re-selecting the current plan = "keep it / undo any pending change".
+    if (target === current) {
+      await releaseSchedule();
+      if (sub.cancel_at_period_end) {
+        try { await stripe.subscriptions.update(row.subId, { cancel_at_period_end: false }); } catch {}
+      }
+      return NextResponse.json({ ok: true, effective: "kept" });
+    }
+
     const item = sub.items.data[0];
     if (!item) return NextResponse.json({ error: "Subscription has no items." }, { status: 400 });
 
@@ -58,9 +73,7 @@ export async function POST(req: Request) {
 
     if (RANK[target] > RANK[current]) {
       // Upgrade now, prorated; clear any pending cancellation/schedule.
-      if (sub.schedule) {
-        try { await stripe.subscriptionSchedules.release(typeof sub.schedule === "string" ? sub.schedule : sub.schedule.id); } catch {}
-      }
+      await releaseSchedule();
       await stripe.subscriptions.update(row.subId, {
         items: [{ id: item.id, price: targetPrice }],
         proration_behavior: "create_prorations",
@@ -71,14 +84,12 @@ export async function POST(req: Request) {
     }
 
     // Downgrade → schedule the lower plan to start at the current period end.
-    let scheduleId = typeof sub.schedule === "string" ? sub.schedule : sub.schedule?.id || null;
-    if (!scheduleId) {
-      const created = await stripe.subscriptionSchedules.create({ from_subscription: row.subId });
-      scheduleId = created.id;
-    }
-    const schedule = await stripe.subscriptionSchedules.retrieve(scheduleId);
-    const phase0 = schedule.phases[0];
-    await stripe.subscriptionSchedules.update(scheduleId, {
+    // Release any existing schedule first, then build a fresh two-phase one so a
+    // re-targeted downgrade replaces the previous one cleanly.
+    await releaseSchedule();
+    const created = await stripe.subscriptionSchedules.create({ from_subscription: row.subId });
+    const phase0 = created.phases[0];
+    await stripe.subscriptionSchedules.update(created.id, {
       end_behavior: "release",
       phases: [
         {

@@ -40,6 +40,10 @@ function normalizeStyle(s) {
   if (!s) return s;
   if (typeof s.weight !== 'number') s.weight = s.bold ? 700 : 400;
   if (typeof s.lineHeight !== 'number') s.lineHeight = 1.1;
+  // Back-compat: projects saved before the highlight-mode feature.
+  if (typeof s.highlightMode !== 'string') s.highlightMode = 'color';
+  if (typeof s.highlightBg !== 'string') s.highlightBg = '#FFD233';
+  if (typeof s.highlightPill !== 'boolean') s.highlightPill = false;
   return s;
 }
 const optList = (items, sel) => items.map((i) => i.code === '__sep' ? `<option disabled>${i.label}</option>` : `<option value="${i.code}"${i.code === sel ? ' selected' : ''}>${i.label}</option>`).join('');
@@ -298,6 +302,10 @@ function openProject(data) {
   }
   state.duration = data.meta.duration; state.selCue = -1; state.view = { zoom: 1, panX: 0, panY: 0 };
   ensureRows();
+  // Sequentialise any residual same-row micro-overlaps now that duration + rows
+  // are known (the loosened row-spill tolerance can leave a small overlap that
+  // would otherwise hide a cue until the next structural edit).
+  fixOverlaps();
   el.uploadView.hidden = true; el.topActions.hidden = false;
   // Loading a project means we leave the home view behind. hideHome() also
   // unhides the back chevron + the editable project name in the topbar.
@@ -731,7 +739,9 @@ function renderStylePanel() {
   const advBtn = $('#advToggleTop'); const advBox = $('#advControls');
   if (advBtn && advBox) advBtn.onclick = () => {
     const open = advBox.style.maxHeight !== '0px' && advBox.style.maxHeight !== '';
-    advBox.style.maxHeight = open ? '0px' : (advBox.scrollHeight + 200) + 'px';
+    // Large fixed cap when open so NESTED collapses (Fine-tune shadow / highlight)
+    // can expand without being clipped by this wrapper.
+    advBox.style.maxHeight = open ? '0px' : '3000px';
     advBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
     advBtn.textContent = open ? 'Advanced styling ▾' : 'Advanced styling ▴';
   };
@@ -908,7 +918,20 @@ function applyPresetStyle(item) {
   const st = item.styleFor(state.meta) || {};
   Object.assign(state.style, st);
   normalizeStyle(state.style);
-  renderStylePanel(); afterStyle();
+  // Preserve the search query + Advanced-open state across the panel rebuild so
+  // applying a preset mid-search doesn't reset the view.
+  const searchEl = document.getElementById('preset-search');
+  const q = searchEl ? searchEl.value : '';
+  const advEl = document.getElementById('advControls');
+  const advOpen = !!(advEl && advEl.style.maxHeight && advEl.style.maxHeight !== '0px');
+  renderStylePanel();
+  if (q) { const ps = $('#preset-search'); if (ps) { ps.value = q; renderPresetGrid(q); } }
+  if (advOpen) {
+    const a = $('#advControls'), b = $('#advToggleTop');
+    if (a) a.style.maxHeight = '3000px';
+    if (b) { b.setAttribute('aria-expanded', 'true'); b.textContent = 'Advanced styling ▴'; }
+  }
+  afterStyle();
   if (item.name) toast(`Applied “${item.name}”`);
 }
 function afterStyle() {

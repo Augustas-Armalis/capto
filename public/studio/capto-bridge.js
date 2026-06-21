@@ -201,10 +201,15 @@
     // 1) Drag-drop → capture the file's handle BEFORE app.js reads the File.
     if (homeDz) {
       homeDz.addEventListener('drop', (e) => {
+        pendingHandle = null;
         try {
           const it = e.dataTransfer && e.dataTransfer.items && e.dataTransfer.items[0];
-          if (it && typeof it.getAsFileSystemHandle === 'function') pendingHandle = it.getAsFileSystemHandle();
-        } catch {}
+          // Only capture a handle for an actual video drop — app.js rejects
+          // non-videos, so capturing one would leak a wrong handle to a later upload.
+          if (it && it.kind === 'file' && /^video\//.test(it.type || '') && typeof it.getAsFileSystemHandle === 'function') {
+            pendingHandle = it.getAsFileSystemHandle();
+          }
+        } catch { pendingHandle = null; }
       }, true);
     }
     // 2) Click-to-pick → use the FS Access picker (captures a handle), then feed
@@ -521,7 +526,7 @@
         await w.close();
         window.__captoSaveHandle = null;
         return;
-      } catch { /* user revoked / error → fall back to download */ }
+      } catch { window.__captoSaveHandle = null; /* user revoked / error → fall back to download */ }
     }
     downloadBlob(blob, name);
   }
@@ -723,7 +728,15 @@
   // Remember the user's format choice between exports.
   function wireFormatMemory() {
     const f = document.getElementById('capto-format');
-    if (f) f.onchange = () => { try { localStorage.setItem('capto-export-format', f.value); } catch {} };
+    if (f) f.onchange = () => {
+      try { localStorage.setItem('capto-export-format', f.value); } catch {}
+      // If a save location was already chosen, its filename extension is now
+      // stale — drop it so the suggested name matches the newly chosen format.
+      if (window.__captoSaveHandle) {
+        window.__captoSaveHandle = null;
+        const p = document.getElementById('exPath'); if (p && supportsSavePicker) { p.textContent = 'Ask on export'; p.title = ''; }
+      }
+    };
   }
   function renderExportOptions() {
     const opts = document.getElementById('capto-export-opts');
@@ -851,7 +864,14 @@
     const toggle = (ids, show) => ids.forEach((id) => { const el = document.getElementById(id); if (el) el.style.display = show ? '' : 'none'; });
     const orig = exStart.onclick;
     let step = 0;
-    const reset = () => { step = 0; panel.style.display = 'none'; chosenThumb = null; window.__captoChosenThumb = null; exStart.textContent = 'Export'; toggle(['tiers', 'capto-export-opts'], true); if (supportsSavePicker) toggle(['exDest'], true); };
+    const reset = () => {
+      step = 0; panel.style.display = 'none'; chosenThumb = null; window.__captoChosenThumb = null;
+      // Drop any save-location handle from a previous export session so a new
+      // export never silently writes into the wrong (old) file.
+      window.__captoSaveHandle = null;
+      const p = document.getElementById('exPath'); if (p && supportsSavePicker) { p.textContent = 'Ask on export'; p.title = ''; }
+      exStart.textContent = 'Export'; toggle(['tiers', 'capto-export-opts'], true); if (supportsSavePicker) toggle(['exDest'], true);
+    };
     exStart.onclick = (e) => {
       if (step === 0) {
         toggle(['tiers', 'capto-export-opts', 'exDest'], false);
@@ -1059,7 +1079,7 @@
         })();
       }
       if (sub === '' && method === 'DELETE') {
-        return (async () => { await captoApi.del(id); delete thumbCache[id]; return json({ ok: true }); })();
+        return (async () => { await captoApi.del(id); delete thumbCache[id]; await idbDel(id); return json({ ok: true }); })();
       }
     }
 

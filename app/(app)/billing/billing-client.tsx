@@ -15,11 +15,15 @@ export function BillingClient({
   autoUpgrade,
   autoInterval,
   stripeReady,
+  pendingPlan,
+  pendingAt,
 }: {
   plan: PlanId;
   autoUpgrade: PlanId | null;
   autoInterval: Interval;
   stripeReady: boolean;
+  pendingPlan?: PlanId | null;
+  pendingAt?: number | null;
 }) {
   const [interval, setInterval] = React.useState<Interval>(autoInterval);
   const [loading, setLoading] = React.useState<PlanId | "portal" | null>(null);
@@ -101,6 +105,25 @@ export function BillingClient({
     [plan, startCheckout],
   );
 
+  // Undo a pending cancel/downgrade — "keep my current plan". Re-selecting the
+  // current plan tells /api/stripe/change to release the schedule + clear cancel.
+  const keepPlan = React.useCallback(async () => {
+    setError(null);
+    setLoading(plan);
+    try {
+      const r = await fetch("/api/stripe/change", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      if (!r.ok) throw new Error("Couldn't update.");
+      window.location.href = "/billing?changed=1";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Try the billing portal.");
+      setLoading(null);
+    }
+  }, [plan]);
+
   const openPortal = React.useCallback(async () => {
     setError(null);
     setLoading("portal");
@@ -140,6 +163,18 @@ export function BillingClient({
         <div className="mt-6 flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 px-4 py-3 text-sm text-[var(--color-success)]">
           <Check className="mt-0.5 size-4 shrink-0" />
           <span>{notice}</span>
+        </div>
+      )}
+
+      {pendingPlan && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-4 py-3 text-sm">
+          <span className="text-[var(--color-warning)]">
+            Scheduled to switch to <b>{getPlan(pendingPlan)?.name ?? pendingPlan}</b>
+            {pendingAt ? ` on ${new Date(pendingAt * 1000).toLocaleDateString()}` : ""} — you keep {getPlan(plan)?.name} until then.
+          </span>
+          <Button onClick={keepPlan} loading={loading === plan} variant="secondary" size="sm">
+            Keep {getPlan(plan)?.name}
+          </Button>
         </div>
       )}
 
