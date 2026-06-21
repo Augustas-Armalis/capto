@@ -46,7 +46,7 @@ export function MadeWithCapto() {
       <Container>
         <div className="max-w-xl">
           <SectionEyebrow>Made with Capto</SectionEyebrow>
-          <SectionTitle>Real clips. No watermark to hide behind.</SectionTitle>
+          <SectionTitle>No watermark to hide behind.</SectionTitle>
         </div>
       </Container>
 

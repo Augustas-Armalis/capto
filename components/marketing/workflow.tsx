@@ -1,11 +1,13 @@
+import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Section, SectionEyebrow, SectionTitle } from "@/components/ui/section";
 
 const STEPS = [
-  { n: "01", title: "Upload", body: "Drop your clip in." },
-  { n: "02", title: "Transcribe", body: "Word-level text, auto-timed." },
-  { n: "03", title: "Style", body: "Pick a look, tweak words." },
-  { n: "04", title: "Export", body: "1080p, no watermark." },
+  { n: "01", title: "Drop", body: "Any clip, any format. Up to 4K." },
+  { n: "02", title: "Transcribe", body: "Word level, 50+ languages, auto synced." },
+  { n: "03", title: "Style", body: "Pick a preset. Tweak it. Save it." },
+  { n: "04", title: "Export", body: "1080p or original. No watermark." },
 ];
 
 export function Workflow() {
@@ -14,7 +16,7 @@ export function Workflow() {
       <Container>
         <div className="max-w-xl">
           <SectionEyebrow>How it works</SectionEyebrow>
-          <SectionTitle>Four steps. Under two minutes.</SectionTitle>
+          <SectionTitle>Under two minutes, every time.</SectionTitle>
         </div>
 
         <div className="mt-14 grid gap-px overflow-hidden rounded-[var(--radius-xl)] border border-white/[0.07] bg-white/[0.06] sm:grid-cols-2 lg:grid-cols-4">
@@ -28,6 +30,13 @@ export function Workflow() {
               )}
             </div>
           ))}
+        </div>
+
+        <div className="mt-10 flex justify-center">
+          <Button href="/signup" size="lg" variant="primary">
+            Start free
+            <ArrowRight className="size-4" />
+          </Button>
         </div>
       </Container>
     </Section>

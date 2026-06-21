@@ -13,8 +13,8 @@ export function CaptionStyleStudio() {
       <Container>
         <div className="max-w-xl">
           <SectionEyebrow>Style studio</SectionEyebrow>
-          <SectionTitle>Styles that look made, not generated.</SectionTitle>
-          <SectionLede>Fonts, color, motion, position. Save it once, reuse it everywhere.</SectionLede>
+          <SectionTitle>Captions that look like yours.</SectionTitle>
+          <SectionLede>Submagic looks like Submagic. CapCut looks like CapCut. Capto looks like you.</SectionLede>
         </div>
 
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

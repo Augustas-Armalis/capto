@@ -31,7 +31,7 @@ export function FeatureGrid() {
       <Container>
         <div className="max-w-xl">
           <SectionEyebrow>What you get</SectionEyebrow>
-          <SectionTitle>Built for the one thing that decides if a video gets watched.</SectionTitle>
+          <SectionTitle>Built for the one thing the algorithm watches.</SectionTitle>
         </div>
 
         <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

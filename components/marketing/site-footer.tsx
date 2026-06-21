@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Container } from "@/components/ui/container";
+import { FeedbackButton } from "@/components/feedback/feedback-button";
 import { PoweredByContles } from "./powered-by-contles";
 
 const COLS = [
@@ -89,6 +90,7 @@ export function SiteFooter() {
           <div className="flex items-center gap-4 text-xs text-[var(--color-fg-subtle)]">
             <Link href="/privacy" className="hover:text-[var(--color-fg-muted)]">Privacy</Link>
             <Link href="/terms" className="hover:text-[var(--color-fg-muted)]">Terms</Link>
+            <FeedbackButton variant="inline" />
             <PoweredByContles variant="inline" />
           </div>
         </div>

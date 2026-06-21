@@ -1,4 +1,5 @@
-import { Check, X } from "lucide-react";
+import { ArrowRight, Check, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Money } from "@/components/ui/money";
 import { Section, SectionEyebrow, SectionTitle } from "@/components/ui/section";
@@ -8,13 +9,11 @@ type Row = { feature: string; capto: Cell; submagic: Cell; captions: Cell; veed:
 
 const ROWS: Row[] = [
   { feature: "Entry paid price", capto: "__capto_price__", submagic: "$19", captions: "$24.99", veed: "$24" },
-  { feature: "Lossless / original-quality export", capto: true, submagic: false, captions: false, veed: false },
-  { feature: "No watermark on paid", capto: true, submagic: true, captions: true, veed: false },
-  { feature: "AI clipping included", capto: true, submagic: "+$19/mo", captions: true, veed: false },
-  { feature: "Flat team pricing", capto: true, submagic: false, captions: false, veed: false },
-  { feature: "Real word-level timeline", capto: true, submagic: false, captions: "Partial", veed: true },
-  { feature: "Bring your own API key", capto: true, submagic: false, captions: false, veed: false },
+  { feature: "Lossless export", capto: true, submagic: false, captions: false, veed: false },
+  { feature: "No watermark", capto: true, submagic: true, captions: true, veed: false },
   { feature: "Minutes, not credits", capto: true, submagic: true, captions: false, veed: true },
+  { feature: "Word-level timeline", capto: true, submagic: false, captions: "Partial", veed: false },
+  { feature: "Bring your own key", capto: true, submagic: false, captions: false, veed: false },
 ];
 
 function CellView({ value, hero = false }: { value: Cell; hero?: boolean }) {
@@ -43,7 +42,7 @@ export function Comparison() {
       <Container>
         <div className="max-w-xl">
           <SectionEyebrow>The honest math</SectionEyebrow>
-          <SectionTitle>What the others charge for the same thing.</SectionTitle>
+          <SectionTitle>What the others charge extra for.</SectionTitle>
         </div>
 
         <div className="relative mt-12 overflow-hidden rounded-[var(--radius-2xl)] border border-white/[0.07]">
@@ -75,6 +74,12 @@ export function Comparison() {
           </div>
           {/* gradient edge highlighting the Capto column on wide screens */}
           <div className="pointer-events-none absolute inset-y-0 left-[calc(33%)] hidden w-px bg-gradient-to-b from-transparent via-[var(--color-violet)]/40 to-transparent lg:block" />
+        </div>
+
+        <div className="mt-10 flex justify-center">
+          <Button href="#pricing" size="lg" variant="outline">
+            See pricing
+          </Button>
         </div>
       </Container>
     </Section>

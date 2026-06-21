@@ -1,6 +1,7 @@
 import * as React from "react";
 import { redirect } from "next/navigation";
 import { AppNav } from "@/components/app/app-nav";
+import { FeedbackButton } from "@/components/feedback/feedback-button";
 import { getCurrentSession } from "@/lib/session";
 import { isConfigured } from "@/lib/env";
 
@@ -20,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen">
       <AppNav userName={userName} userEmail={userEmail} userImage={userImage} />
       <main>{children}</main>
+      <FeedbackButton variant="fixed" userEmail={userEmail} />
     </div>
   );
 }

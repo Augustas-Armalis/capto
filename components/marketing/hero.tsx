@@ -27,11 +27,11 @@ export function Hero() {
           </a>
 
           <h1 className="display mx-auto mt-7 max-w-4xl text-balance text-5xl text-white sm:text-7xl">
-            Your captions are why people <span className="text-magic">scroll.</span>
+            Your captions are losing you <span className="text-magic">views.</span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-xl text-lg text-[var(--color-fg-muted)]">
-            Bad timing kills retention. Capto fixes it in 90 seconds.
+            Capto fixes the one thing on your video that decides whether it gets watched.
           </p>
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -39,13 +39,13 @@ export function Hero() {
               Start free
               <ArrowRight className="size-4 transition-transform group-hover/btn:translate-x-0.5" />
             </Button>
-            <Button href="/pricing" size="lg" variant="outline">
+            <Button href="#pricing" size="lg" variant="outline">
               See pricing
             </Button>
           </div>
 
           <p className="mt-5 text-sm text-[var(--color-fg-subtle)]">
-            Free to start. €6.99 when you want more.
+            90 seconds per clip. No watermark. €6.99 when you want more.
           </p>
         </div>
 

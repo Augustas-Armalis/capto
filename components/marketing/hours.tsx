@@ -15,7 +15,7 @@ export function Hours() {
       <Container size="narrow">
         <div className="text-center">
           <SectionEyebrow>The hours</SectionEyebrow>
-          <SectionTitle>29 days a year.</SectionTitle>
+          <SectionTitle>You&rsquo;re losing a month a year.</SectionTitle>
           <p className="mt-4 text-lg text-[var(--color-fg-muted)]">
             That&rsquo;s what manual captions cost you.
           </p>

@@ -693,20 +693,22 @@
     }
     ctx.restore();
   }
-  // Bottom-right "Made with Capto" mark, burned into free-tier exports.
+  // "Made with Capto" mark burned into free-tier exports. Placed TOP-CENTRE (a
+  // bit down from the top) where it sits over the content and is hard to crop or
+  // cover — the whole point of a free-tier watermark.
   function drawWatermark(ctx, W, H) {
-    const px = Math.round(Math.min(W, H) * 0.026);
+    const px = Math.round(Math.min(W, H) * 0.032);
     ctx.save();
-    ctx.font = `600 ${px}px 'Inter', system-ui, sans-serif`;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'bottom';
-    try { ctx.letterSpacing = '0px'; } catch {}
-    const pad = Math.round(W * 0.03);
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = px * 0.4;
-    ctx.shadowOffsetY = px * 0.06;
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.fillText('Made with Capto', W - pad, H - pad);
+    ctx.font = `700 ${px}px 'Inter', system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    try { ctx.letterSpacing = '0.01em'; } catch {}
+    const y = Math.round(H * 0.06);
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = px * 0.5;
+    ctx.shadowOffsetY = px * 0.08;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillText('Made with Capto', W / 2, y);
     ctx.restore();
   }
   function drawCaptions(ctx, t, cues, s, W, H) {

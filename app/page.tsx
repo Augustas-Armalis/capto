@@ -12,6 +12,7 @@ import { Comparison } from "@/components/marketing/comparison";
 import { Testimonials } from "@/components/marketing/testimonials";
 import { MadeWithCapto } from "@/components/marketing/made-with-capto";
 import { PricingTable } from "@/components/marketing/pricing-table";
+import { Objections } from "@/components/marketing/objections";
 import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 import { Reveal } from "@/components/marketing/reveal";
@@ -36,6 +37,7 @@ export default function HomePage() {
         <Testimonials />
         <MadeWithCapto />
         <Reveal variant="up"><PricingTable /></Reveal>
+        <Reveal variant="up"><Objections /></Reveal>
         <Reveal variant="up"><FaqAccordion /></Reveal>
         <CtaBanner />
       </main>

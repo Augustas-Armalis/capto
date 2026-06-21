@@ -67,8 +67,8 @@ export function ValueProof() {
       <Container>
         <div className="max-w-xl">
           <SectionEyebrow>Why Capto</SectionEyebrow>
-          <SectionTitle>Same output. None of the markup.</SectionTitle>
-          <SectionLede>The pricey tools aren&rsquo;t better. They just spend more on ads.</SectionLede>
+          <SectionTitle>You stop paying for someone else&rsquo;s ad budget.</SectionTitle>
+          <SectionLede>The pricey tools aren&rsquo;t better. They&rsquo;ve just been around longer.</SectionLede>
         </div>
         <div className="mt-12 grid gap-5 lg:grid-cols-2">
           <PriceBars />

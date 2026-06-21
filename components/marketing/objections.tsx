@@ -1,10 +1,12 @@
+import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Section, SectionTitle } from "@/components/ui/section";
 
 const ITEMS = [
   {
     q: "€6.99 is suspicious.",
-    a: "No catch. Small team, no investors yet, no ad budget to fund. Pricey tools are expensive because of their burn rate, not their tech.",
+    a: "No catch. Small team, no investors yet. The pricey tools fund ads, not better captions.",
   },
   {
     q: "CapCut is free.",
@@ -16,7 +18,7 @@ const ITEMS = [
   },
   {
     q: "What if Capto disappears?",
-    a: "Built by Contles. Real company, real revenue. And every export is yours, lossless, watermark free. Even if we vanished, your videos stay clean.",
+    a: "Built by Contles. Real revenue, real team. And every export is yours, lossless and watermark free. Even if we vanished, your videos stay clean.",
   },
 ];
 
@@ -32,6 +34,13 @@ export function Objections() {
               <p className="mt-3 text-sm leading-relaxed text-[var(--color-fg-muted)]">{it.a}</p>
             </div>
           ))}
+        </div>
+
+        <div className="mt-10 flex justify-center">
+          <Button href="/signup" size="lg" variant="primary">
+            Start free
+            <ArrowRight className="size-4" />
+          </Button>
         </div>
       </Container>
     </Section>

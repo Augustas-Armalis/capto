@@ -55,7 +55,7 @@ export function Testimonials() {
       <Container>
         <div className="max-w-xl">
           <SectionEyebrow>From creators</SectionEyebrow>
-          <SectionTitle>Posted with it. Switched because of it.</SectionTitle>
+          <SectionTitle>Switched and didn&rsquo;t switch back.</SectionTitle>
         </div>
       </Container>
 

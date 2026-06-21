@@ -1158,6 +1158,19 @@ function doRenderOverlay() {
   for (const [r, b] of existingSolid) if (!seen.has(r)) b.remove();
   for (const [r, b] of existingGhost) if (!seen.has(r)) b.remove();
 
+  // Always surface the move/resize handles around the caption currently on
+  // screen — you never have to hunt for them. Grab the body to move, a corner to
+  // resize the font, a side to resize the box. (Skipped while inline-editing or
+  // mid-drag, where selCue already points at the caption being worked on.)
+  if (!state.editingCaption && !state.draggingCaption) {
+    const cur = state.selCue;
+    const stillActive = cur >= 0 && state.cues[cur] && activeCueInRow(state.cues[cur].row || 0, t) === cur;
+    if (!stillActive) {
+      let pick = -1;
+      for (let r = 0; r < state.rows; r++) { const a = activeCueInRow(r, t); if (a >= 0) { pick = a; break; } }
+      state.selCue = pick;
+    }
+  }
   highlightActive();
   positionSelBox();
 }
@@ -1191,7 +1204,7 @@ el.frame.addEventListener('pointerdown', (e) => {
   e.preventDefault(); e.stopPropagation();
   const i = state.cues.findIndex((c) => c.id === block.dataset.cue);
   if (i < 0) return;
-  state.selCue = i; positionSelBox();
+  state.selCue = i; state.draggingCaption = true; positionSelBox();
   const fr = el.frame.getBoundingClientRect();
   const sx = e.clientX, sy = e.clientY;
   let moved = false;
@@ -1213,7 +1226,7 @@ el.frame.addEventListener('pointerdown', (e) => {
     for (const sy2 of [0.12, 0.5, 0.82]) if (Math.abs((y - rowOff) - sy2) < 0.025) y = sy2 + rowOff;
     state.style.posX = x; state.style.posY = y; renderOverlay();
   };
-  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); if (moved) afterStyle(); else { highlightActive(); positionSelBox(); } };
+  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; if (moved) afterStyle(); else { highlightActive(); positionSelBox(); } };
   document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
 });
 // Resize handles. Corners (tl/tr/bl/br) scale FONT size. Side handles (ml/mr)
@@ -1224,6 +1237,7 @@ $$('.cap-handle', el.capSel).forEach((h) => h.addEventListener('pointerdown', (e
   const cueId = state.cues[i].id;
   const block = el.capLayer.querySelector(`.cap-block[data-cue="${cueId}"]`);
   if (!block) return;
+  state.draggingCaption = true;
   const which = h.dataset.h;
   const fr = el.frame.getBoundingClientRect();
   const br = block.getBoundingClientRect();
@@ -1236,7 +1250,7 @@ $$('.cap-handle', el.capSel).forEach((h) => h.addEventListener('pointerdown', (e
       state.style.boxWidth = clamp((half * 2) / fr.width, 0.18, 1.5);
       doRenderOverlay();
     };
-    const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); afterStyle(); };
+    const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; afterStyle(); };
     document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
     return;
   }
@@ -1251,7 +1265,7 @@ $$('.cap-handle', el.capSel).forEach((h) => h.addEventListener('pointerdown', (e
     state.style.letterSpacing = state.style.fontSize * lsRatio;
     doRenderOverlay();
   };
-  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); refreshSizeInput(); afterStyle(); };
+  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; refreshSizeInput(); afterStyle(); };
   document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
 }));
 function refreshSizeInput() { const i = $('#st-size'); if (i) { i.value = state.style.fontSize; const v = $('#v-size'); if (v) v.textContent = (Math.round(state.style.fontSize * 100) / 100) + 'px'; } }

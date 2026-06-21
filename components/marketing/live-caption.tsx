@@ -57,9 +57,12 @@ export function LiveCaption({
           key={i}
           className={cn(
             // Transition only paint props — never layout — so nothing jumps.
-            // NB: no background-color here, so the highlight box snaps on/off
-            // instead of two boxes cross-fading (a crisp karaoke sweep).
-            "transition-[color,text-shadow,opacity] duration-200 ease-[var(--ease-out)]",
+            // Box styles SNAP the colour + background together (only opacity eases)
+            // so e.g. Bubble's white pill + black text appear at the same instant —
+            // no white-on-white flash. Colour styles ease the accent in smoothly.
+            isBox
+              ? "transition-opacity duration-200 ease-[var(--ease-out)]"
+              : "transition-[color,text-shadow,opacity] duration-200 ease-[var(--ease-out)]",
             // Reserve the box geometry on every word, but ONLY for box styles.
             isBox && "rounded px-1.5",
             wordClass,
