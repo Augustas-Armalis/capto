@@ -43,6 +43,13 @@
       "when": 1781996842200,
       "tag": "0005_early_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782035427558,
+      "tag": "0006_clever_lorna_dane",
+      "breakpoints": true
     }
   ]
 }

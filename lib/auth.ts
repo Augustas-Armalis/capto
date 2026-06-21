@@ -1,7 +1,9 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { getDb } from "./db";
+import { eq } from "drizzle-orm";
+import { getDb, user as userTable } from "./db";
 import { env, isConfigured } from "./env";
+import { isAdmin } from "./admin";
 
 function buildAuth() {
   return betterAuth({
@@ -17,6 +19,21 @@ function buildAuth() {
       // Let users change their own email from Settings (direct change — no
       // verification step, since Capto's pay-first accounts start unverified).
       changeEmail: { enabled: true },
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          // Admin accounts get full (Ultra) access automatically, so the founder
+          // login is "everything unlocked" the moment it's created.
+          after: async (u: { id: string; email?: string | null }) => {
+            try {
+              if (isAdmin(u.email)) {
+                await getDb().update(userTable).set({ plan: "ultra" }).where(eq(userTable.id, u.id));
+              }
+            } catch { /* non-fatal */ }
+          },
+        },
+      },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 30,

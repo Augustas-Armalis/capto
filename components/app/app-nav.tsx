@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { LogOut, Settings, CreditCard, FolderOpen, ChevronLeft, ChevronDown, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
+import { isAdmin } from "@/lib/admin";
 
 // Minimal top bar for the whole app — no sidebar. Primary action ("New") +
 // Projects up front; everything else lives in a compact avatar menu.
@@ -35,6 +36,7 @@ export function AppNav({
   }
 
   const initial = (userName || userEmail || "?").trim().charAt(0).toUpperCase();
+  const adminUser = isAdmin(userEmail);
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 backdrop-blur-xl">
@@ -78,8 +80,8 @@ export function AppNav({
                     { href: "/dashboard", label: "Projects", icon: FolderOpen },
                     { href: "/billing", label: "Billing", icon: CreditCard },
                     { href: "/settings", label: "Settings", icon: Settings },
-                    ...(userEmail?.toLowerCase() === "augustas.armalis@aiacquisition.com"
-                      ? [{ href: "/admin/learning", label: "Learning (admin)", icon: Sparkles }]
+                    ...(adminUser
+                      ? [{ href: "/admin", label: "Admin panel", icon: Sparkles }]
                       : []),
                   ].map((it) => (
                     <Link

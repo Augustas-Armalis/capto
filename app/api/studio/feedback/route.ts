@@ -5,10 +5,9 @@ import { getCurrentSession } from "@/lib/session";
 import { getDb, captionCorrection } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
 import { recordEdits, bumpVocabulary } from "@/lib/usage";
+import { isAdmin } from "@/lib/admin";
 
 export const runtime = "nodejs";
-
-const ADMIN_EMAIL = "augustas.armalis@aiacquisition.com";
 
 // ── edit-signal helpers (shared shape with /api/ai/feedback) ──
 function toWords(s: string): string[] {
@@ -154,7 +153,7 @@ export async function GET() {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
-  if ((session.user.email ?? "").toLowerCase() !== ADMIN_EMAIL) {
+  if (!isAdmin(session.user.email)) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 

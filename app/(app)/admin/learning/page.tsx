@@ -4,11 +4,10 @@ import { desc, sql } from "drizzle-orm";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, aiMetric, userVocabulary, captionCorrection } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
+import { isAdmin } from "@/lib/admin";
 
 export const metadata: Metadata = { title: "Learning" };
 export const dynamic = "force-dynamic";
-
-const ADMIN_EMAIL = "augustas.armalis@aiacquisition.com";
 
 // Capto's learning loop, made visible: which engine people correct the least
 // (the signal the "Auto" engine ranks on), the vocabulary it's learned, and how
@@ -16,7 +15,7 @@ const ADMIN_EMAIL = "augustas.armalis@aiacquisition.com";
 export default async function LearningPage() {
   const session = await getCurrentSession();
   if (!session?.user?.id) redirect("/signin");
-  if ((session.user.email ?? "").toLowerCase() !== ADMIN_EMAIL) redirect("/dashboard");
+  if (!isAdmin(session.user.email)) redirect("/dashboard");
 
   let engines: { provider: string; model: string; runs: number; words: number; editedWords: number; accuracy: number }[] = [];
   let vocab: { term: string; weight: number }[] = [];
@@ -62,14 +61,13 @@ export default async function LearningPage() {
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-10 lg:px-10">
-      <h1 className="heading text-4xl text-[var(--color-fg)]">Learning</h1>
-      <p className="mt-2 text-[var(--color-fg-muted)]">
-        How Capto&rsquo;s caption AI is improving from real usage — admin only.
+    <div className="px-6 py-8 lg:px-10">
+      <p className="mb-2 text-sm text-[var(--color-fg-muted)]">
+        How Capto&rsquo;s caption AI is improving from real usage.
       </p>
 
       {/* headline stats */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-4">
+      <div className="mt-6 grid gap-4 sm:grid-cols-4">
         {[
           { label: "Transcriptions", value: totalRuns.toLocaleString() },
           { label: "Words transcribed", value: totalWords.toLocaleString() },

@@ -4,10 +4,12 @@ import { getCurrentSession } from "@/lib/session";
 import { sendEmail } from "@/lib/email";
 import { isConfigured } from "@/lib/env";
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
+import { getDb, feedback as feedbackTable } from "@/lib/db";
+import { ADMIN_EMAILS } from "@/lib/admin";
 
 export const runtime = "nodejs";
 
-const FOUNDER_EMAIL = "augustas.armalis@aiacquisition.com";
+const FOUNDER_EMAIL = ADMIN_EMAILS[0] || "augustas.armalis@aiacquisition.com";
 
 const Body = z.object({
   kind: z.enum(["bug", "idea"]),
@@ -67,6 +69,23 @@ export async function POST(req: Request) {
       </table>
       <div style="margin-top:18px;padding:14px 16px;background:#f5f5f7;border-radius:10px;white-space:pre-wrap;">${esc(message)}</div>
     </div>`;
+
+  // Persist so the founder can browse reports in the admin panel. Best-effort:
+  // tolerate the table not being migrated yet so the email path still works.
+  if (isConfigured.db()) {
+    try {
+      await getDb().insert(feedbackTable).values({
+        id: crypto.randomUUID(),
+        userId: accountId ?? null,
+        email: accountEmail ?? email ?? null,
+        kind,
+        message,
+        page: page ?? null,
+      });
+    } catch {
+      /* feedback table not migrated yet — skip the DB write */
+    }
+  }
 
   if (isConfigured.email()) {
     // sendEmail no-ops/returns false on failure; never throw to the user.

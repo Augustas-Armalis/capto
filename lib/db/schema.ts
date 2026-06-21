@@ -236,7 +236,21 @@ export const captionCorrection = pgTable("caption_correction", {
   payload: jsonb("payload"), // freeform: { aiStart, aiEnd, finalStart, finalEnd, styleBefore, styleAfter, ... }
 });
 
+// ─── User feedback (bug reports / feature ideas from the "Leave feedback" box) ──
+// Stored so the founder can see them in the admin panel (also emailed live).
+export const feedback = pgTable("feedback", {
+  id: text("id").primaryKey(),
+  userId: text("user_id"), // nullable — feedback can be anonymous
+  email: text("email"),
+  kind: text("kind").notNull(), // 'bug' | 'idea'
+  message: text("message").notNull(),
+  page: text("page"),
+  resolved: boolean("resolved").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export type User = typeof user.$inferSelect;
 export type Project = typeof project.$inferSelect;
 export type UserCaptionPreset = typeof userCaptionPreset.$inferSelect;
 export type CaptionCorrection = typeof captionCorrection.$inferSelect;
+export type Feedback = typeof feedback.$inferSelect;

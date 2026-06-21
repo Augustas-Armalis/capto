@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/session";
 import { readTranscriptionUsage } from "@/lib/usage";
 import { isConfigured } from "@/lib/env";
+import { isAdmin } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,18 @@ export async function GET() {
 
   const session = await getCurrentSession();
   if (!session?.user?.id) return NextResponse.json(anon);
+
+  // Admins get everything unlocked — Ultra, no watermark, unlimited.
+  if (isAdmin(session.user.email)) {
+    return NextResponse.json({
+      signedIn: true,
+      name: session.user.name ?? null,
+      email: session.user.email ?? null,
+      plan: "ultra",
+      watermark: false,
+      minutes: { used: 0, limit: null, remaining: null, unlimited: true },
+    });
+  }
 
   const usage = await readTranscriptionUsage(session.user.id).catch(() => null);
   const plan = usage?.plan ?? "free";

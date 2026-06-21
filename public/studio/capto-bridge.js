@@ -1218,14 +1218,15 @@
     const icBilling = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>';
     const icTheme = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor" stroke="none"/></svg>';
     const icOut = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>';
-    const isAdmin = (u.email || '').toLowerCase() === 'augustas.armalis@aiacquisition.com';
+    const ADMINS = ['trycapto@gmail.com', 'augustas.armalis@aiacquisition.com'];
+    const isAdmin = ADMINS.indexOf((u.email || '').toLowerCase()) >= 0;
     const icLearn = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5 10.1 10.9 5.5 9l4.6-1.4z"/></svg>';
     menu.innerHTML =
       `<div class="hd"><div class="nm2">${escHtml(nm)}</div><div class="em">${escHtml(u.email || '')}</div></div>` +
       `<div class="sep"></div>` +
       `<button data-a="settings">${icSettings} Settings</button>` +
       `<button data-a="billing">${icBilling} Billing</button>` +
-      (isAdmin ? `<button data-a="learning">${icLearn} Learning (admin)</button>` : '') +
+      (isAdmin ? `<button data-a="admin">${icLearn} Admin panel</button>` : '') +
       `<button data-a="theme">${icTheme} Toggle theme</button>` +
       `<div class="sep"></div>` +
       `<button data-a="signout">${icOut} Sign out</button>`;
@@ -1234,7 +1235,7 @@
     menu.style.right = Math.max(12, window.innerWidth - r.right) + 'px';
     menu.querySelector('[data-a="settings"]').onclick = goTop('/settings');
     menu.querySelector('[data-a="billing"]').onclick = goTop('/billing');
-    if (isAdmin) menu.querySelector('[data-a="learning"]').onclick = goTop('/admin/learning');
+    if (isAdmin) menu.querySelector('[data-a="admin"]').onclick = goTop('/admin');
     menu.querySelector('[data-a="theme"]').onclick = () => { toggleTheme(); closeProfileMenu(); };
     menu.querySelector('[data-a="signout"]').onclick = () => { closeProfileMenu(); signOut(); };
     setTimeout(() => document.addEventListener('pointerdown', onDocDown, true), 0);
