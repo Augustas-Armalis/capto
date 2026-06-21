@@ -2,16 +2,20 @@
 
 import * as React from "react";
 
-// A reel clip that loads once and then just loops — no pause/resume churn.
-//   • preload="metadata" + start playing the FIRST time it nears the viewport,
-//     then stop observing, so it never gets paused → reloaded → restarted
-//     (that black-out-and-replay was the bug on hover/scroll).
+// A reel clip for the "Made with Capto" marquee.
+//   • Light H.264 MP4 (hardware-decoded → many can run at once) + a poster JPG,
+//     so a not-yet-loaded or paused clip shows a still frame, never a black box.
+//   • PLAY only while near the viewport, PAUSE when it scrolls away. Pausing a
+//     loaded <video> just freezes the current frame — no reload/black-out (that
+//     bug came from REMOUNTING, which the stateless Marquee no longer does).
+//     This caps how many clips decode at once, so the browser never evicts/blanks
+//     one when the row is wide (the "randomly disappeared" symptom).
 //   • muted + loop so autoplay is allowed and it runs forever.
-//   • onError → soft gradient fallback (e.g. AV1 on Safari) instead of a broken
-//     black box that breaks the row.
+//   • onError → soft gradient fallback instead of a broken box.
 export function VideoReel({ src, index = 0 }: { src: string; index?: number }) {
   const ref = React.useRef<HTMLVideoElement | null>(null);
   const [broken, setBroken] = React.useState(false);
+  const poster = `/videos/posters/${src.replace(/\.[^.]+$/, "")}.jpg`;
 
   React.useEffect(() => {
     const v = ref.current;
@@ -22,11 +26,12 @@ export function VideoReel({ src, index = 0 }: { src: string; index?: number }) {
           if (e.isIntersecting) {
             const p = v.play();
             if (p && typeof p.catch === "function") p.catch(() => {});
-            io.unobserve(v); // started — leave it looping, never pause/restart it
+          } else {
+            v.pause(); // freezes on the current frame — no reload
           }
         }
       },
-      { rootMargin: "400px" },
+      { rootMargin: "150px" },
     );
     io.observe(v);
     return () => io.disconnect();
@@ -48,6 +53,7 @@ export function VideoReel({ src, index = 0 }: { src: string; index?: number }) {
         <video
           ref={ref}
           src={`/videos/${src}`}
+          poster={poster}
           muted
           loop
           playsInline

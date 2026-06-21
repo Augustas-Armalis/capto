@@ -52,11 +52,14 @@ export function MadeWithCapto() {
 
       <Marquee
         items={items}
-        durationSec={hasVideos ? 70 : 80}
+        durationSec={hasVideos ? 150 : 80}
         gapPx={16}
-        // Videos are heavy — keep DOM copies low (one group of clips, mirrored
-        // for the seamless loop). Placeholders are cheap, so repeat more.
-        repeat={hasVideos ? (videos.length < 5 ? 2 : 1) : 3}
+        // Repeat the clip set so one group is wider than any screen (incl. 4K /
+        // ultra-wide) — that's what makes the -50% loop seam-free on big monitors.
+        // Mirrored again for the loop. Clips are light H.264 and pause when
+        // off-screen, so the extra DOM copies are cheap (only the on-screen
+        // handful actually decode at once).
+        repeat={hasVideos ? 3 : 3}
         pauseOnHover
         className="mt-12"
         maskClass="[mask-image:linear-gradient(90deg,transparent,#000_5%,#000_95%,transparent)]"
