@@ -80,25 +80,53 @@
   // handle is missing, the file moved, or permission was denied (e.g. a new
   // device or a browser without the API). Chromium-only; other browsers degrade
   // gracefully to the manual relink.
-  const HANDLE_DB = 'capto-media', HANDLE_STORE = 'handles';
+  const HANDLE_DB = 'capto-media', HANDLE_STORE = 'handles', BLOB_STORE = 'blobs';
   function idb() {
     return new Promise((resolve, reject) => {
       let req;
-      try { req = indexedDB.open(HANDLE_DB, 1); } catch (e) { return reject(e); }
-      req.onupgradeneeded = () => { try { req.result.createObjectStore(HANDLE_STORE); } catch {} };
+      try { req = indexedDB.open(HANDLE_DB, 2); } catch (e) { return reject(e); }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        try { if (!db.objectStoreNames.contains(HANDLE_STORE)) db.createObjectStore(HANDLE_STORE); } catch {}
+        try { if (!db.objectStoreNames.contains(BLOB_STORE)) db.createObjectStore(BLOB_STORE); } catch {}
+      };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
   }
-  async function idbPut(key, val) {
-    try { const db = await idb(); await new Promise((res, rej) => { const tx = db.transaction(HANDLE_STORE, 'readwrite'); tx.objectStore(HANDLE_STORE).put(val, key); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch {}
+  async function idbPutIn(store, key, val) {
+    const db = await idb();
+    await new Promise((res, rej) => { const tx = db.transaction(store, 'readwrite'); tx.objectStore(store).put(val, key); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
   }
-  async function idbGet(key) {
-    try { const db = await idb(); return await new Promise((res, rej) => { const tx = db.transaction(HANDLE_STORE, 'readonly'); const r = tx.objectStore(HANDLE_STORE).get(key); r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error); }); } catch { return null; }
+  async function idbGetIn(store, key) {
+    try { const db = await idb(); return await new Promise((res, rej) => { const tx = db.transaction(store, 'readonly'); const r = tx.objectStore(store).get(key); r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error); }); } catch { return null; }
   }
-  async function idbDel(key) {
-    try { const db = await idb(); await new Promise((res) => { const tx = db.transaction(HANDLE_STORE, 'readwrite'); tx.objectStore(HANDLE_STORE).delete(key); tx.oncomplete = res; tx.onerror = res; }); } catch {}
+  async function idbDelIn(store, key) {
+    try { const db = await idb(); await new Promise((res) => { const tx = db.transaction(store, 'readwrite'); tx.objectStore(store).delete(key); tx.oncomplete = res; tx.onerror = res; }); } catch {}
   }
+  // handles (File System Access) — survive across devices only if re-granted
+  async function idbPut(key, val) { try { await idbPutIn(HANDLE_STORE, key, val); } catch {} }
+  const idbGet = (key) => idbGetIn(HANDLE_STORE, key);
+  const idbDel = (key) => idbDelIn(HANDLE_STORE, key);
+  // video blobs — the robust same-device store: the actual file bytes, so reopen
+  // (after refresh, or days later) links silently with NO path prompt / permission.
+  async function idbPutBlob(key, file) { await idbPutIn(BLOB_STORE, key, file); } // may throw on quota — caller catches
+  const idbGetBlob = (key) => idbGetIn(BLOB_STORE, key);
+  const idbDelBlob = (key) => idbDelIn(BLOB_STORE, key);
+  // Keep only the most-recent few video blobs so storage can't grow without
+  // bound (older projects fall back to the handle / manual relink).
+  const BLOB_LRU_KEY = 'capto-blob-ids', BLOB_LRU_MAX = 6;
+  function lruList() { try { return JSON.parse(localStorage.getItem(BLOB_LRU_KEY) || '[]'); } catch { return []; } }
+  function lruSave(ids) { try { localStorage.setItem(BLOB_LRU_KEY, JSON.stringify(ids)); } catch {} }
+  async function storeBlob(id, file) {
+    try {
+      await idbPutBlob(id, file);
+      let ids = [id, ...lruList().filter((x) => x !== id)];
+      for (const e of ids.slice(BLOB_LRU_MAX)) { try { await idbDelBlob(e); } catch {} }
+      lruSave(ids.slice(0, BLOB_LRU_MAX));
+    } catch { /* quota or error — blob just won't be cached for this one */ }
+  }
+  function forgetBlob(id) { idbDelBlob(id); lruSave(lruList().filter((x) => x !== id)); }
   const supportsHandles = typeof window.showOpenFilePicker === 'function';
 
   // The handle captured during the most recent file pick / drop, awaiting the
@@ -116,10 +144,24 @@
       if (h && h.kind === 'file') await idbPut(id, h);
     } catch { pendingHandle = null; }
   }
-  // Re-acquire the saved handle and load its file into __captoMedia. Must be
-  // KICKED OFF from within a user gesture (the project click) so requestPermission
-  // is allowed to prompt; once granted the read is silent on later opens.
+  // Re-link a project's video without asking. Tries, in order:
+  //  1) the saved video BLOB (device-local bytes) — fully silent, survives refresh
+  //     and days, the primary path that makes reopen "just work" on this device;
+  //  2) a saved FileSystemFileHandle (needs a one-time permission re-grant).
+  // Only when BOTH miss do we fall back to the manual "locate video" prompt.
   async function relinkFromHandle(id) {
+    // 1) blob path — no gesture, no permission.
+    try {
+      const blob = await idbGetBlob(id);
+      if (blob) {
+        const file = blob instanceof File ? blob : new File([blob], (captoProject && captoProject.originalName) || 'video', { type: (blob && blob.type) || 'video/mp4' });
+        const { url, meta } = await readVideoMeta(file);
+        if (window.__captoMedia && window.__captoMedia.url) { try { URL.revokeObjectURL(window.__captoMedia.url); } catch {} }
+        window.__captoMedia = { id, file, url, meta };
+        return true;
+      }
+    } catch {}
+    // 2) handle path — File System Access (may prompt for permission once).
     if (!supportsHandles) return false;
     try {
       const h = await idbGet(id);
@@ -164,6 +206,7 @@
     const { url, meta } = await readVideoMeta(file);
     window.__captoMedia = { id, file, url, meta, handle: handle || undefined };
     if (handle) await idbPut(id, handle); else await idbDel(id);
+    await storeBlob(id, file); // so the next reopen is silent
     clearRelink();
     const v = document.getElementById('video');
     if (v) { v.src = url; v.load(); }
@@ -271,8 +314,9 @@
   // Capto's /api/transcribe returns flat word timings; Subby wants grouped cues.
   // Break into caption lines on pauses / max words / max chars (punchy chunks).
   function wordsToCues(words) {
-    // Punchy 1–3 word captions by default — clean, fast, easy to read on phones.
-    const MAXW = 3, MAXGAP = 0.45, MAXCHARS = 24;
+    // Clean social captions: up to 4 words / ~32 chars per line so lines read
+    // SMALLER + WIDER (not giant 1-word blocks), still broken on sentences/pauses.
+    const MAXW = 4, MAXGAP = 0.45, MAXCHARS = 32;
     // Timing polish: a caption lingers a beat past its last word (LEAD_OUT), and
     // through SHORT pauses (extends toward the next word, minus GAP_PAD). But on a
     // BIG pause (> HIDE_GAP of silence) it disappears so captions don't hang on
@@ -627,18 +671,8 @@
     let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
     const toks = words.map((w, i) => ({ text: applyCaseLocal(w.word, s.caseMode), idx: i }));
     const measure = () => { for (const tk of toks) tk.w = ctx.measureText(tk.text).width; return ctx.measureText(' ').width || fontPx * 0.3; };
-    let spaceW = measure();
+    const spaceW = measure();
     const hasBox = (typeof s.boxWidth === 'number' && s.boxWidth > 0);
-    // Stretch short single-line cues to fill the width — mirrors the preview's
-    // fitBlockToFrame up-scale so 1–3 word captions render big and full, and what
-    // you see in the editor matches the exported video.
-    if (!hasBox) {
-      const singleW = toks.reduce((a, tk) => a + tk.w, 0) + spaceW * Math.max(0, toks.length - 1);
-      if (singleW > 0 && singleW <= 0.92 * W && singleW < 0.62 * W) {
-        const k2 = Math.max(1, Math.min(1.6, (0.74 * W) / singleW));
-        if (k2 > 1.01) { fontPx = fontPx * k2; setFont(fontPx); spaceW = measure(); }
-      }
-    }
     const maxW = hasBox ? s.boxWidth * W : 0.92 * W;
     const lines = []; let line = []; let lineW = 0;
     for (const tk of toks) {
@@ -1000,7 +1034,8 @@
         catch { id = genId(); } // offline / signed-out fallback (won't sync)
         if (window.__captoMedia && window.__captoMedia.url) { try { URL.revokeObjectURL(window.__captoMedia.url); } catch {} }
         window.__captoMedia = { id, file, url, meta };
-        await storeHandleFor(id); // remember the device file so reopening auto-links
+        await storeHandleFor(id); // remember the device file handle (cross-session)
+        await storeBlob(id, file); // robust same-device reopen (no prompt)
         currentProjectId = id;
         captoProject = state;
         pendingRelinkId = null;
@@ -1079,7 +1114,7 @@
         })();
       }
       if (sub === '' && method === 'DELETE') {
-        return (async () => { await captoApi.del(id); delete thumbCache[id]; await idbDel(id); return json({ ok: true }); })();
+        return (async () => { await captoApi.del(id); delete thumbCache[id]; await idbDel(id); forgetBlob(id); return json({ ok: true }); })();
       }
     }
 
@@ -1135,19 +1170,23 @@
     const menu = document.createElement('div');
     menu.id = 'capto-menu';
     menu.className = 'capto-menu';
-    const icUser = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/></svg>';
+    const icSettings = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>';
+    const icBilling = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>';
     const icTheme = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor" stroke="none"/></svg>';
     const icOut = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>';
     menu.innerHTML =
-      `<div class="em">${escHtml(u.email || nm)}</div>` +
-      `<button data-a="profile">${icUser} Profile settings</button>` +
+      `<div class="hd"><div class="nm2">${escHtml(nm)}</div><div class="em">${escHtml(u.email || '')}</div></div>` +
+      `<div class="sep"></div>` +
+      `<button data-a="settings">${icSettings} Settings</button>` +
+      `<button data-a="billing">${icBilling} Billing</button>` +
       `<button data-a="theme">${icTheme} Toggle theme</button>` +
       `<div class="sep"></div>` +
       `<button data-a="signout">${icOut} Sign out</button>`;
     document.body.appendChild(menu);
     menu.style.top = (r.bottom + 8) + 'px';
     menu.style.right = Math.max(12, window.innerWidth - r.right) + 'px';
-    menu.querySelector('[data-a="profile"]').onclick = goTop('/settings');
+    menu.querySelector('[data-a="settings"]').onclick = goTop('/settings');
+    menu.querySelector('[data-a="billing"]').onclick = goTop('/billing');
     menu.querySelector('[data-a="theme"]').onclick = () => { toggleTheme(); closeProfileMenu(); };
     menu.querySelector('[data-a="signout"]').onclick = () => { closeProfileMenu(); signOut(); };
     setTimeout(() => document.addEventListener('pointerdown', onDocDown, true), 0);
@@ -1179,11 +1218,10 @@
     }
     const nm = u.name || (u.email ? u.email.split('@')[0] : 'Account');
     const initial = (nm.trim()[0] || 'A').toUpperCase();
+    // Matches the platform AppNav (settings/billing): avatar + chevron, opening
+    // a consistent account dropdown. Settings/Billing live inside the menu.
     nav.innerHTML =
-      `<button class="btn ghost icon capto-gear" id="capto-gear" title="Settings"><svg class="ic"><use href="#i-settings"/></svg></button>` +
-      `<button class="capto-pfp" id="capto-pfp"><span class="av">${initial}</span><span class="nm">${escHtml(nm)}</span></button>`;
-    const gear = document.getElementById('capto-gear');
-    if (gear) gear.onclick = goTop('/settings');
+      `<button class="capto-pfp" id="capto-pfp" title="Account"><span class="av">${initial}</span><svg class="capto-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>`;
     const pfp = document.getElementById('capto-pfp');
     if (pfp) pfp.onclick = (e) => { e.stopPropagation(); document.getElementById('capto-menu') ? closeProfileMenu() : openProfileMenu(pfp); };
   }
@@ -1301,17 +1339,20 @@
       };
       new MutationObserver(applyThumbs).observe(grid, { childList: true });
     }
-    // "Powered by Contles" chip at the foot of the home.
+    // "Powered by Contles" chip at the foot of the home — clickable → Contles.
     const wrap = document.querySelector('.home-wrap');
     if (wrap && !document.getElementById('capto-contles')) {
       const c = document.createElement('div');
       c.id = 'capto-contles';
       c.style.cssText = 'margin:36px 0 8px;display:flex;justify-content:center';
       c.innerHTML =
-        `<span style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:var(--faint);` +
-        `border:1px solid var(--line);border-radius:99px;padding:6px 13px">` +
+        `<a href="https://contles.com?ref=capto" target="_blank" rel="noopener noreferrer" ` +
+        `style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:var(--faint);text-decoration:none;` +
+        `border:1px solid var(--line);border-radius:99px;padding:6px 13px;transition:.14s">` +
         `<span style="width:6px;height:6px;border-radius:50%;background:linear-gradient(120deg,#82a5ff,#62d8ff)"></span>` +
-        `Powered by Contles</span>`;
+        `Powered by <b style="color:var(--text);font-weight:600">Contles</b></a>`;
+      const a = c.querySelector('a');
+      if (a) { a.onmouseenter = () => { a.style.borderColor = 'var(--line-2)'; a.style.color = 'var(--muted)'; }; a.onmouseleave = () => { a.style.borderColor = 'var(--line)'; a.style.color = 'var(--faint)'; }; }
       wrap.appendChild(c);
     }
     setupSafeZones();

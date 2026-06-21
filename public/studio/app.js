@@ -1102,25 +1102,19 @@ function renderOverlay() {
 }
 function fitBlockToFrame(block) {
   if (!block || !el.frame) return;
-  // When the user has set an explicit box width, respect it — don't auto-fit
+  // When the user has set an explicit box width, respect it — don't auto-shrink
   // (that's what previously made captions "compress" unexpectedly).
-  if (typeof state.style.boxWidth === 'number' && state.style.boxWidth > 0) { block.style.transform = 'translate(-50%, -50%)'; block.dataset.fit = '1'; return; }
-  // Remove any prior scale so we measure the natural width
+  if (typeof state.style.boxWidth === 'number' && state.style.boxWidth > 0) { block.style.transform = 'translate(-50%, -50%)'; return; }
+  // Remove any prior scale so we measure the natural width.
   block.style.transform = 'translate(-50%, -50%)';
   const fw = el.frame.clientWidth;
   const bw = block.offsetWidth;
-  let scale = 1;
-  if (bw > fw * 0.95) {
-    // Too wide (long word on a portrait clip) → shrink to fit. Caps at 0.5×.
-    scale = Math.max(0.5, (fw * 0.92) / bw);
-  } else {
-    // Short single-line cue → stretch to fill the width so a 1–3 word caption
-    // reads big and full instead of tiny in the middle of the frame.
-    const singleLine = !block.querySelector('br');
-    if (singleLine && bw > 0 && bw < fw * 0.62) scale = clamp((fw * 0.74) / bw, 1, 1.6);
-  }
-  block.dataset.fit = String(scale);
-  block.style.transform = scale === 1 ? 'translate(-50%, -50%)' : `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
+  if (bw <= fw * 0.95) return; // fits — no scaling (caption sizing is the font size, not a transform)
+  // Only ever SHRINK an over-wide caption to fit (e.g. one long word on a
+  // portrait clip). Never up-scale — the on-screen size must equal the real font
+  // size so the corner-resize handles map 1:1 (matches original Subby).
+  const scale = Math.max(0.5, (fw * 0.92) / bw);
+  block.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
 }
 function doRenderOverlay() {
   if (!state.meta || state.editingCaption) return;
@@ -1181,14 +1175,13 @@ function positionSelBox() {
   const cueId = i >= 0 && state.cues[i] ? state.cues[i].id : null;
   const block = cueId ? el.capLayer.querySelector(`.cap-block[data-cue="${cueId}"]`) : null;
   if (!block) { el.capSel.classList.remove('on'); return; }
-  // The block uses transform:translate(-50%,-50%) [+ scale] with left/top in px
-  // relative to .frame. The sel box mirrors left/top and the RENDERED size, so it
-  // tracks the caption even when fitBlockToFrame stretched/shrank it.
-  const fit = parseFloat(block.dataset.fit) || 1;
+  // The block uses transform:translate(-50%,-50%) with left/top in px relative to
+  // .frame. The sel box does the same, so we mirror left/top exactly + measure
+  // the rendered size.
   el.capSel.style.left = block.style.left;
   el.capSel.style.top = block.style.top;
-  el.capSel.style.width = (block.offsetWidth * fit) + 'px';
-  el.capSel.style.height = (block.offsetHeight * fit) + 'px';
+  el.capSel.style.width = block.offsetWidth + 'px';
+  el.capSel.style.height = block.offsetHeight + 'px';
   el.capSel.classList.add('on');
 }
 

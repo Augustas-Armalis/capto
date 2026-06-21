@@ -5,6 +5,7 @@ import { ArrowRight, Check, Crown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PricingTable } from "@/components/marketing/pricing-table";
+import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 import { getPlan, type PlanId } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
@@ -269,6 +270,10 @@ export function BillingClient({
           </p>
         )}
         <PricingTable withChrome={false} currentPlan={plan} onPlanClick={(id, iv) => changePlan(id as PlanId, iv)} />
+      </div>
+
+      <div className="mt-12 flex justify-center">
+        <PoweredByContles variant="chip" />
       </div>
     </div>
   );

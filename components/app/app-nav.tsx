@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { LogOut, Settings, CreditCard, FolderOpen, ChevronLeft, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -19,7 +19,6 @@ export function AppNav({
   userEmail?: string;
   userImage?: string | null;
 }) {
-  const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
@@ -36,7 +35,6 @@ export function AppNav({
   }
 
   const initial = (userName || userEmail || "?").trim().charAt(0).toUpperCase();
-  const onDashboard = pathname === "/dashboard";
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 backdrop-blur-xl">
@@ -50,26 +48,13 @@ export function AppNav({
         </Link>
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/dashboard"
-            className={cn(
-              "hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors sm:inline-flex",
-              onDashboard
-                ? "bg-[var(--color-bg-elev)] text-[var(--color-fg)]"
-                : "text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]",
-            )}
-          >
-            <FolderOpen className="size-4" />
-            Projects
-          </Link>
-
           <div className="relative">
             <button
               onClick={() => setMenuOpen((o) => !o)}
-              className="flex items-center gap-1 rounded-full p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+              className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-0.5 pr-1.5 text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)]"
               aria-label="Account menu"
             >
-              <span className="inline-flex size-8 items-center justify-center overflow-hidden rounded-full bg-[var(--color-brand)]/15 text-sm font-semibold text-[var(--color-brand)]">
+              <span className="inline-flex size-[30px] items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#a0c1ff] to-[#82a5ff] text-[12.5px] font-bold text-[#0b0c14]">
                 {userImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={userImage} alt="" className="size-full object-cover" />

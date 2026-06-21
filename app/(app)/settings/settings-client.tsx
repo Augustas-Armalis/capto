@@ -16,6 +16,7 @@ import {
   User,
   Users,
   ShieldAlert,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { TeamSection } from "@/components/app/team-section";
 import { STT_MODELS, PROVIDER_LABEL, PLAN_RANK, type AiProvider } from "@/lib/ai/models";
 import { changeEmail, changePassword } from "@/lib/auth-client";
+import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 import { cn } from "@/lib/utils";
 
 type Provider = AiProvider;
@@ -490,7 +492,38 @@ export function SettingsClient({
                   : "Keys are encrypted with AES-256-GCM. Add a Groq key to run uncapped, or any other provider to use its models."}
               </p>
               <div className="mt-5 space-y-4">
-                {PROVIDERS.filter((p) => plan !== "free" || p.id === "groq").map((p) => (
+                {PROVIDERS.map((p) => {
+                  // Free users can only use Groq; the paid providers are shown but
+                  // locked so they can see the upgrade path (server still 403s them).
+                  const locked = plan === "free" && p.id !== "groq";
+                  if (locked) {
+                    return (
+                      <div key={p.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/20 p-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex size-8 items-center justify-center rounded-lg bg-[var(--color-bg-elev)] text-[var(--color-fg-subtle)]">
+                              <Lock className="size-4" aria-hidden />
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-[var(--color-fg-muted)]">{p.name}</span>
+                                <Badge variant="outline">Pro</Badge>
+                              </div>
+                              <div className="text-xs text-[var(--color-fg-subtle)]">{p.hint}</div>
+                            </div>
+                          </div>
+                          <Button href="/billing" variant="secondary" size="sm">
+                            Upgrade to Pro
+                            <ArrowRight className="size-4" />
+                          </Button>
+                        </div>
+                        <p className="mt-3 text-xs text-[var(--color-fg-subtle)]">
+                          Bring your own {p.name} key on Pro to run its models on your account.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
                   <div key={p.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-5">
                     <div className="flex items-center justify-between">
                       <div>
@@ -519,7 +552,13 @@ export function SettingsClient({
                       <p className="mt-2 text-xs text-[var(--color-brand)]">Saved.</p>
                     )}
                   </div>
-                ))}
+                  );
+                })}
+                {plan === "free" && (
+                  <p className="text-xs text-[var(--color-fg-subtle)]">
+                    Bring your own OpenAI / Deepgram / Gemini key on Pro — Groq stays free.
+                  </p>
+                )}
               </div>
             </Section>
           )}
@@ -537,6 +576,10 @@ export function SettingsClient({
             </Section>
           )}
         </div>
+      </div>
+
+      <div className="mt-12 flex justify-center">
+        <PoweredByContles variant="chip" />
       </div>
     </div>
   );
