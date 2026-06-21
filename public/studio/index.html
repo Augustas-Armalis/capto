@@ -113,17 +113,16 @@
         <button class="tab active" data-tab="captions">Captions</button>
         <button class="tab" data-tab="script">Script</button>
         <button class="tab" data-tab="style">Style</button>
-        <button class="tab" data-tab="settings">Settings</button>
       </div>
 
       <div class="tabpane" id="tab-captions">
         <div class="retranscribe">
           <div class="rt-controls">
-            <select id="editEngine" title="Engine"></select>
-            <select id="editLang" title="Language"></select>
+            <select id="editEngine" title="Caption engine"></select>
+            <select id="editLang" title="Spoken language"></select>
             <select id="editModel" title="Local model" hidden></select>
           </div>
-          <button class="btn ghost icon" id="retranscribeBtn" title="Re-transcribe from audio">↻</button>
+          <button class="btn ghost sm" id="retranscribeBtn" title="Regenerate captions from the audio with the chosen engine + language">↻ Regenerate</button>
         </div>
         <div class="rowsel" id="capRowSel" hidden><label>Row</label><select id="capRow"></select></div>
         <div class="cue-toolbar">
@@ -151,57 +150,6 @@
       </div>
 
       <div class="tabpane" id="tab-style" hidden></div>
-
-      <div class="tabpane" id="tab-settings" hidden>
-        <div class="section">
-          <p class="sec-title">Appearance</p>
-          <div class="field">
-            <label>Theme</label>
-            <div class="seg" id="setTheme">
-              <button data-v="dark">Dark</button>
-              <button data-v="light">Light</button>
-              <button data-v="system">Auto</button>
-            </div>
-          </div>
-        </div>
-        <div class="section">
-          <p class="sec-title">Editor</p>
-          <label class="toggle-mini" style="font-size:13px;color:var(--text);">
-            <input type="checkbox" id="setPreviewClick">
-            <span>Preview caption on sidebar click <span class="muted">— plays just that caption when you click its card</span></span>
-          </label>
-        </div>
-        <div class="section">
-          <p class="sec-title">Transcription</p>
-          <div class="field"><label>Engine</label><select id="setEngine"></select></div>
-          <div class="field" id="setModelField"><label>Local model — bigger = better, slower</label><select id="setModel"></select></div>
-          <div class="field"><label>Default spoken language</label><select id="setLang"></select></div>
-        </div>
-        <div class="section">
-          <p class="sec-title">API keys</p>
-          <div class="field">
-            <label>Groq <span class="muted">— free online (recommended)</span></label>
-            <input type="password" id="setGroqKey" placeholder="gsk_..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
-          </div>
-          <div class="field">
-            <label>OpenAI <span class="muted">— optional, paid</span></label>
-            <input type="password" id="setOpenaiKey" placeholder="sk-..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
-          </div>
-          <div class="field">
-            <label>Custom OpenAI-compatible <span class="muted">— any provider with /v1/audio/transcriptions</span></label>
-            <input type="password" id="setCustomKey" placeholder="key (optional)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
-            <input type="text"     id="setCustomUrl" placeholder="https://api.example.com/v1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-top:8px" />
-            <input type="text"     id="setCustomModel" placeholder="model id (e.g. whisper-1)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-top:8px" />
-          </div>
-          <div class="field" style="margin-top:14px"><button class="btn primary sm" id="saveKeys">Save keys</button></div>
-          <p class="hint-line" id="engineHint"></p>
-          <p class="hint-line">Keys are stored locally in your <code>.env</code> file — they never leave your machine.</p>
-        </div>
-        <div class="section">
-          <p class="sec-title">Best quality tips</p>
-          <p class="hint-line">For the most accurate captions — especially <b>Lithuanian</b> — use <b>Groq</b> (free online, large‑v3) or set the local model to <b>medium</b> / <b>large‑v3</b>. Then hit <b>↻</b> on the Captions tab.</p>
-        </div>
-      </div>
     </aside>
   </main>
 
@@ -275,6 +223,7 @@
        client-side model (local video, Groq transcription, browser export).
        MUST load before app.js so the fetch override is in place at init(). -->
   <script src="/studio/capto-bridge.js"></script>
+  <script src="/studio/caption-presets.js"></script>
   <script src="/studio/app.js"></script>
 </body>
 </html>

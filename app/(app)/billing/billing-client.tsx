@@ -5,7 +5,7 @@ import { ArrowRight, Check, Crown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PricingTable } from "@/components/marketing/pricing-table";
-import { PLANS, getPlan, type PlanId } from "@/lib/pricing";
+import { getPlan, type PlanId } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 type Interval = "monthly" | "annual";
@@ -75,6 +75,32 @@ export function BillingClient({
     [],
   );
 
+  // Switch between PAID plans in place (never a 2nd subscription). Free users go
+  // through checkout; paid users hit /api/stripe/change (upgrade now / downgrade
+  // at period end). Downgrading to Free is the Cancel flow below.
+  const changePlan = React.useCallback(
+    async (target: PlanId, iv: Interval) => {
+      setError(null);
+      if (plan === "free") { startCheckout(target, iv); return; }
+      if (target === plan) return;
+      setLoading(target);
+      try {
+        const r = await fetch("/api/stripe/change", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ plan: target }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Couldn't change plan.");
+        window.location.href = j.effective === "period_end" ? "/billing?scheduled=1" : "/billing?changed=1";
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Something went wrong.");
+        setLoading(null);
+      }
+    },
+    [plan, startCheckout],
+  );
+
   const openPortal = React.useCallback(async () => {
     setError(null);
     setLoading("portal");
@@ -93,14 +119,29 @@ export function BillingClient({
     if (autoUpgrade && plan === "free" && stripeReady) startCheckout(autoUpgrade, autoInterval);
   }, [autoUpgrade, autoInterval, plan, stripeReady, startCheckout]);
 
+  // Confirmation notice after a plan change / schedule (set via the redirect).
+  const [notice, setNotice] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("scheduled")) setNotice("Downgrade scheduled — you keep your current plan until the end of this billing period, then it switches automatically.");
+    else if (q.get("changed")) setNotice("Plan updated. Your new plan is active now.");
+    else if (q.get("success")) setNotice("You're all set — welcome aboard!");
+  }, []);
+
   const current = getPlan(plan)!;
   const isPaid = plan !== "free";
-  const upgradeTargets = PLANS.filter((p) => p.id !== "free" && p.id !== plan);
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10 lg:px-10">
+    <div className="mx-auto w-full max-w-6xl px-6 py-10 lg:px-10">
       <h1 className="heading text-4xl text-[var(--color-fg)]">Billing</h1>
       <p className="mt-2 text-[var(--color-fg-muted)]">Your plan, your invoices, your control.</p>
+
+      {notice && (
+        <div className="mt-6 flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 px-4 py-3 text-sm text-[var(--color-success)]">
+          <Check className="mt-0.5 size-4 shrink-0" />
+          <span>{notice}</span>
+        </div>
+      )}
 
       {/* current plan */}
       <div className="mt-8 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-7">
@@ -182,14 +223,18 @@ export function BillingClient({
         </div>
       )}
 
-      {/* upgrade options — same boxes/slider/prices as the landing page,
-          wired to the account-linked checkout, with the current plan marked. */}
-      {plan !== "ultra" && (
-        <div className="mt-10">
-          <h2 className="heading mb-2 text-lg">{isPaid ? "Upgrade your plan" : "Choose a plan"}</h2>
-          <PricingTable withChrome={false} currentPlan={plan} onPlanClick={(id, iv) => startCheckout(id as PlanId, iv)} />
-        </div>
-      )}
+      {/* plan options — same boxes/slider/prices as the landing page, wired to
+          account-linked checkout (free→paid) or in-place change (paid↔paid),
+          with the current plan marked. Downgrading to Free is the Cancel flow. */}
+      <div className="mt-10">
+        <h2 className="heading mb-2 text-lg">{isPaid ? "Change your plan" : "Choose a plan"}</h2>
+        {isPaid && (
+          <p className="mb-5 text-sm text-[var(--color-fg-muted)]">
+            Upgrades apply immediately (prorated). Downgrades take effect at the end of your current billing period. To drop to Free, use <button onClick={() => { setShowCancel(true); setRetDone(null); }} className="text-[var(--color-brand)] underline-offset-2 hover:underline">Cancel plan</button>.
+          </p>
+        )}
+        <PricingTable withChrome={false} currentPlan={plan} onPlanClick={(id, iv) => changePlan(id as PlanId, iv)} />
+      </div>
     </div>
   );
 }

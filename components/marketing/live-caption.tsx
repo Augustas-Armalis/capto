@@ -45,7 +45,11 @@ export function LiveCaption({
         <span
           key={i}
           className={cn(
-            "transition-all duration-300 ease-[var(--ease-out)]",
+            // Reserve the highlight box geometry on EVERY word (rounded + px) and
+            // only transition colour/opacity — never layout props. Animating
+            // `all` previously grew the active word's padding mid-tween, shoving
+            // neighbours onto a second line and back (the karaoke "glitch").
+            "rounded px-1.5 transition-[color,background-color,opacity] duration-300 ease-[var(--ease-out)]",
             wordClass,
             i === active ? highlightClass : "opacity-60",
           )}

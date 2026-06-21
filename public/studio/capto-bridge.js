@@ -21,10 +21,32 @@
 
   // Plan + usage for the signed-in user (minutes indicator, export watermark).
   window.__captoUser = { signedIn: false, plan: 'free', watermark: true, minutes: null };
+
+  // Canonical engine + language catalogue — mirrors lib/ai/models.ts STT_MODELS
+  // and the dashboard/settings language list, so the editor's Captions tab shows
+  // exactly the same options as the rest of Capto (plan-gated the same way).
+  window.__captoModels = [
+    { id: 'groq-whisper-large-v3', label: 'Whisper Large v3 · Groq', minPlan: 'free' },
+    { id: 'groq-whisper-large-v3-turbo', label: 'Whisper v3 Turbo · Groq', minPlan: 'free' },
+    { id: 'deepgram-nova-3', label: 'Deepgram Nova-3', minPlan: 'pro' },
+    { id: 'openai-whisper-1', label: 'OpenAI Whisper', minPlan: 'pro' },
+  ];
+  window.__captoLangs = [
+    ['auto', 'Auto-detect'], ['en', 'English'], ['es', 'Spanish'], ['fr', 'French'],
+    ['de', 'German'], ['pt', 'Portuguese'], ['it', 'Italian'], ['nl', 'Dutch'],
+    ['hi', 'Hindi'], ['ja', 'Japanese'],
+  ];
+  window.__captoPlanRank = { free: 0, pro: 1, ultra: 2 };
   async function fetchMe() {
     try {
       const r = await realFetch('/api/studio/me');
-      if (r.ok) { window.__captoUser = await r.json(); renderQuotaUI(); renderExportOptions(); }
+      if (r.ok) {
+        window.__captoUser = await r.json();
+        renderQuotaUI(); renderExportOptions();
+        // Re-render the editor engine dropdowns now the plan is known, so Pro/Ultra
+        // models become selectable for paid users (init ran before this resolved).
+        if (typeof window.__captoRefreshEngines === 'function') { try { window.__captoRefreshEngines(); } catch {} }
+      }
     } catch { /* keep defaults */ }
   }
 
@@ -49,6 +71,182 @@
     });
   }
 
+  // ───────────────── same-device auto-relink (File System Access) ─────────────────
+  // The video never leaves the device, so reopening a project needs the local
+  // file again. Instead of asking every time, we persist the file's
+  // FileSystemFileHandle in IndexedDB keyed by project id. On reopen we silently
+  // re-read it (re-granting permission within the click gesture), so the clip
+  // links itself. We only fall back to the manual "Locate video" prompt when the
+  // handle is missing, the file moved, or permission was denied (e.g. a new
+  // device or a browser without the API). Chromium-only; other browsers degrade
+  // gracefully to the manual relink.
+  const HANDLE_DB = 'capto-media', HANDLE_STORE = 'handles';
+  function idb() {
+    return new Promise((resolve, reject) => {
+      let req;
+      try { req = indexedDB.open(HANDLE_DB, 1); } catch (e) { return reject(e); }
+      req.onupgradeneeded = () => { try { req.result.createObjectStore(HANDLE_STORE); } catch {} };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbPut(key, val) {
+    try { const db = await idb(); await new Promise((res, rej) => { const tx = db.transaction(HANDLE_STORE, 'readwrite'); tx.objectStore(HANDLE_STORE).put(val, key); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch {}
+  }
+  async function idbGet(key) {
+    try { const db = await idb(); return await new Promise((res, rej) => { const tx = db.transaction(HANDLE_STORE, 'readonly'); const r = tx.objectStore(HANDLE_STORE).get(key); r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error); }); } catch { return null; }
+  }
+  async function idbDel(key) {
+    try { const db = await idb(); await new Promise((res) => { const tx = db.transaction(HANDLE_STORE, 'readwrite'); tx.objectStore(HANDLE_STORE).delete(key); tx.oncomplete = res; tx.onerror = res; }); } catch {}
+  }
+  const supportsHandles = typeof window.showOpenFilePicker === 'function';
+
+  // The handle captured during the most recent file pick / drop, awaiting the
+  // POST /api/projects that turns it into a project id we can key it under.
+  let pendingHandle = null;     // a FileSystemFileHandle or a Promise of one
+  // In-flight auto-relink attempts, keyed by project id, started within the
+  // project-card click so the GET handler can await them before deciding.
+  const pendingAuth = {};
+  let currentProjectId = null;   // the project currently open in the editor
+
+  async function storeHandleFor(id) {
+    try {
+      let h = pendingHandle; pendingHandle = null;
+      if (h && typeof h.then === 'function') h = await h;
+      if (h && h.kind === 'file') await idbPut(id, h);
+    } catch { pendingHandle = null; }
+  }
+  // Re-acquire the saved handle and load its file into __captoMedia. Must be
+  // KICKED OFF from within a user gesture (the project click) so requestPermission
+  // is allowed to prompt; once granted the read is silent on later opens.
+  async function relinkFromHandle(id) {
+    if (!supportsHandles) return false;
+    try {
+      const h = await idbGet(id);
+      if (!h) return false;
+      let perm = 'granted';
+      try { perm = await h.queryPermission({ mode: 'read' }); } catch {}
+      if (perm !== 'granted') { try { perm = await h.requestPermission({ mode: 'read' }); } catch {} }
+      if (perm !== 'granted') return false;
+      const file = await h.getFile(); // throws if the file was moved/deleted
+      const { url, meta } = await readVideoMeta(file);
+      if (window.__captoMedia && window.__captoMedia.url) { try { URL.revokeObjectURL(window.__captoMedia.url); } catch {} }
+      window.__captoMedia = { id, file, url, meta, handle: h };
+      return true;
+    } catch { return false; }
+  }
+  function preauthorize(id) {
+    if (!id || (window.__captoMedia && window.__captoMedia.id === id)) return;
+    pendingAuth[id] = relinkFromHandle(id);
+  }
+  // Re-pick the local video for a project and (re)link it. Prefers the File
+  // System Access picker so we ALSO capture a fresh handle for next-time
+  // auto-relink; falls back to a plain file input (this session only).
+  async function pickAndLink(id) {
+    if (!id) id = currentProjectId;
+    if (!id) return false;
+    let file = null, handle = null;
+    if (supportsHandles) {
+      try {
+        const picked = await window.showOpenFilePicker({ types: [{ description: 'Video', accept: { 'video/*': ['.mp4', '.mov', '.m4v', '.webm', '.mkv'] } }] });
+        handle = picked && picked[0]; if (!handle) return false;
+        file = await handle.getFile();
+      } catch { return false; } // cancelled
+    } else {
+      file = await new Promise((res) => {
+        const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'video/*'; inp.style.display = 'none';
+        inp.onchange = () => res(inp.files && inp.files[0] ? inp.files[0] : null);
+        document.body.appendChild(inp); inp.click(); setTimeout(() => { try { inp.remove(); } catch {} }, 1500);
+      });
+      if (!file) return false;
+    }
+    if (window.__captoMedia && window.__captoMedia.url) { try { URL.revokeObjectURL(window.__captoMedia.url); } catch {} }
+    const { url, meta } = await readVideoMeta(file);
+    window.__captoMedia = { id, file, url, meta, handle: handle || undefined };
+    if (handle) await idbPut(id, handle); else await idbDel(id);
+    clearRelink();
+    const v = document.getElementById('video');
+    if (v) { v.src = url; v.load(); }
+    return true;
+  }
+  window.__captoReplaceSource = () => pickAndLink(currentProjectId);
+
+  // After a silent auto-relink, offer a brief "wrong file?" revert so an
+  // accidental/mismatched link can be fixed; auto-dismisses after ~9s.
+  function showRelinkRevert(id, name) {
+    if (document.getElementById('capto-revert')) return;
+    const bar = document.createElement('div');
+    bar.id = 'capto-revert';
+    bar.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:120;display:flex;align-items:center;gap:12px;background:var(--surface-2,#17171b);border:1px solid var(--line-2,rgba(255,255,255,.12));border-radius:12px;padding:10px 12px 10px 14px;box-shadow:0 16px 40px -12px rgba(0,0,0,.7);font-size:13px;color:var(--text,#f1f1f4);max-width:92vw';
+    bar.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:#6ee7b7;flex-shrink:0"></span><span>Linked <b>${escHtml(name || 'your video')}</b> from this device.</span>`;
+    const btn = document.createElement('button');
+    btn.textContent = 'Wrong file? Re-pick';
+    btn.style.cssText = 'background:none;border:1px solid var(--line-2,rgba(255,255,255,.14));color:var(--accent-2,#a0c1ff);border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;cursor:pointer';
+    btn.onclick = async () => { bar.remove(); await pickAndLink(id); };
+    const x = document.createElement('button');
+    x.textContent = '✕'; x.title = 'Dismiss';
+    x.style.cssText = 'background:none;border:none;color:var(--faint,#65656f);cursor:pointer;font-size:14px;padding:2px 6px;line-height:1';
+    x.onclick = () => bar.remove();
+    bar.appendChild(btn); bar.appendChild(x);
+    document.body.appendChild(bar);
+    setTimeout(() => { if (bar.parentNode) bar.remove(); }, 9000);
+  }
+
+  // Wire up handle capture (so reopening auto-links) + a persistent "replace
+  // source" control. All Chromium-gated; other browsers keep the manual flow.
+  function setupHandleCapture() {
+    const homeDz = document.getElementById('homeDropzone');
+    const homeFi = document.getElementById('homeFileInput');
+    const grid = document.getElementById('homeGrid');
+    // 1) Drag-drop → capture the file's handle BEFORE app.js reads the File.
+    if (homeDz) {
+      homeDz.addEventListener('drop', (e) => {
+        try {
+          const it = e.dataTransfer && e.dataTransfer.items && e.dataTransfer.items[0];
+          if (it && typeof it.getAsFileSystemHandle === 'function') pendingHandle = it.getAsFileSystemHandle();
+        } catch {}
+      }, true);
+    }
+    // 2) Click-to-pick → use the FS Access picker (captures a handle), then feed
+    //    the file into app.js's existing change-driven upload pipeline.
+    if (homeDz && homeFi && supportsHandles) {
+      homeDz.addEventListener('click', async (e) => {
+        if (e.target.closest('#homeTxRow')) return; // engine/lang selects, not the card
+        e.preventDefault(); e.stopImmediatePropagation();
+        try {
+          const picked = await window.showOpenFilePicker({ types: [{ description: 'Video', accept: { 'video/*': ['.mp4', '.mov', '.m4v', '.webm', '.mkv'] } }] });
+          const h = picked && picked[0]; if (!h) return;
+          pendingHandle = h;
+          const file = await h.getFile();
+          const dt = new DataTransfer(); dt.items.add(file);
+          homeFi.files = dt.files;
+          homeFi.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch {}
+      }, true);
+    }
+    // 3) Project-card click → pre-authorize the saved handle WITHIN the gesture so
+    //    the project opens with its video already linked (no relink prompt).
+    if (grid) {
+      grid.addEventListener('click', (e) => {
+        const card = e.target.closest('.proj'); if (!card) return;
+        if (e.target.closest('.del') || e.target.closest('.rn')) return;
+        preauthorize(card.dataset.id);
+      }, true);
+    }
+    // 4) Persistent "Replace source" button in the canvas tool bar — if the user
+    //    misses the revert toast, they can swap the linked file any time.
+    const tools = document.querySelector('.canvas-tools');
+    if (tools && !document.getElementById('capto-replace-src')) {
+      const sep = document.createElement('span'); sep.className = 'ct-sep';
+      const swap = document.createElement('button');
+      swap.id = 'capto-replace-src';
+      swap.title = 'Replace the source video — link a different local file';
+      swap.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>';
+      swap.onclick = () => pickAndLink(currentProjectId);
+      tools.appendChild(sep); tools.appendChild(swap);
+    }
+  }
+
   // Mirrors Subby's server-side defaultStyle(meta) exactly.
   function defaultStyle(meta) {
     const H = meta.height || 1920;
@@ -60,6 +258,7 @@
       shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
       shadowDistance: Math.max(2, Math.round(H * 0.0025)), shadowBlur: Math.max(2, Math.round(H * 0.0035)),
       highlightEnabled: false, highlightColor: '#A0C1FF', highlightScale: 100,
+      highlightMode: 'color', highlightBg: '#FFD233', highlightPill: false,
       posX: 0.5, posY: 0.82, entrance: 'none', exit: 'none', animMs: 180,
     };
   }
@@ -67,29 +266,62 @@
   // Capto's /api/transcribe returns flat word timings; Subby wants grouped cues.
   // Break into caption lines on pauses / max words / max chars (punchy chunks).
   function wordsToCues(words) {
-    // Punchy 2–3 word captions by default — clean, fast, easy to read on phones.
-    const MAXW = 3, MAXGAP = 0.5, MAXCHARS = 24;
-    const out = [];
-    let cur = null;
+    // Punchy 1–3 word captions by default — clean, fast, easy to read on phones.
+    const MAXW = 3, MAXGAP = 0.45, MAXCHARS = 24;
+    // Timing polish: a caption lingers a beat past its last word (LEAD_OUT), and
+    // through SHORT pauses (extends toward the next word, minus GAP_PAD). But on a
+    // BIG pause (> HIDE_GAP of silence) it disappears so captions don't hang on
+    // screen during dead air.
+    const LEAD_OUT = 0.15, GAP_PAD = 0.08, HIDE_GAP = 0.7;
+    const flat = [];
     for (const w of words || []) {
       const word = String(w.word || w.text || '').trim();
       if (!word) continue;
-      const start = +w.start, end = +w.end;
-      if (!cur) { cur = [{ word, start, end }]; continue; }
+      flat.push({ word, start: +w.start, end: +w.end });
+    }
+    // 1) group into clean 1–3 word chunks. A new caption ALWAYS starts when the
+    // previous word ended a sentence (. ! ? …) or after a real pause — we never
+    // stack the first word of a new thought onto the tail of the previous one.
+    const endsSentence = (word) => /[.!?…]["'’”\)\]]?$/.test(word);
+    const groups = [];
+    let cur = null;
+    for (const w of flat) {
+      if (!cur) { cur = [w]; continue; }
       const last = cur[cur.length - 1];
       const text = cur.map((x) => x.word).join(' ');
-      if (start - last.end > MAXGAP || cur.length >= MAXW || text.length + word.length + 1 > MAXCHARS) {
-        out.push(cur); cur = [{ word, start, end }];
-      } else cur.push({ word, start, end });
+      if (
+        endsSentence(last.word) ||                                  // sentence boundary
+        w.start - last.end > MAXGAP ||                              // real pause
+        cur.length >= MAXW ||                                       // max words
+        text.length + w.word.length + 1 > MAXCHARS                  // max chars
+      ) {
+        groups.push(cur); cur = [w];
+      } else cur.push(w);
     }
-    if (cur) out.push(cur);
-    return out.map((ws) => ({ start: ws[0].start, end: ws[ws.length - 1].end, text: ws.map((w) => w.word).join(' '), words: ws }));
+    if (cur) groups.push(cur);
+    // 2) build cues, extending the end across small pauses but hiding on big ones
+    return groups.map((ws, gi) => {
+      const start = ws[0].start;
+      const lastEnd = ws[ws.length - 1].end;
+      const nextStart = gi + 1 < groups.length ? groups[gi + 1][0].start : Infinity;
+      const gap = nextStart - lastEnd;
+      let end;
+      if (gap > HIDE_GAP) end = lastEnd + LEAD_OUT;                      // big pause → vanish
+      else end = Math.min(lastEnd + LEAD_OUT, nextStart - GAP_PAD);      // small pause → persist
+      if (!(end > lastEnd)) end = lastEnd + Math.min(LEAD_OUT, 0.06);    // guard
+      return { start, end, text: ws.map((w) => w.word).join(' '), words: ws };
+    });
   }
 
   async function transcribe(file, body) {
     const fd = new FormData();
     fd.append('file', file, file.name || 'clip');
     fd.append('language', body.language || 'auto');
+    // Forward the chosen engine/model so /api/transcribe can honour it (Auto =
+    // let the server pick). The server falls back to the house Groq model when
+    // the id is unknown or the user lacks the key, so this is always safe.
+    const eng = body.model || body.engine || '';
+    if (eng && eng !== 'auto') fd.append('model', eng);
     const dur = window.__captoMedia && window.__captoMedia.meta && window.__captoMedia.meta.duration;
     if (dur) fd.append('durationSec', String(Math.round(dur)));
     let res;
@@ -227,22 +459,10 @@
     const btn = document.createElement('button');
     btn.className = 'btn primary lg';
     btn.textContent = 'Choose video file';
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'video/*'; input.style.display = 'none';
-    btn.onclick = () => input.click();
-    input.onchange = () => {
-      const f = input.files && input.files[0];
-      if (!f) return;
-      if (window.__captoMedia && window.__captoMedia.url) { try { URL.revokeObjectURL(window.__captoMedia.url); } catch {} }
-      readVideoMeta(f).then(({ url, meta }) => {
-        window.__captoMedia = { id, file: f, url, meta };
-        clearRelink();
-        const v = document.getElementById('video');
-        if (v) { v.src = url; v.load(); }
-      });
-    };
+    // pickAndLink uses the File System Access picker when available, so this
+    // manual relink ALSO saves a handle — the next reopen links automatically.
+    btn.onclick = () => pickAndLink(id);
     o.appendChild(btn);
-    o.appendChild(input);
     area.appendChild(o);
   }
 
@@ -257,6 +477,28 @@
     const c = ['video/mp4;codecs=h264,aac', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
     for (const m of c) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
     return 'video/webm';
+  }
+  // In-browser MediaRecorder can only ever MUX two containers: WebM (everywhere)
+  // and MP4/H.264 (recent Chromium + Safari). MOV/MKV/ProRes would need a
+  // transcode (ffmpeg.wasm / a server) which Capto's client-only model avoids,
+  // so we never offer them as selectable. Honest options only.
+  const FORMAT_MIMES = {
+    mp4: ['video/mp4;codecs=h264,aac', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4'],
+    webm: ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'],
+  };
+  function mimeForFormat(fmt) {
+    for (const m of (FORMAT_MIMES[fmt] || [])) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+    return null;
+  }
+  function formatSupported(fmt) { return !!mimeForFormat(fmt); }
+  // The container the user asked for (read from the export modal), falling back
+  // to the auto pick. friend tier always auto (it targets size, not container).
+  function resolveExportMime(quality) {
+    if (quality !== 'friend') {
+      const fmt = getVal('capto-format', '');
+      if (fmt) { const m = mimeForFormat(fmt); if (m) return m; }
+    }
+    return pickExportMime();
   }
   function extFor(mime) { return mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm'; }
   function downloadBlob(blob, name) {
@@ -286,9 +528,12 @@
   async function chooseSaveLocation() {
     if (!supportsSavePicker) return;
     const base = ((window.__captoMedia && window.__captoMedia.file && window.__captoMedia.file.name) || 'video').replace(/\.[^.]+$/, '');
+    // Match the suggested extension to the format the user picked, so the saved
+    // file's name and its actual bytes agree.
+    const ext = extFor(resolveExportMime(currentTier()));
     try {
       const handle = await window.showSaveFilePicker({
-        suggestedName: `${base}-captioned.mp4`,
+        suggestedName: `${base}-captioned.${ext}`,
         types: [{ description: 'Video', accept: { 'video/mp4': ['.mp4'], 'video/webm': ['.webm'] } }],
       });
       window.__captoSaveHandle = handle;
@@ -312,11 +557,30 @@
       if (typeof s[key] === 'number') out[key] = s[key] * k;
     return out;
   }
-  function drawWord(ctx, text, x, y, s, active) {
+  function roundRectPath(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function drawWord(ctx, text, x, y, s, active, fontPx) {
     const ow = s.outlineWidth || 0;
-    const fill = active && s.highlightEnabled ? s.highlightColor : s.primaryColor;
+    const mode = s.highlightMode || 'color';
+    const hot = active && s.highlightEnabled;
+    const fill = hot ? s.highlightColor : s.primaryColor;
+    const w = ctx.measureText(text).width;
+    // Box highlight — filled (rounded/pill) rect behind the active word.
+    if (hot && mode === 'box') {
+      const padX = fontPx * 0.16, padY = fontPx * 0.14;
+      const bx = x - padX, by = y - fontPx * 0.5 - padY, bw = w + padX * 2, bh = fontPx + padY * 2;
+      const r = s.highlightPill ? bh / 2 : fontPx * 0.16;
+      ctx.save(); ctx.fillStyle = s.highlightBg || '#FFD233'; roundRectPath(ctx, bx, by, bw, bh, r); ctx.fill(); ctx.restore();
+    }
     ctx.save();
-    if (s.shadowEnabled) {
+    if (hot && mode === 'glow') {
+      ctx.shadowColor = s.highlightColor; ctx.shadowBlur = fontPx * 0.55; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    } else if (s.shadowEnabled) {
       ctx.shadowColor = hexALocal(s.shadowColor, (s.shadowOpacity == null ? 60 : s.shadowOpacity) / 100);
       ctx.shadowBlur = s.shadowBlur || 0;
       ctx.shadowOffsetX = s.shadowDistance || 0;
@@ -333,21 +597,44 @@
     }
     ctx.fillStyle = fill;
     ctx.fillText(text, x, y);
+    // Underline highlight
+    if (hot && mode === 'underline') {
+      ctx.save();
+      ctx.strokeStyle = s.highlightBg || s.highlightColor;
+      ctx.lineWidth = Math.max(2, fontPx * 0.08);
+      ctx.beginPath(); ctx.moveTo(x, y + fontPx * 0.42); ctx.lineTo(x + w, y + fontPx * 0.42); ctx.stroke();
+      ctx.restore();
+    }
   }
   function drawCue(ctx, cue, t, s, W, H) {
-    const fontPx = s.fontSize;
+    let fontPx = s.fontSize;
+    const baseFont = s.fontSize || 1;
     const weight = typeof s.weight === 'number' ? s.weight : (s.bold ? 700 : 400);
     ctx.save();
-    ctx.font = `${s.italic ? 'italic ' : ''}${weight} ${fontPx}px '${s.fontFamily}'`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    try { ctx.letterSpacing = (s.letterSpacing || 0) + 'px'; } catch {}
+    const setFont = (px) => {
+      ctx.font = `${s.italic ? 'italic ' : ''}${weight} ${px}px '${s.fontFamily}'`;
+      try { ctx.letterSpacing = ((s.letterSpacing || 0) * (px / baseFont)) + 'px'; } catch {}
+    };
+    setFont(fontPx);
     const words = (cue.words && cue.words.length) ? cue.words : [{ word: cue.text, start: cue.start, end: cue.end }];
     let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
     const toks = words.map((w, i) => ({ text: applyCaseLocal(w.word, s.caseMode), idx: i }));
-    for (const tk of toks) tk.w = ctx.measureText(tk.text).width;
-    const spaceW = ctx.measureText(' ').width || fontPx * 0.3;
-    const maxW = (typeof s.boxWidth === 'number' && s.boxWidth > 0) ? s.boxWidth * W : 0.92 * W;
+    const measure = () => { for (const tk of toks) tk.w = ctx.measureText(tk.text).width; return ctx.measureText(' ').width || fontPx * 0.3; };
+    let spaceW = measure();
+    const hasBox = (typeof s.boxWidth === 'number' && s.boxWidth > 0);
+    // Stretch short single-line cues to fill the width — mirrors the preview's
+    // fitBlockToFrame up-scale so 1–3 word captions render big and full, and what
+    // you see in the editor matches the exported video.
+    if (!hasBox) {
+      const singleW = toks.reduce((a, tk) => a + tk.w, 0) + spaceW * Math.max(0, toks.length - 1);
+      if (singleW > 0 && singleW <= 0.92 * W && singleW < 0.62 * W) {
+        const k2 = Math.max(1, Math.min(1.6, (0.74 * W) / singleW));
+        if (k2 > 1.01) { fontPx = fontPx * k2; setFont(fontPx); spaceW = measure(); }
+      }
+    }
+    const maxW = hasBox ? s.boxWidth * W : 0.92 * W;
     const lines = []; let line = []; let lineW = 0;
     for (const tk of toks) {
       const add = (line.length ? spaceW : 0) + tk.w;
@@ -362,7 +649,7 @@
     let y = cy - (lines.length * lineH) / 2 + lineH / 2;
     for (const ln of lines) {
       let x = cx - ln.w / 2;
-      for (const it of ln.items) { drawWord(ctx, it.text, x + it.w / 2 - it.w / 2, y, s, it.idx === aw); x += it.w + spaceW; }
+      for (const it of ln.items) { drawWord(ctx, it.text, x, y, s, it.idx === aw, fontPx); x += it.w + spaceW; }
       y += lineH;
     }
     ctx.restore();
@@ -415,6 +702,29 @@
     const on = document.querySelector('#tiers .tier.on');
     return on ? on.dataset.q : 'lossless';
   }
+  // Pro/Ultra-only output-format picker for the custom + lossless tiers. Only the
+  // containers the browser can actually record are selectable; the rest are shown
+  // disabled so the choice stays honest.
+  function formatSelectHtml(free) {
+    if (free) return '';
+    const mp4 = formatSupported('mp4'), webm = formatSupported('webm');
+    const last = (function () { try { return localStorage.getItem('capto-export-format') || ''; } catch { return ''; } })();
+    const def = (last === 'mp4' && mp4) || (last === 'webm' && webm) ? last : (mp4 ? 'mp4' : 'webm');
+    const opt = (val, label, ok) => `<option value="${val}"${val === def ? ' selected' : ''}${ok ? '' : ' disabled'}>${label}${ok ? '' : ' — not supported here'}</option>`;
+    const sel = 'width:auto;min-width:100px;display:inline-block;padding:7px 26px 7px 10px;font-size:12.5px';
+    return `<label style="font-size:12px;color:var(--muted)">Format <select id="capto-format" style="${sel}">` +
+      opt('mp4', 'MP4', mp4) + opt('webm', 'WebM', webm) +
+      `</select></label>`;
+  }
+  function formatHintHtml(free) {
+    if (free) return '';
+    return `<div style="margin-top:9px;font-size:11px;color:var(--faint)">MP4 plays everywhere (TikTok, Reels, iPhone). WebM is smaller but support varies — pick MP4 if unsure.</div>`;
+  }
+  // Remember the user's format choice between exports.
+  function wireFormatMemory() {
+    const f = document.getElementById('capto-format');
+    if (f) f.onchange = () => { try { localStorage.setItem('capto-export-format', f.value); } catch {} };
+  }
   function renderExportOptions() {
     const opts = document.getElementById('capto-export-opts');
     if (!opts) return;
@@ -442,7 +752,12 @@
     if (q === 'friend') {
       opts.innerHTML = `<label style="display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)">Target size <input id="capto-mb" type="number" min="3" max="300" value="25" style="width:96px"> MB</label>`;
     } else if (q === 'lossless') {
-      opts.innerHTML = `<div style="font-size:12px;color:var(--faint)">Full resolution, original audio copied.</div>`;
+      opts.innerHTML =
+        `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">` +
+        `<div style="font-size:12px;color:var(--faint);flex:1 1 100%">Full resolution, original audio copied.</div>` +
+        formatSelectHtml(free) +
+        `</div>` + formatHintHtml(free);
+      wireFormatMemory();
     } else {
       const lock = free ? 'disabled' : '';
       const sel = 'width:auto;min-width:88px;display:inline-block;padding:7px 26px 7px 10px;font-size:12.5px';
@@ -458,13 +773,15 @@
           `<option value="custom">Custom…</option>` +
         `</select></label>` +
         `<span id="capto-bitrate-custom" style="display:none;font-size:12px;color:var(--muted)"><input id="capto-bitrate" type="number" min="1" max="50" value="10" style="width:74px"> Mbps</span>` +
-        `</div>` +
-        (free ? `<div style="margin-top:9px;font-size:11px;color:var(--faint)">Free is capped at 1080p / 30fps. <span style="color:var(--accent-2);cursor:pointer" id="capto-up">Upgrade</span> for send-to-friend, lossless, 60fps and highest bitrate.</div>` : '');
+        formatSelectHtml(free) +
+        `</div>` + formatHintHtml(free) +
+        (free ? `<div style="margin-top:9px;font-size:11px;color:var(--faint)">Free is capped at 1080p / 30fps. <span style="color:var(--accent-2);cursor:pointer" id="capto-up">Upgrade</span> for send-to-friend, lossless, 60fps, format choice and highest bitrate.</div>` : '');
       const up = document.getElementById('capto-up');
       if (up) up.onclick = goTop('/billing');
       const bsel = document.getElementById('capto-bitrate-sel');
       const bcustom = document.getElementById('capto-bitrate-custom');
       if (bsel && bcustom) bsel.onchange = () => { bcustom.style.display = bsel.value === 'custom' ? 'inline' : 'none'; };
+      wireFormatMemory();
     }
   }
   function setupExportOptions() {
@@ -595,7 +912,7 @@
     const tracks = cstream.getVideoTracks();
     if (audioTrack) tracks.push(audioTrack);
     const stream = new MediaStream(tracks);
-    const mime = pickExportMime();
+    const mime = resolveExportMime(body.quality);
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: settings.videoBitrate });
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -663,6 +980,8 @@
         catch { id = genId(); } // offline / signed-out fallback (won't sync)
         if (window.__captoMedia && window.__captoMedia.url) { try { URL.revokeObjectURL(window.__captoMedia.url); } catch {} }
         window.__captoMedia = { id, file, url, meta };
+        await storeHandleFor(id); // remember the device file so reopening auto-links
+        currentProjectId = id;
         captoProject = state;
         pendingRelinkId = null;
         clearRelink();
@@ -702,7 +1021,21 @@
           try {
             const st = await captoApi.get(id);
             captoProject = st;
-            pendingRelinkId = window.__captoMedia && window.__captoMedia.id === id ? null : id;
+            currentProjectId = id;
+            // Auto-relink from the saved device handle (kicked off in the card
+            // click). If it succeeds the clip is already loaded → no prompt; we
+            // briefly offer a "wrong file?" revert. Otherwise fall back to relink.
+            let autoLinked = false;
+            if (!(window.__captoMedia && window.__captoMedia.id === id)) {
+              if (pendingAuth[id]) { try { autoLinked = await pendingAuth[id]; } catch {} delete pendingAuth[id]; }
+              if (!autoLinked && !(window.__captoMedia && window.__captoMedia.id === id)) {
+                autoLinked = await relinkFromHandle(id); // last try (silent if already granted)
+              }
+            } else { autoLinked = true; }
+            pendingRelinkId = (window.__captoMedia && window.__captoMedia.id === id) ? null : id;
+            if (pendingRelinkId === null && autoLinked && (window.__captoMedia && window.__captoMedia.handle)) {
+              setTimeout(() => showRelinkRevert(id, st.originalName), 600);
+            }
             return json({ meta: st.meta, originalName: st.originalName, style: st.style, cues: st.cues || [], language: st.language });
           } catch { return json({ error: 'Project not found.' }, 404); }
         })();
@@ -964,6 +1297,7 @@
     setupSafeZones();
     setupExportOptions();
     setupThumbPicker();
+    setupHandleCapture();
     renderQuotaUI();
     fetchMe();
   });

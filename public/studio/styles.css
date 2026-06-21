@@ -420,6 +420,25 @@ body.panel-collapsed .collapse-btn { left: 0; }
 .hint-line { font-size: 11.5px; color: var(--faint); margin-top: 8px; line-height: 1.45; }
 .collapse { overflow: hidden; transition: max-height .2s var(--ease), opacity .2s; }
 
+/* ---- style presets: live-preview boxes + search + advanced collapse ---- */
+.preset-search { width: 100%; margin-bottom: 10px; }
+.preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 300px; overflow-y: auto; padding: 2px; margin: 0 -2px; }
+.preset-box { display: flex; flex-direction: column; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0; overflow: hidden; cursor: pointer; transition: .14s var(--ease); font: inherit; }
+.preset-box:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 8px 20px -12px rgba(0,0,0,.7); }
+.pb-stage { display: flex; flex-wrap: wrap; gap: .3em .45em; align-items: center; justify-content: center; min-height: 58px; padding: 12px 10px; font-size: 15px; line-height: 1.3; color: #fff; background: radial-gradient(130% 100% at 50% 0%, #1c1c24, #0b0b0f); border-bottom: 1px solid var(--line); }
+.pb-stage span { display: inline-block; }
+.pb-name { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 7px 9px; }
+.pb-pop { font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #0b0c14; background: linear-gradient(120deg,#a0c1ff,#8983ff); padding: 1px 6px; border-radius: 99px; }
+.pb-del { color: var(--faint); font-size: 12px; padding: 0 4px; border-radius: 5px; cursor: pointer; }
+.pb-del:hover { color: var(--danger); background: rgba(255,94,118,.12); }
+.adv-toggle { width: 100%; justify-content: center; margin: 6px 0 2px; }
+.adv-controls { transition: max-height .28s var(--ease); }
+
+/* Caption-on-canvas: make it discoverable that the caption is grabbable/editable.
+   Desktop only (not inside the mobile media query). */
+.cap-layer .cap-block { transition: outline-color .12s; outline: 2px dashed transparent; outline-offset: 5px; border-radius: 5px; }
+.cap-layer .cap-block:hover { outline-color: rgba(130,165,255,.55); }
+
 /* script tab */
 .script-help { font-size: 12px; color: var(--muted); margin: 0 0 10px; line-height: 1.45; }
 .script-para { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px; font-size: 14.5px; line-height: 1.85; min-height: 80px; max-height: 38vh; overflow-y: auto; user-select: none; }
@@ -639,3 +658,31 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, 'Se
 .capto-menu button:hover { background: var(--accent-soft); color: var(--accent-2); }
 .capto-menu .sep { height: 1px; background: var(--line); margin: 5px 6px; }
 .capto-menu .em { font-size: 11px; color: var(--faint); padding: 4px 11px 6px; }
+
+/* ---- mobile editor polish (phones only) — timeline + top bar + presets ---- */
+@media (max-width: 860px) {
+  /* Top bar: tighter, drop the name divider, shrink the title so Export fits. */
+  .topbar { padding: 0 10px; height: 50px; }
+  .topbar-left { gap: 4px; }
+  .project-name { max-width: 38vw; font-size: 12.5px; padding: 6px 8px; }
+  .project-name::before { display: none; }
+  .brand-wm { height: 18px; }
+  .topbar-actions { gap: 6px; }
+  #exportBtn { padding: 8px 12px; }
+  .capto-pfp .nm { display: none; }            /* avatar only on phones */
+  .capto-pfp { padding: 4px; }
+
+  /* Timeline: roomier track + bigger blocks/handles for touch. */
+  .timeline { height: 150px; }
+  .tl-row { height: 52px; }
+  .tl-block { font-size: 11.5px; padding: 0 9px; top: 6px; bottom: 6px; }
+  .tl-handle { width: 20px; }                  /* fat touch targets for trim */
+  .transport { flex-wrap: wrap; row-gap: 6px; }
+  .tl-tools { width: 100%; justify-content: flex-start; }
+  .retranscribe { grid-template-columns: 1fr; }
+  #retranscribeBtn { width: 100%; justify-content: center; }
+
+  /* Style presets: single tall column reads better on a narrow panel. */
+  .preset-grid { grid-template-columns: 1fr; max-height: 320px; }
+  .pb-stage { min-height: 52px; font-size: 16px; }
+}

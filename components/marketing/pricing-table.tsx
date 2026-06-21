@@ -234,7 +234,15 @@ export function PricingTable({
                 size="lg"
                 className="mt-6 w-full"
               >
-                {onPlanClick && currentPlan && currentPlan !== "free" ? `Switch to ${plan.name}` : plan.cta}
+                {(() => {
+                  const RANK: Record<string, number> = { free: 0, pro: 1, ultra: 2 };
+                  if (onPlanClick && currentPlan && currentPlan !== "free") {
+                    return (RANK[plan.id] ?? 0) > (RANK[currentPlan] ?? 0)
+                      ? `Upgrade to ${plan.name}`
+                      : `Downgrade to ${plan.name}`;
+                  }
+                  return plan.cta;
+                })()}
               </Button>
             )}
 

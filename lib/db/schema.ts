@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -206,5 +207,36 @@ export const userVocabulary = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.userId, t.term] }) }),
 );
 
+// ─── User caption presets (saved studio styles) ──────────────────────
+// A named bundle of caption style settings the user can re-apply across
+// projects. `config` is the raw studio style object (kept as JSON so the
+// editor can evolve its shape without a migration each time).
+export const userCaptionPreset = pgTable("user_caption_preset", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  config: jsonb("config").notNull(), // the studio style object
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Caption-correction telemetry (training data) ────────────────────
+// Captures how users edit AI-generated captions so Capto can learn and later
+// export the data to train a model. One row per discrete edit event.
+export const captionCorrection = pgTable("caption_correction", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  projectId: text("project_id"), // studio project id (string, not FK — projects may be client-only)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  engine: text("engine"), // model id used (e.g. groq-whisper-large-v3 / auto)
+  language: text("language"),
+  kind: text("kind").notNull(), // 'text' | 'timing' | 'split' | 'merge' | 'delete' | 'add' | 'style' | 'regenerate'
+  aiText: text("ai_text"), // original AI caption text (if applicable)
+  finalText: text("final_text"), // user-edited text
+  payload: jsonb("payload"), // freeform: { aiStart, aiEnd, finalStart, finalEnd, styleBefore, styleAfter, ... }
+});
+
 export type User = typeof user.$inferSelect;
 export type Project = typeof project.$inferSelect;
+export type UserCaptionPreset = typeof userCaptionPreset.$inferSelect;
+export type CaptionCorrection = typeof captionCorrection.$inferSelect;

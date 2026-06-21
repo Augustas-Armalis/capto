@@ -36,6 +36,13 @@
       "when": 1781943321726,
       "tag": "0004_giant_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781996842200,
+      "tag": "0005_early_shockwave",
+      "breakpoints": true
     }
   ]
 }

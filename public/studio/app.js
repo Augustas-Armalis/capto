@@ -8,27 +8,11 @@ const FONTS = [
   { family: 'Luckiest Guy', label: 'Luckiest Guy' }, { family: 'Pacifico', label: 'Pacifico' },
 ];
 const HAS_BOLD = new Set(['Inter', 'Poppins', 'Lato']);
-const LANGUAGES = [
-  { code: 'en', label: 'English' }, { code: 'lt', label: 'Lithuanian' },
-  { code: '__sep', label: '──────────' }, { code: 'auto', label: 'Auto-detect' },
-  { code: 'es', label: 'Spanish' }, { code: 'fr', label: 'French' }, { code: 'de', label: 'German' },
-  { code: 'it', label: 'Italian' }, { code: 'pt', label: 'Portuguese' }, { code: 'nl', label: 'Dutch' },
-  { code: 'pl', label: 'Polish' }, { code: 'ru', label: 'Russian' }, { code: 'uk', label: 'Ukrainian' },
-  { code: 'lv', label: 'Latvian' }, { code: 'et', label: 'Estonian' }, { code: 'fi', label: 'Finnish' },
-  { code: 'sv', label: 'Swedish' }, { code: 'no', label: 'Norwegian' }, { code: 'da', label: 'Danish' },
-  { code: 'cs', label: 'Czech' }, { code: 'tr', label: 'Turkish' }, { code: 'ja', label: 'Japanese' },
-  { code: 'ko', label: 'Korean' }, { code: 'zh', label: 'Chinese' }, { code: 'ar', label: 'Arabic' },
-];
-const ENGINES = [
-  { code: 'local', label: 'On your Mac — free, offline' },
-  { code: 'groq', label: 'Groq — free online' },
-  { code: 'openai', label: 'OpenAI — paid' },
-];
-const MODELS = [
-  { code: 'tiny', label: 'Tiny — fastest' }, { code: 'base', label: 'Base' },
-  { code: 'small', label: 'Small' }, { code: 'medium', label: 'Medium — accurate' },
-  { code: 'large-v3', label: 'Large-v3 — best' },
-];
+// Engines + languages come from the bridge's canonical catalogue (window.__captoModels
+// / __captoLangs), which mirrors lib/ai/models.ts and the dashboard. Fallbacks keep
+// the editor working if the bridge ever fails to load.
+const LANGUAGES = (window.__captoLangs || [['auto', 'Auto-detect'], ['en', 'English']]).map(([code, label]) => ({ code, label }));
+const langLabel = (code) => (LANGUAGES.find((l) => l.code === code) || {}).label || 'audio';
 const CASES = [{ code: 'lower', label: 'ab' }, { code: 'sentence', label: 'Ab' }, { code: 'title', label: 'Ab Cd' }, { code: 'upper', label: 'AB' }];
 const SWATCHES = ['#FFFFFF', '#111319', '#FFE36E', '#7C6CFF', '#46D39A', '#FF6B81', '#54C7FC', '#FF8FD0'];
 
@@ -63,7 +47,7 @@ const optList = (items, sel) => items.map((i) => i.code === '__sep' ? `<option d
 /* ============================ state ============================ */
 const state = {
   id: null, meta: null, originalName: '', cues: [], style: null,
-  language: 'en', engine: 'local', model: 'small',
+  language: 'en', engine: 'auto', model: 'auto',
   rows: 1, capRow: 0, scriptRow: 0,
   activeCue: -1, selCue: -1, duration: 0, zoom: 1,
   view: { zoom: 1, panX: 0, panY: 0 },
@@ -101,38 +85,54 @@ for (const k of Object.keys(el)) {
 init();
 async function init() {
   try { health = await (await fetch('/api/health')).json(); } catch {}
-  state.engine = health.engines[health.defaultEngine] ? health.defaultEngine : 'local';
-  state.model = health.defaultModel || 'small';
+  // Managed service: default to "Auto" (server picks the best engine the user can run).
+  state.engine = 'auto'; state.model = 'auto';
   populateSelectors();
+  loadCustomPresets();   // fetch the user's saved style presets (async; grid refreshes)
   applyPanelWidth();
   // Start on the home view (project library). The user picks an existing
   // project or hits "New video" to upload.
   showHome();
 }
+function userPlanRank() {
+  const u = window.__captoUser || {}; const r = window.__captoPlanRank || { free: 0, pro: 1, ultra: 2 };
+  return r[u.plan] != null ? r[u.plan] : 0;
+}
+// Engine dropdown = "Auto" + the canonical STT models, plan-gated exactly like the
+// dashboard/settings: models above the user's plan show but are disabled with a
+// (Pro)/(Ultra) tag. BYOK note: the server still honours a user key for any model.
 function engineOptions(sel) {
-  return ENGINES.map((e) => { const ok = health.engines[e.code]; return `<option value="${e.code}"${e.code === sel ? ' selected' : ''}${ok ? '' : ' disabled'}>${ok ? e.label : e.label + ' (needs key)'}</option>`; }).join('');
+  const models = window.__captoModels || [];
+  const planR = window.__captoPlanRank || { free: 0, pro: 1, ultra: 2 };
+  const rank = userPlanRank();
+  let html = `<option value="auto"${sel === 'auto' ? ' selected' : ''}>Auto — best engine</option>`;
+  for (const m of models) {
+    const ok = (planR[m.minPlan] || 0) <= rank;
+    const tag = m.minPlan === 'ultra' ? ' (Ultra)' : ' (Pro)';
+    html += `<option value="${m.id}"${m.id === sel ? ' selected' : ''}${ok ? '' : ' disabled'}>${ok ? m.label : m.label + tag}</option>`;
+  }
+  return html;
 }
 function populateSelectors() {
   [el.uploadEngine, el.setEngine, el.editEngine, el.homeEngine].forEach((s) => s.innerHTML = engineOptions(state.engine));
-  [el.uploadLang, el.setLang, el.editLang, el.homeLang].forEach((s) => s.innerHTML = optList(LANGUAGES, state.language));
-  [el.uploadModel, el.setModel, el.editModel, el.homeModel].forEach((s) => s.innerHTML = optList(MODELS, state.model));
+  const langHtml = LANGUAGES.map((l) => `<option value="${l.code}"${l.code === state.language ? ' selected' : ''}>${l.label}</option>`).join('');
+  [el.uploadLang, el.setLang, el.editLang, el.homeLang].forEach((s) => s.innerHTML = langHtml);
   syncSelectors();
-  const need = []; if (!health.engines.groq) need.push('GROQ_API_KEY'); if (!health.engines.openai) need.push('OPENAI_API_KEY');
-  el.engineHint.textContent = need.length ? 'Add ' + need.join(' / ') + ' in .env to enable more engines.' : 'All engines ready.';
-  el.uploadHint.textContent = state.engine === 'local' ? 'Tip: Groq (free online) or a bigger model = better quality.' : 'Online engine selected.';
+  el.uploadHint.textContent = 'Auto picks the best engine for your clip. Add your own keys in Settings to unlock more.';
 }
+// Expose so the bridge can refresh the engine list once the signed-in plan loads
+// (fetchMe resolves after init), keeping Pro/Ultra models enabled when applicable.
+window.__captoRefreshEngines = populateSelectors;
 function syncSelectors() {
   [el.uploadEngine, el.setEngine, el.editEngine, el.homeEngine].forEach((s) => s.value = state.engine);
   [el.uploadLang, el.setLang, el.editLang, el.homeLang].forEach((s) => s.value = state.language);
-  [el.uploadModel, el.setModel, el.editModel, el.homeModel].forEach((s) => s.value = state.model);
-  const local = state.engine === 'local';
-  el.uploadModelField.hidden = !local; el.setModelField.hidden = !local; el.editModel.hidden = !local;
-  if (el.homeModelField) el.homeModelField.hidden = !local;
+  // Managed service — there's no local-model size picker. Always hide those fields.
+  el.uploadModelField.hidden = true; el.setModelField.hidden = true; el.editModel.hidden = true;
+  if (el.homeModelField) el.homeModelField.hidden = true;
 }
 function bindSel(elem, key) { elem.addEventListener('change', () => { state[key] = elem.value; syncSelectors(); if (key === 'engine') populateSelectors(); }); }
 [['uploadEngine','engine'],['setEngine','engine'],['editEngine','engine'],['homeEngine','engine'],
- ['uploadLang','language'],['setLang','language'],['editLang','language'],['homeLang','language'],
- ['uploadModel','model'],['setModel','model'],['editModel','model'],['homeModel','model']].forEach(([id, k]) => bindSel(el[id], k));
+ ['uploadLang','language'],['setLang','language'],['editLang','language'],['homeLang','language']].forEach(([id, k]) => bindSel(el[id], k));
 
 /* ============================ home view ============================ */
 // Home shows your project library. Editor is shown when a project is loaded.
@@ -339,14 +339,18 @@ if (el.previewQ) {
 }
 
 async function transcribeProject() {
-  const lang = (LANGUAGES.find((l) => l.code === state.language) || {}).label || 'audio';
-  setStatus(`<span class="spinner"></span> Transcribing ${lang}… (first local run downloads the model)`);
+  const lang = langLabel(state.language);
+  setStatus(`<span class="spinner"></span> Generating ${lang} captions…`);
   el.cues.innerHTML = '<div class="cue-empty"><span class="spinner"></span><br>Generating captions…</div>';
   el.retranscribeBtn.disabled = true;
   try {
-    const res = await fetch(`/api/projects/${state.id}/transcribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: state.language, engine: state.engine, model: state.model }) });
+    const res = await fetch(`/api/projects/${state.id}/transcribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: state.language, engine: state.engine, model: state.engine }) });
     const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Transcription failed');
-    state.cues = data.cues.map((c) => ({ row: 0, ...c }));
+    // Tag each cue with the AI's ORIGINAL text + timing so later user edits can be
+    // diffed against it for the learning telemetry (see sendFeedback).
+    state.cues = data.cues.map((c) => ({ row: 0, ...c, _ai: c.text, _aiStart: c.start, _aiEnd: c.end }));
+    for (const k of Object.keys(fbSent)) delete fbSent[k];           // fresh baseline
+    sendFeedback({ kind: 'regenerate', payload: { count: data.cues.length, language: data.language || state.language } });
     // Push any overlapping cues to fresh rows (engine occasionally emits two cues
     // covering the same window — we never want them stacked on the same row).
     state.rows = distributeRows(state.cues);
@@ -381,13 +385,19 @@ const MIN_DUR = 0.06, OVERLAP_EPS = 0;
 // cue. The first cue lands on row 0; if the next cue starts before the previous
 // one ends (transcription glitch — two engines occasionally do this), it gets row 1,
 // and so on. Returns the highest row used, so callers can size state.rows.
+// Tolerance for spilling a cue to a NEW row. Raw STT word timings routinely make
+// cue[i] start a few ms before cue[i-1] ended; with a tight (1ms) tolerance every
+// such micro-overlap forced a new lane, so a one-line transcript ballooned the
+// timeline to many rows. We only spill to a fresh row on a REAL overlap (>0.25s);
+// fixOverlaps() then sequentialises the tiny ones back-to-back on the same row.
+const ROW_SPILL_TOL = 0.25;
 function distributeRows(cues) {
   const rowEnds = [];  // rowEnds[r] = the last "end" timestamp on that row
   const sorted = cues.map((c, i) => ({ c, i })).sort((a, b) => a.c.start - b.c.start);
   for (const { c } of sorted) {
     let placed = -1;
     for (let r = 0; r < rowEnds.length; r++) {
-      if (c.start >= rowEnds[r] - 1e-3) { placed = r; break; }
+      if (c.start >= rowEnds[r] - ROW_SPILL_TOL) { placed = r; break; }
     }
     if (placed < 0) { placed = rowEnds.length; rowEnds.push(0); }
     c.row = placed;
@@ -526,7 +536,7 @@ el.cues.addEventListener('keydown', (e) => {
 el.cues.addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]')?.dataset.act; if (!act) return;
   const i = +e.target.closest('.cue').dataset.i;
-  if (act === 'del') { state.cues.splice(i, 1); if (state.selCue === i) state.selCue = -1; ensureRows(); renderAll(); renderScript(); saveSoon(); }
+  if (act === 'del') { const d = state.cues[i]; if (d && d._ai) sendFeedback({ kind: 'delete', cueId: String(d.id), aiText: d._ai, finalText: '' }); state.cues.splice(i, 1); if (state.selCue === i) state.selCue = -1; ensureRows(); renderAll(); renderScript(); saveSoon(); }
   if (act === 'time') openTimeEditor(e.target.closest('.cue'), i);
 });
 // Time display in M:SS.cs (centiseconds) when editing, so users can set precise
@@ -591,33 +601,61 @@ el.addCueBtn.onclick = () => {
 function neighborBoundsFor(cue) { let hi = state.duration; state.cues.forEach((c) => { if ((c.row || 0) === cue.row && c.start >= cue.start) hi = Math.min(hi, c.start); }); return { hi }; }
 
 /* ============================ style panel ============================ */
-// Use a function so it's hoisted — no chance of TDZ from any caller.
-function builtinPresets() { return {
-  'Clean':    { fontFamily: 'Inter', bold: true,  caseMode: 'sentence', outlineWidth: 0,    shadowEnabled: true,  shadowColor: '#000000', shadowOpacity: 55, shadowDistance: 0,    shadowBlur: 0.08, highlightEnabled: false, letterSpacingPct: -6 },
-  'Bold Pop': { fontFamily: 'Inter', bold: true,  caseMode: 'upper',    outlineWidth: 0,    shadowEnabled: true,  shadowColor: '#000000', shadowOpacity: 70, shadowDistance: 0.06, shadowBlur: 0.05, highlightEnabled: true, highlightColor: '#FFE36E', highlightScale: 112, letterSpacingPct: -3 },
-  'Outline':  { fontFamily: 'Anton', bold: false, caseMode: 'upper',    outlineWidth: 0.05, outlineColor: '#000000', shadowEnabled: false, highlightEnabled: false, letterSpacingPct: 0 },
-  'Subtle':   { fontFamily: 'Inter', bold: true,  caseMode: 'sentence', outlineWidth: 0,    shadowEnabled: true,  shadowColor: '#000000', shadowOpacity: 40, shadowDistance: 0.03, shadowBlur: 0.06, highlightEnabled: false, letterSpacingPct: -5 },
-  'Hormozi':  { fontFamily: 'Archivo Black', bold: false, caseMode: 'upper', outlineWidth: 0.02, outlineColor: '#000000', shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 70, shadowDistance: 0.05, shadowBlur: 0.04, highlightEnabled: true, highlightColor: '#FFE36E', highlightScale: 112, letterSpacingPct: -2 },
-  'Karaoke':  { fontFamily: 'Poppins', bold: true, caseMode: 'upper', outlineWidth: 0, shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60, shadowDistance: 0.03, shadowBlur: 0.05, highlightEnabled: true, highlightColor: '#82A5FF', highlightScale: 108, letterSpacingPct: -2 },
-  'Neon':     { fontFamily: 'Bebas Neue', bold: false, caseMode: 'upper', outlineWidth: 0, shadowEnabled: true, shadowColor: '#62D8FF', shadowOpacity: 85, shadowDistance: 0, shadowBlur: 0.14, highlightEnabled: true, highlightColor: '#62D8FF', highlightScale: 106, letterSpacingPct: 1 },
-  'Beasty':   { fontFamily: 'Anton', bold: false, caseMode: 'upper', outlineWidth: 0.035, outlineColor: '#000000', shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 75, shadowDistance: 0.05, shadowBlur: 0.03, highlightEnabled: true, highlightColor: '#46D39A', highlightScale: 116, letterSpacingPct: -1 },
-}; }
-function customPresets() { try { return JSON.parse(localStorage.getItem('subby-presets') || '{}'); } catch { return {}; } }
-function saveCustomPresets(p) { localStorage.setItem('subby-presets', JSON.stringify(p)); }
+// The advertised caption styles (window.CAPTO_PRESETS, from caption-presets.js) +
+// the user's own saved presets (persisted to the Capto DB via /api/user/presets,
+// with a localStorage fallback for offline / signed-out). Each renders as a live
+// preview box; clicking one applies it onto state.style.
+var customPresetList = [];     // [{ id, name, config, isDefault }]
+const CUSTOM_LS = 'capto-presets-v2';
+function customLocal() { try { return JSON.parse(localStorage.getItem(CUSTOM_LS) || '[]'); } catch { return []; } }
+function saveCustomLocal(list) { try { localStorage.setItem(CUSTOM_LS, JSON.stringify(list)); } catch {} }
+async function loadCustomPresets() {
+  try {
+    const r = await fetch('/api/user/presets');
+    if (r.ok) { const d = await r.json(); customPresetList = Array.isArray(d.presets) ? d.presets : []; saveCustomLocal(customPresetList); }
+    else customPresetList = customLocal();
+  } catch { customPresetList = customLocal(); }
+  // If a custom preset is the saved default and this is a brand-new style, you
+  // could auto-apply — we keep it manual to avoid surprising existing projects.
+  renderPresetGrid();
+}
+async function saveCustomPreset(name, makeDefault) {
+  const config = snapshotStyle();
+  config._fontRatio = (state.meta && state.meta.height) ? (state.style.fontSize / state.meta.height) : null;
+  let saved = null;
+  try {
+    const r = await fetch('/api/user/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, config, isDefault: !!makeDefault }) });
+    if (r.ok) saved = await r.json();
+  } catch {}
+  // local mirror (and the only store when signed out / offline)
+  const list = customLocal().filter((p) => p.name !== name);
+  list.unshift({ id: (saved && saved.id) || ('local-' + Date.now()), name, config, isDefault: !!makeDefault });
+  if (makeDefault) list.forEach((p, i) => p.isDefault = i === 0);
+  saveCustomLocal(list);
+  await loadCustomPresets();
+}
+async function deleteCustomPreset(id) {
+  try { await fetch('/api/user/presets?id=' + encodeURIComponent(id), { method: 'DELETE' }); } catch {}
+  saveCustomLocal(customLocal().filter((p) => p.id !== id));
+  await loadCustomPresets();
+}
 
 function renderStylePanel() {
   const s = state.style;
   $('#tab-style').innerHTML = `
     <div class="section">
-      <p class="sec-title">Presets</p>
-      <div class="chips" id="preset-chips"></div>
-      <div style="display:flex; gap:6px; margin-top:9px">
-        <button class="btn ghost sm" id="savePreset">＋ Save preset</button>
+      <p class="sec-title">Styles</p>
+      <input type="text" class="search preset-search" id="preset-search" placeholder="Search styles…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="preset-grid" id="preset-grid"></div>
+      <div style="display:flex; gap:6px; margin-top:10px">
+        <button class="btn ghost sm" id="savePreset">＋ Save current as preset</button>
         <button class="btn ghost sm" id="resetDefault" title="Forget the saved default style — fresh videos will use Capto's built-in defaults again">⟲ Reset default</button>
       </div>
-      <p class="hint-line">Your current style is auto‑saved and applied to every new video. Click a preset to switch instantly.</p>
+      <p class="hint-line">Pick a style, then fine-tune under Advanced. Your current look is auto-saved as the default for new videos.</p>
     </div>
-    <div class="section">
+    <button class="btn ghost sm adv-toggle" id="advToggleTop" aria-expanded="false">Advanced styling ▾</button>
+    <div class="collapse adv-controls" id="advControls" style="max-height:0">
+    <div class="section" style="margin-top:14px">
       <p class="sec-title">Text</p>
       <div class="field"><label>Font</label><select id="st-font">${FONTS.map((f) => `<option value="${f.family}">${f.label}</option>`).join('')}</select></div>
       <div class="row2">
@@ -657,9 +695,14 @@ function renderStylePanel() {
       <p class="sec-title">Word highlight</p>
       <div class="field"><div class="seg" id="st-hl"><button data-h="off">Off</button><button data-h="on">On</button></div></div>
       <div class="collapse" id="hlAdv">
-        <div class="row2" style="margin-top:10px">
-          <div class="field"><label>Highlight color</label><input type="color" id="st-hlcolor"></div>
+        <div class="field" style="margin-top:10px"><label>Style</label><div class="seg" id="st-hlmode"><button data-m="color">Color</button><button data-m="box">Box</button><button data-m="glow">Glow</button><button data-m="underline">Line</button></div></div>
+        <div class="row2">
+          <div class="field"><label>Active text</label><input type="color" id="st-hlcolor"></div>
+          <div class="field"><label>Box / accent</label><input type="color" id="st-hlbg"></div>
+        </div>
+        <div class="row2">
           <div class="field"><label>Pop <span class="val" id="v-hls"></span></label><input type="range" id="st-hls" min="100" max="150"></div>
+          <div class="field"><label>Rounded</label><div class="seg icons" id="st-hlpill"><button data-p="pill">●</button></div></div>
         </div>
       </div>
     </div>
@@ -677,7 +720,21 @@ function renderStylePanel() {
       <p class="sec-title">Position</p>
       <div class="chips"><div class="chip" data-y="0.12">Top</div><div class="chip" data-y="0.5">Middle</div><div class="chip" data-y="0.82">Bottom</div></div>
       <p class="hint-line">Drag the caption on the video to place it freely. Drag its corners to resize. Double‑click to edit text.</p>
+    </div>
     </div>`;
+
+  // Preset grid + search
+  renderPresetGrid();
+  const psearch = $('#preset-search');
+  if (psearch) psearch.oninput = () => renderPresetGrid(psearch.value);
+  // Advanced collapse — expand to full content height (handles nested collapses).
+  const advBtn = $('#advToggleTop'); const advBox = $('#advControls');
+  if (advBtn && advBox) advBtn.onclick = () => {
+    const open = advBox.style.maxHeight !== '0px' && advBox.style.maxHeight !== '';
+    advBox.style.maxHeight = open ? '0px' : (advBox.scrollHeight + 200) + 'px';
+    advBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    advBtn.textContent = open ? 'Advanced styling ▾' : 'Advanced styling ▴';
+  };
 
   $('#st-font').value = s.fontFamily; $('#st-font').onchange = () => { s.fontFamily = $('#st-font').value; afterStyle(); };
   $('#st-size').max = Math.round((state.meta.height || 1920) * 0.18);
@@ -689,7 +746,7 @@ function renderStylePanel() {
   rng('#st-shb', 'shadowBlur', '#v-shb', (v) => `${v}px`);
   rng('#st-ow', 'outlineWidth', '#v-ow', (v) => `${v}px`);
   rng('#st-hls', 'highlightScale', '#v-hls', (v) => `${Math.round(v)}%`);
-  col('#st-color', 'primaryColor'); col('#st-shcolor', 'shadowColor'); col('#st-ocolor', 'outlineColor'); col('#st-hlcolor', 'highlightColor');
+  col('#st-color', 'primaryColor'); col('#st-shcolor', 'shadowColor'); col('#st-ocolor', 'outlineColor'); col('#st-hlcolor', 'highlightColor'); col('#st-hlbg', 'highlightBg');
   seg('#st-case', 'caseMode', 'v');
   $$('#sw-color .swatch').forEach((sw) => sw.onclick = () => { s.primaryColor = sw.dataset.c; $('#st-color').value = sw.dataset.c; syncSwatch(); afterStyle(); });
   syncSwatch();
@@ -703,8 +760,11 @@ function renderStylePanel() {
   $$('button', shSeg).forEach((b) => b.onclick = () => { applyShadowPreset(b.dataset.s); syncSh(); refreshShadowInputs(); afterStyle(); }); syncSh();
   $('#advToggle').onclick = () => { const c = $('#advShadow'); c.style.maxHeight = c.style.maxHeight === '0px' || !c.style.maxHeight ? '320px' : '0px'; };
   // highlight
-  const hlSeg = $('#st-hl'); const syncHl = () => { $$('button', hlSeg).forEach((b) => b.classList.toggle('on', (b.dataset.h === 'on') === !!s.highlightEnabled)); $('#hlAdv').style.maxHeight = s.highlightEnabled ? '120px' : '0px'; };
+  const hlSeg = $('#st-hl'); const syncHl = () => { $$('button', hlSeg).forEach((b) => b.classList.toggle('on', (b.dataset.h === 'on') === !!s.highlightEnabled)); $('#hlAdv').style.maxHeight = s.highlightEnabled ? '260px' : '0px'; };
   $$('button', hlSeg).forEach((b) => b.onclick = () => { s.highlightEnabled = b.dataset.h === 'on'; syncHl(); afterStyle(); }); syncHl();
+  // highlight mode (color / box / glow / underline) + rounded toggle
+  seg('#st-hlmode', 'highlightMode', 'm');
+  const pillSeg = $('#st-hlpill'); if (pillSeg) { const syncPill = () => $('[data-p=pill]', pillSeg).classList.toggle('on', !!s.highlightPill); $('[data-p=pill]', pillSeg).onclick = () => { s.highlightPill = !s.highlightPill; syncPill(); afterStyle(); }; syncPill(); }
   // position chips
   $$('#tab-style .chips .chip[data-y]').forEach((c) => c.onclick = () => { s.posX = 0.5; s.posY = parseFloat(c.dataset.y); afterStyle(); });
   // Animation controls
@@ -713,8 +773,12 @@ function renderStylePanel() {
   rng('#st-animms', 'animMs', '#v-animms', (v) => `${Math.round(v)}ms`);
 
   refreshShadowInputs();
-  renderPresetChips();
-  $('#savePreset').onclick = async () => { const name = await promptDialog('Save current style as preset', ''); if (!name) return; const p = customPresets(); p[name] = snapshotStyle(); saveCustomPresets(p); renderPresetChips(); toast('Preset saved'); };
+  $('#savePreset').onclick = async () => {
+    const name = await promptDialog('Name this preset', '');
+    if (!name || !name.trim()) return;
+    await saveCustomPreset(name.trim(), false);
+    toast('Preset saved');
+  };
   const resetBtn = $('#resetDefault');
   if (resetBtn) resetBtn.onclick = () => { clearDefaultStyle(); toast('Saved default cleared — next new video will use Capto defaults'); };
 }
@@ -778,23 +842,74 @@ function currentShadowPreset() { const s = state.style; if (!s.shadowEnabled) re
 function applyShadowPreset(p) { const s = state.style, H = state.meta.height; if (p === 'none') { s.shadowEnabled = false; return; } s.shadowEnabled = true; s.shadowColor = s.shadowColor || '#000000'; if (p === 'soft') { s.shadowOpacity = 55; s.shadowDistance = Math.round(H * 0.002); s.shadowBlur = Math.round(H * 0.006); } if (p === 'hard') { s.shadowOpacity = 80; s.shadowDistance = Math.round(H * 0.006); s.shadowBlur = 0; } if (p === 'glow') { s.shadowOpacity = 70; s.shadowDistance = 0; s.shadowBlur = Math.round(H * 0.016); } }
 function refreshShadowInputs() { const s = state.style; ['shadowOpacity:#st-shop:#v-shop:%','shadowDistance:#st-shd:#v-shd:px','shadowBlur:#st-shb:#v-shb:px','outlineWidth:#st-ow:#v-ow:px'].forEach((d) => { const [k, sel, v, u] = d.split(':'); const i = $(sel); if (i) { i.value = s[k]; $(v).textContent = (u === '%' ? Math.round(s[k]) : s[k]) + u; } }); if ($('#st-shcolor')) $('#st-shcolor').value = s.shadowColor; if ($('#st-ocolor')) $('#st-ocolor').value = s.outlineColor; }
 function snapshotStyle() { const { posX, posY, ...rest } = state.style; return rest; }
-function renderPresetChips() {
-  const wrap = $('#preset-chips'); if (!wrap) return;
-  const custom = customPresets();
-  wrap.innerHTML = Object.keys(builtinPresets()).map((n) => `<div class="chip preset" data-preset="${n}">${n}</div>`).join('')
-    + Object.keys(custom).map((n) => `<div class="chip preset" data-cpreset="${n}">${n}<span class="x" data-delpreset="${n}">✕</span></div>`).join('');
-  $$('[data-preset]', wrap).forEach((c) => c.onclick = () => applyPreset(builtinPresets()[c.dataset.preset]));
-  $$('[data-cpreset]', wrap).forEach((c) => c.onclick = (e) => { if (e.target.dataset.delpreset) { const p = customPresets(); delete p[e.target.dataset.delpreset]; saveCustomPresets(p); renderPresetChips(); return; } applyPreset(custom[c.dataset.cpreset]); });
+
+// Build the unified list of selectable styles: the advertised CAPTO_PRESETS +
+// the user's saved custom presets. Each item carries a studio-style object.
+function presetItems() {
+  const items = [];
+  (window.CAPTO_PRESETS || []).forEach((p) => items.push({
+    key: 'b:' + p.id, name: p.name, sample: p.sample, popular: !!p.popular, kind: 'builtin',
+    styleFor: (meta) => (window.captoPresetToStyle ? window.captoPresetToStyle(p, meta) : {}),
+  }));
+  (customPresetList || []).forEach((c) => items.push({
+    key: 'c:' + c.id, id: c.id, name: c.name, sample: 'your style', kind: 'custom', isDefault: !!c.isDefault,
+    styleFor: (meta) => {
+      const cfg = Object.assign({}, c.config || {});
+      // Rescale a saved absolute font size to the current video height if we
+      // captured a ratio, so a preset looks the same across resolutions.
+      if (cfg._fontRatio && meta && meta.height) cfg.fontSize = Math.round(meta.height * cfg._fontRatio);
+      return cfg;
+    },
+  }));
+  return items;
 }
-function applyPreset(p) {
-  const s = state.style, H = state.meta.height;
-  Object.assign(s, p);
-  if ('bold' in p) s.weight = p.bold ? 700 : 400; // presets still describe bold; map to numeric weight
-  if (p.letterSpacingPct != null) s.letterSpacing = Math.round(s.fontSize * p.letterSpacingPct / 100);
-  if (p.outlineWidth != null && p.outlineWidth <= 1) s.outlineWidth = Math.round(p.outlineWidth * H);
-  if (p.shadowDistance != null && p.shadowDistance <= 1) s.shadowDistance = Math.round(p.shadowDistance * H);
-  if (p.shadowBlur != null && p.shadowBlur <= 1) s.shadowBlur = Math.round(p.shadowBlur * H);
+// One WYSIWYG mini-preview box, styled inline from the item's studio-style.
+function presetBoxHTML(item) {
+  const st = item.styleFor({ height: 1080 }) || {};
+  const words = String(item.sample || item.name || 'Aa Bb Cc').split(/\s+/).filter(Boolean).slice(0, 4);
+  const fill = st.primaryColor || '#fff';
+  const mode = st.highlightMode || 'color';
+  const hi = st.highlightColor || fill;
+  const bg = st.highlightBg || '#FFD233';
+  const pill = !!st.highlightPill;
+  const cap = (w) => st.caseMode === 'upper' ? w.toUpperCase() : st.caseMode === 'lower' ? w.toLowerCase() : (st.caseMode === 'title' ? w.replace(/\S+/g, (x) => x.charAt(0).toUpperCase() + x.slice(1)) : w);
+  const hiIdx = Math.min(1, words.length - 1);
+  const spans = words.map((w, i) => {
+    let css = '';
+    if (i === hiIdx && st.highlightEnabled !== false) {
+      if (mode === 'box') css = `color:${hi};background:${bg};box-shadow:0 0 0 ${pill ? '.24em' : '.12em'} ${bg};border-radius:${pill ? '.6em' : '.16em'}`;
+      else if (mode === 'glow') css = `color:${hi};text-shadow:0 0 .3em ${hi},0 0 .6em ${hi}`;
+      else if (mode === 'underline') css = `color:${hi};box-shadow:inset 0 -.12em 0 ${bg}`;
+      else css = `color:${hi}`;
+    } else css = `color:${fill}`;
+    return `<span style="${css}">${escapeHtml(cap(w))}</span>`;
+  }).join(' ');
+  const badge = item.kind === 'custom'
+    ? `<span class="pb-del" data-del="${escapeAttr(item.id)}" title="Delete preset">✕</span>`
+    : (item.popular ? `<span class="pb-pop">Popular</span>` : '');
+  const textShadow = st.shadowEnabled !== false && mode !== 'glow' ? 'text-shadow:0 2px 6px rgba(0,0,0,.7)' : '';
+  return `<button class="preset-box" data-key="${escapeAttr(item.key)}" title="${escapeAttr(item.name)}">
+    <span class="pb-stage" style="font-weight:${st.weight || 700};${textShadow}">${spans}</span>
+    <span class="pb-name">${escapeHtml(item.name)} ${badge}</span>
+  </button>`;
+}
+function renderPresetGrid(filter) {
+  const grid = $('#preset-grid'); if (!grid) return;
+  const q = (filter || '').trim().toLowerCase();
+  const items = presetItems().filter((it) => !q || it.name.toLowerCase().includes(q));
+  grid.innerHTML = items.length ? items.map(presetBoxHTML).join('') : `<div class="hint-line" style="grid-column:1/-1">No styles match “${escapeHtml(q)}”.</div>`;
+  $$('.preset-box', grid).forEach((box) => box.onclick = (e) => {
+    if (e.target.closest('.pb-del')) { e.stopPropagation(); deleteCustomPreset(e.target.closest('.pb-del').dataset.del); return; }
+    const item = presetItems().find((it) => it.key === box.dataset.key);
+    if (item) applyPresetStyle(item);
+  });
+}
+function applyPresetStyle(item) {
+  const st = item.styleFor(state.meta) || {};
+  Object.assign(state.style, st);
+  normalizeStyle(state.style);
   renderStylePanel(); afterStyle();
+  if (item.name) toast(`Applied “${item.name}”`);
 }
 function afterStyle() {
   renderOverlay(); saveSoon(); persistDefaultStyle();
@@ -815,8 +930,10 @@ document.addEventListener('click', (e) => {
   if (t && t.dataset && t.dataset.tab) switchTab(t.dataset.tab);
 });
 function switchTab(name) {
+  // 'settings' lives in the Capto dashboard now — the editor has only these three.
+  if (name === 'settings') name = 'captions';
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
-  ['captions', 'script', 'style', 'settings'].forEach((n) => $('#tab-' + n).hidden = n !== name);
+  ['captions', 'script', 'style'].forEach((n) => { const p = $('#tab-' + n); if (p) p.hidden = n !== name; });
   if (name === 'script') renderScript();
 }
 
@@ -915,19 +1032,43 @@ function styleBlock(block, cue) {
     block.style.maxWidth = Math.round(fw * 0.92) + 'px';
   }
 }
-// Per-frame: only mutate spans when the active word actually changes.
+// Per-frame: only mutate spans when the active word actually changes. Supports
+// four highlight modes — colour, box (filled pill/rect), glow, underline — all
+// painted with layout-NEUTRAL CSS (background + box-shadow spread, never padding)
+// so advancing the active word never changes width / wraps the line.
 function paintActiveWord(block, cue, t) {
   const s = state.style;
   const words = (cue.words && cue.words.length) ? cue.words : [{ word: cue.text, start: cue.start, end: cue.end }];
   let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
-  const sig = `${aw}|${s.highlightEnabled}|${s.highlightColor}|${s.highlightScale}`;
+  const mode = s.highlightMode || 'color';
+  const bg = s.highlightBg || '#FFE36E';
+  const sig = `${aw}|${s.highlightEnabled}|${mode}|${s.highlightColor}|${bg}|${s.highlightPill}|${s.highlightScale}`;
   if (block.dataset.awsig === sig) return; // no change — no DOM mutation
   block.dataset.awsig = sig;
   const spans = block.children;
   for (let k = 0; k < spans.length; k++) {
+    const sp = spans[k];
     const on = s.highlightEnabled && k === aw;
-    spans[k].style.color = on ? s.highlightColor : '';
-    spans[k].style.transform = on && s.highlightScale !== 100 ? `scale(${s.highlightScale / 100})` : '';
+    // reset everything we might set (textShadow falls back to the block's)
+    sp.style.color = ''; sp.style.background = ''; sp.style.boxShadow = '';
+    sp.style.borderRadius = ''; sp.style.transform = ''; sp.style.textShadow = '';
+    if (!on) continue;
+    if (s.highlightScale && s.highlightScale !== 100) sp.style.transform = `scale(${s.highlightScale / 100})`;
+    if (mode === 'box') {
+      const sp2 = s.highlightPill ? '.24em' : '.14em';
+      sp.style.color = s.highlightColor;
+      sp.style.background = bg;
+      sp.style.boxShadow = `0 0 0 ${sp2} ${bg}`;        // spread = padding without reflow
+      sp.style.borderRadius = s.highlightPill ? '.6em' : '.16em';
+    } else if (mode === 'glow') {
+      sp.style.color = s.highlightColor;
+      sp.style.textShadow = `0 0 .35em ${s.highlightColor}, 0 0 .7em ${s.highlightColor}`;
+    } else if (mode === 'underline') {
+      sp.style.color = s.highlightColor;
+      sp.style.boxShadow = `inset 0 -.12em 0 ${bg}`;
+    } else {
+      sp.style.color = s.highlightColor;
+    }
   }
 }
 
@@ -938,16 +1079,25 @@ function renderOverlay() {
 }
 function fitBlockToFrame(block) {
   if (!block || !el.frame) return;
-  // When the user has set an explicit box width, respect it — don't auto-shrink
+  // When the user has set an explicit box width, respect it — don't auto-fit
   // (that's what previously made captions "compress" unexpectedly).
-  if (typeof state.style.boxWidth === 'number' && state.style.boxWidth > 0) { block.style.transform = 'translate(-50%, -50%)'; return; }
+  if (typeof state.style.boxWidth === 'number' && state.style.boxWidth > 0) { block.style.transform = 'translate(-50%, -50%)'; block.dataset.fit = '1'; return; }
   // Remove any prior scale so we measure the natural width
   block.style.transform = 'translate(-50%, -50%)';
   const fw = el.frame.clientWidth;
   const bw = block.offsetWidth;
-  if (bw <= fw * 0.95) return; // fits — no scaling
-  const scale = Math.max(0.5, (fw * 0.92) / bw);
-  block.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
+  let scale = 1;
+  if (bw > fw * 0.95) {
+    // Too wide (long word on a portrait clip) → shrink to fit. Caps at 0.5×.
+    scale = Math.max(0.5, (fw * 0.92) / bw);
+  } else {
+    // Short single-line cue → stretch to fill the width so a 1–3 word caption
+    // reads big and full instead of tiny in the middle of the frame.
+    const singleLine = !block.querySelector('br');
+    if (singleLine && bw > 0 && bw < fw * 0.62) scale = clamp((fw * 0.74) / bw, 1, 1.6);
+  }
+  block.dataset.fit = String(scale);
+  block.style.transform = scale === 1 ? 'translate(-50%, -50%)' : `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
 }
 function doRenderOverlay() {
   if (!state.meta || state.editingCaption) return;
@@ -1008,12 +1158,14 @@ function positionSelBox() {
   const cueId = i >= 0 && state.cues[i] ? state.cues[i].id : null;
   const block = cueId ? el.capLayer.querySelector(`.cap-block[data-cue="${cueId}"]`) : null;
   if (!block) { el.capSel.classList.remove('on'); return; }
-  // The block uses transform:translate(-50%,-50%) with left/top in px relative to .frame.
-  // The sel box does the same, so we mirror left/top exactly + measure the rendered size.
+  // The block uses transform:translate(-50%,-50%) [+ scale] with left/top in px
+  // relative to .frame. The sel box mirrors left/top and the RENDERED size, so it
+  // tracks the caption even when fitBlockToFrame stretched/shrank it.
+  const fit = parseFloat(block.dataset.fit) || 1;
   el.capSel.style.left = block.style.left;
   el.capSel.style.top = block.style.top;
-  el.capSel.style.width = block.offsetWidth + 'px';
-  el.capSel.style.height = block.offsetHeight + 'px';
+  el.capSel.style.width = (block.offsetWidth * fit) + 'px';
+  el.capSel.style.height = (block.offsetHeight * fit) + 'px';
   el.capSel.classList.add('on');
 }
 
@@ -1325,7 +1477,9 @@ el.tlInner.addEventListener('pointerdown', (e) => {
       const ns = clamp(snapped, b.lo, b.hi - len);
       cue.start = ns; cue.end = ns + len;
       // Move to another row if pointer is in a different row's vertical band.
-      const rowH = 44; // matches CSS .tl-row height
+      // Measure the real lane height (CSS --tl-row-h varies 56–76) so the band
+      // lines up with what the user sees.
+      const rowH = (rowsEl && rowsEl.querySelector('.tl-row') ? rowsEl.querySelector('.tl-row').getBoundingClientRect().height : 56) || 56;
       const rel = ev.clientY - rowsTop.top;
       const nr = clamp(Math.floor(rel / rowH), 0, state.rows - 1);
       if (nr !== (cue.row || 0)) {
@@ -1624,9 +1778,51 @@ el.resizer.addEventListener('pointerdown', (e) => {
 var saveTimer = null;
 function saveSoon() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { fetch(`/api/projects/${state.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues: state.cues, style: state.style }) }).catch(() => {}); }, 450);
+  saveTimer = setTimeout(() => { fetch(`/api/projects/${state.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues: state.cues, style: state.style }) }).catch(() => {}); sendFeedback(); }, 450);
   pushHistory();
 }
+
+/* ============================ learning telemetry ============================ */
+// Every AI-generated cue is tagged with the model's ORIGINAL text + timing
+// (_ai/_aiStart/_aiEnd). As the user corrects captions we stream the (AI → final)
+// diffs to /api/studio/feedback so Capto accumulates real training data — what was
+// edited, where, and how — to keep improving the engine. Privacy: only caption
+// text + timings + the engine/lang are sent; the video never leaves the device.
+const fbSent = {};   // cueId -> last signature sent (dedupe)
+function collectFeedbackEvents() {
+  const events = [];
+  for (const c of state.cues) {
+    if (!c || !c._ai) continue;                 // only cues the AI produced
+    const textChanged = (c.text || '') !== c._ai;
+    const timingChanged = Math.abs((c.start || 0) - (c._aiStart || 0)) > 0.05 || Math.abs((c.end || 0) - (c._aiEnd || 0)) > 0.05;
+    if (!textChanged && !timingChanged) continue;
+    const sig = `${c.text}|${(c.start || 0).toFixed(2)}|${(c.end || 0).toFixed(2)}`;
+    if (fbSent[c.id] === sig) continue;         // unchanged since last send
+    fbSent[c.id] = sig;
+    events.push({
+      kind: textChanged ? 'text' : 'timing',
+      cueId: String(c.id),
+      aiText: c._ai,
+      finalText: c.text,
+      payload: { aiStart: c._aiStart, aiEnd: c._aiEnd, finalStart: c.start, finalEnd: c.end },
+    });
+  }
+  return events;
+}
+function sendFeedback(extra, useBeacon) {
+  if (!state.id) return;
+  try {
+    const events = collectFeedbackEvents();
+    if (extra) events.push(extra);
+    if (!events.length) return;
+    const body = JSON.stringify({ projectId: state.id, engine: state.engine, language: state.language, events });
+    if (useBeacon && navigator.sendBeacon) { navigator.sendBeacon('/api/studio/feedback', new Blob([body], { type: 'application/json' })); return; }
+    fetch('/api/studio/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => {});
+  } catch {}
+}
+// Flush remaining corrections when leaving the project / tab.
+window.addEventListener('pagehide', () => sendFeedback(null, true));
+document.addEventListener('visibilitychange', () => { if (document.hidden) sendFeedback(null, true); });
 
 /* ============================ undo / redo ============================ */
 // Single shared history stack of (cues+style) snapshots. ⌘Z to undo, ⌘⇧Z (or Ctrl-Y) to redo.
@@ -1680,33 +1876,42 @@ if (el.projectName) {
   el.projectName.addEventListener('click', () => {
     if (!state.id || el.projectName.classList.contains('editing')) return;
     const orig = state.originalName || '';
+    // The file EXTENSION is not part of the editable name — strip it for editing
+    // and re-append on commit so it can never be deleted or changed.
+    const extM = orig.match(/\.[a-z0-9]{1,5}$/i);
+    const ext = extM ? extM[0] : '';
+    const base = ext ? orig.slice(0, -ext.length) : orig;
     el.projectName.classList.add('editing');
     el.projectName.contentEditable = 'plaintext-only';
-    el.projectName.textContent = orig;
+    el.projectName.textContent = base;
     el.projectName.focus();
-    // Select the whole name (minus extension if there is one)
     const r = document.createRange(); r.selectNodeContents(el.projectName);
     const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    let done = false;
+    const cleanup = () => { el.projectName.removeEventListener('keydown', onKey); el.projectName.removeEventListener('beforeinput', onBeforeInput); };
+    const restore = () => { cleanup(); el.projectName.contentEditable = 'false'; el.projectName.classList.remove('editing'); el.projectName.textContent = state.originalName || orig; };
     const commit = async () => {
-      el.projectName.contentEditable = 'false';
-      el.projectName.classList.remove('editing');
-      const name = (el.projectName.textContent || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
-      if (!name) { el.projectName.textContent = orig; return; }
-      if (name === orig) { el.projectName.textContent = orig; return; }
+      if (done) return; done = true; cleanup();
+      const typed = (el.projectName.textContent || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+      if (!typed || (typed + ext) === orig) { el.projectName.contentEditable = 'false'; el.projectName.classList.remove('editing'); el.projectName.textContent = orig; return; }
+      const name = typed + ext;
       state.originalName = name;
+      el.projectName.contentEditable = 'false'; el.projectName.classList.remove('editing');
       el.projectName.textContent = name;
       try {
         await fetch(`/api/projects/${state.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
         toast('Renamed');
       } catch { toast('Rename failed', true); el.projectName.textContent = orig; state.originalName = orig; }
     };
-    el.projectName.addEventListener('blur', commit, { once: true });
-    // Enter = save instantly (never a new line). Esc = cancel. (No { once } — must
-    // catch Enter even after the user has typed other keys first.)
+    // A filename can never contain a line break — block any newline input outright,
+    // so Enter (or a pasted multi-line string) can't insert one. Enter just commits.
+    const onBeforeInput = (ev) => { if (ev.inputType === 'insertLineBreak' || ev.inputType === 'insertParagraph') ev.preventDefault(); };
     const onKey = (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); el.projectName.removeEventListener('keydown', onKey); el.projectName.blur(); }
-      else if (ev.key === 'Escape') { ev.preventDefault(); el.projectName.removeEventListener('keydown', onKey); el.projectName.textContent = orig; el.projectName.blur(); }
+      if (ev.key === 'Enter') { ev.preventDefault(); el.projectName.blur(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); done = true; restore(); el.projectName.blur(); }
     };
+    el.projectName.addEventListener('beforeinput', onBeforeInput);
+    el.projectName.addEventListener('blur', commit, { once: true });
     el.projectName.addEventListener('keydown', onKey);
   });
 }
