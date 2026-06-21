@@ -39,19 +39,31 @@ export function LiveCaption({
     );
   }
 
+  // "Box" styles fill a coloured background behind the active word (Hormozi,
+  // Karaoke, Pop…). Only those need padding + a reserved box so toggling the
+  // highlight doesn't reflow the line; colour / glow / underline styles
+  // (Editorial, Neon, Clean Sans…) must stay TIGHT with no extra padding.
+  const isBox = /\bbg-/.test(highlightClass);
   return (
-    <div className={cn("flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1.5", className)}>
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-center gap-y-2 text-center",
+        isBox ? "gap-x-2" : "gap-x-[0.3em]",
+        className,
+      )}
+    >
       {words.map((w, i) => (
         <span
           key={i}
           className={cn(
-            // Reserve the highlight box geometry on EVERY word (rounded + px) and
-            // only transition colour/opacity — never layout props. Animating
-            // `all` previously grew the active word's padding mid-tween, shoving
-            // neighbours onto a second line and back (the karaoke "glitch").
-            "rounded px-1.5 transition-[color,background-color,opacity] duration-300 ease-[var(--ease-out)]",
+            // Transition only paint props — never layout — so nothing jumps.
+            // NB: no background-color here, so the highlight box snaps on/off
+            // instead of two boxes cross-fading (a crisp karaoke sweep).
+            "transition-[color,text-shadow,opacity] duration-200 ease-[var(--ease-out)]",
+            // Reserve the box geometry on every word, but ONLY for box styles.
+            isBox && "rounded px-1.5",
             wordClass,
-            i === active ? highlightClass : "opacity-60",
+            i === active ? highlightClass : "opacity-45",
           )}
         >
           {w}
