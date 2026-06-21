@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { LogOut, Settings, CreditCard, FolderOpen, ChevronLeft, ChevronDown } from "lucide-react";
+import { LogOut, Settings, CreditCard, FolderOpen, ChevronLeft, ChevronDown, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
 
@@ -78,6 +78,9 @@ export function AppNav({
                     { href: "/dashboard", label: "Projects", icon: FolderOpen },
                     { href: "/billing", label: "Billing", icon: CreditCard },
                     { href: "/settings", label: "Settings", icon: Settings },
+                    ...(userEmail?.toLowerCase() === "augustas.armalis@aiacquisition.com"
+                      ? [{ href: "/admin/learning", label: "Learning (admin)", icon: Sparkles }]
+                      : []),
                   ].map((it) => (
                     <Link
                       key={it.href}

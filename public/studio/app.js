@@ -44,6 +44,9 @@ function normalizeStyle(s) {
   if (typeof s.highlightMode !== 'string') s.highlightMode = 'color';
   if (typeof s.highlightBg !== 'string') s.highlightBg = '#FFD233';
   if (typeof s.highlightPill !== 'boolean') s.highlightPill = false;
+  if (typeof s.wordSpacing !== 'number') s.wordSpacing = 0;
+  if (typeof s.hollow !== 'boolean') s.hollow = false;
+  if (typeof s.gradient !== 'boolean') s.gradient = false;
   return s;
 }
 const optList = (items, sel) => items.map((i) => i.code === '__sep' ? `<option disabled>${i.label}</option>` : `<option value="${i.code}"${i.code === sel ? ' selected' : ''}>${i.label}</option>`).join('');
@@ -357,6 +360,7 @@ async function transcribeProject() {
     // Tag each cue with the AI's ORIGINAL text + timing so later user edits can be
     // diffed against it for the learning telemetry (see sendFeedback).
     state.cues = data.cues.map((c) => ({ row: 0, ...c, _ai: c.text, _aiStart: c.start, _aiEnd: c.end }));
+    state.engineUsed = data.engine || null;   // the model that actually ran (for accuracy attribution)
     for (const k of Object.keys(fbSent)) delete fbSent[k];           // fresh baseline
     sendFeedback({ kind: 'regenerate', payload: { count: data.cues.length, language: data.language || state.language } });
     // Push any overlapping cues to fresh rows (engine occasionally emits two cues
@@ -676,6 +680,7 @@ function renderStylePanel() {
         <div class="field"><label>Letter spacing <span class="val" id="v-ls"></span></label><input type="range" id="st-ls" min="-15" max="20" step="0.5"></div>
         <div class="field"><label>Line height <span class="val" id="v-lh"></span></label><input type="range" id="st-lh" min="0.8" max="2" step="0.05"></div>
       </div>
+      <div class="field"><label>Word gap <span class="val" id="v-ws"></span></label><input type="range" id="st-ws" min="-12" max="60" step="1"></div>
       <div class="field"><label>Color</label><div class="swatches" id="sw-color">${SWATCHES.map((c) => `<div class="swatch" data-c="${c}" style="background:${c}"></div>`).join('')}<input type="color" id="st-color" style="width:24px;height:24px;padding:2px;border-radius:6px"></div></div>
     </div>
     <div class="section">
@@ -726,7 +731,11 @@ function renderStylePanel() {
     </div>
     <div class="section">
       <p class="sec-title">Position</p>
-      <div class="chips"><div class="chip" data-y="0.12">Top</div><div class="chip" data-y="0.5">Middle</div><div class="chip" data-y="0.82">Bottom</div></div>
+      <div class="chips"><div class="chip" data-y="0.12">Top</div><div class="chip" data-y="0.5">Middle</div><div class="chip" data-y="0.78">Bottom</div></div>
+      <div class="row2" style="margin-top:10px">
+        <div class="field"><label>X (left ↔ right) <span class="val" id="v-px"></span></label><input type="range" id="st-px" min="0" max="100" step="1"></div>
+        <div class="field"><label>Y (top ↕ bottom) <span class="val" id="v-py"></span></label><input type="range" id="st-py" min="0" max="100" step="1"></div>
+      </div>
       <p class="hint-line">Drag the caption on the video to place it freely. Drag its corners to resize. Double‑click to edit text.</p>
     </div>
     </div>`;
@@ -751,6 +760,7 @@ function renderStylePanel() {
   rng('#st-size', 'fontSize', '#v-size', (v) => `${(Math.round(v * 100) / 100)}px`);
   rng('#st-ls', 'letterSpacing', '#v-ls', (v) => `${v}px`);
   rng('#st-lh', 'lineHeight', '#v-lh', (v) => `${(Math.round(v * 100) / 100)}`);
+  rng('#st-ws', 'wordSpacing', '#v-ws', (v) => `${Math.round(v)}px`);
   rng('#st-shop', 'shadowOpacity', '#v-shop', (v) => `${Math.round(v)}%`);
   rng('#st-shd', 'shadowDistance', '#v-shd', (v) => `${v}px`);
   rng('#st-shb', 'shadowBlur', '#v-shb', (v) => `${v}px`);
@@ -776,7 +786,11 @@ function renderStylePanel() {
   seg('#st-hlmode', 'highlightMode', 'm');
   const pillSeg = $('#st-hlpill'); if (pillSeg) { const syncPill = () => $('[data-p=pill]', pillSeg).classList.toggle('on', !!s.highlightPill); $('[data-p=pill]', pillSeg).onclick = () => { s.highlightPill = !s.highlightPill; syncPill(); afterStyle(); }; syncPill(); }
   // position chips
-  $$('#tab-style .chips .chip[data-y]').forEach((c) => c.onclick = () => { s.posX = 0.5; s.posY = parseFloat(c.dataset.y); afterStyle(); });
+  $$('#tab-style .chips .chip[data-y]').forEach((c) => c.onclick = () => { s.posX = 0.5; s.posY = parseFloat(c.dataset.y); refreshPosInputs(); afterStyle(); });
+  // X / Y fine position sliders (0–100% ↔ posX/posY 0–1).
+  const pxS = $('#st-px'); if (pxS) pxS.oninput = () => { s.posX = clamp(parseFloat(pxS.value) / 100, -0.3, 1.3); $('#v-px').textContent = Math.round(parseFloat(pxS.value)) + '%'; afterStyle(); };
+  const pyS = $('#st-py'); if (pyS) pyS.oninput = () => { s.posY = clamp(parseFloat(pyS.value) / 100, -0.3, 1.3); $('#v-py').textContent = Math.round(parseFloat(pyS.value)) + '%'; afterStyle(); };
+  refreshPosInputs();
   // Animation controls
   seg('#st-entrance', 'entrance', 'v');
   seg('#st-exit', 'exit', 'v');
@@ -1016,7 +1030,7 @@ function buildBlock(cue, row) {
 // between frames, styleBlock returns immediately (no DOM writes = no jitter).
 function styleSig(cue) {
   const s = state.style;
-  return `${cue.id}|${s.fontFamily}|${s.fontSize}|${styleWeight(s)}|${s.italic}|${s.letterSpacing}|${s.lineHeight}|${s.outlineWidth}|${s.outlineColor}|${s.shadowEnabled}|${s.shadowColor}|${s.shadowOpacity}|${s.shadowDistance}|${s.shadowBlur}|${s.primaryColor}|${s.posX}|${s.posY}|${cue.row||0}|${el.frame.clientWidth}|${el.frame.clientHeight}`;
+  return `${cue.id}|${s.fontFamily}|${s.fontSize}|${styleWeight(s)}|${s.italic}|${s.letterSpacing}|${s.wordSpacing||0}|${s.lineHeight}|${s.outlineWidth}|${s.outlineColor}|${s.hollow?1:0}|${s.gradient?1:0}|${s.shadowEnabled}|${s.shadowColor}|${s.shadowOpacity}|${s.shadowDistance}|${s.shadowBlur}|${s.primaryColor}|${s.posX}|${s.posY}|${cue.row||0}|${el.frame.clientWidth}|${el.frame.clientHeight}`;
 }
 
 function styleBlock(block, cue) {
@@ -1042,8 +1056,23 @@ function styleBlock(block, cue) {
   block.style.fontWeight = weight;
   block.style.fontStyle = s.italic ? 'italic' : 'normal';
   block.style.letterSpacing = lsPx.toFixed(1) + 'px';
+  block.style.wordSpacing = ((s.wordSpacing || 0) * scale).toFixed(1) + 'px';
   block.style.lineHeight = (typeof s.lineHeight === 'number' ? s.lineHeight : 1.12);
-  block.style.color = s.primaryColor;
+  // Fill mode: solid colour, hollow stroke (Outline), or gradient wash.
+  if (s.hollow) {
+    block.style.webkitTextStroke = Math.max(1, fontPx * 0.04).toFixed(1) + 'px ' + (s.primaryColor || '#fff');
+    block.style.backgroundImage = ''; block.style.webkitBackgroundClip = 'border-box';
+    block.style.color = 'transparent';
+  } else if (s.gradient) {
+    block.style.webkitTextStroke = '0';
+    block.style.backgroundImage = 'linear-gradient(100deg,#5fe3f5,#b8a4ff 52%,#ef79e6)';
+    block.style.webkitBackgroundClip = 'text'; block.style.backgroundClip = 'text';
+    block.style.color = 'transparent';
+  } else {
+    block.style.webkitTextStroke = '0';
+    block.style.backgroundImage = ''; block.style.webkitBackgroundClip = 'border-box';
+    block.style.color = s.primaryColor;
+  }
   block.style.textShadow = shadows.length ? shadows.join(',') : 'none';
   // Box width: explicit (free-form, set by side handles) or auto (wrap up to 92%).
   if (typeof s.boxWidth === 'number' && s.boxWidth > 0) {
@@ -1065,7 +1094,7 @@ function paintActiveWord(block, cue, t) {
   let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
   const mode = s.highlightMode || 'color';
   const bg = s.highlightBg || '#FFE36E';
-  const sig = `${aw}|${s.highlightEnabled}|${mode}|${s.highlightColor}|${bg}|${s.highlightPill}|${s.highlightScale}`;
+  const sig = `${aw}|${s.highlightEnabled}|${mode}|${s.highlightColor}|${bg}|${s.highlightPill}|${s.highlightScale}|${s.hollow?1:0}|${s.gradient?1:0}`;
   if (block.dataset.awsig === sig) return; // no change — no DOM mutation
   block.dataset.awsig = sig;
   const spans = block.children;
@@ -1074,9 +1103,13 @@ function paintActiveWord(block, cue, t) {
     const on = s.highlightEnabled && k === aw;
     // reset everything we might set (textShadow falls back to the block's)
     sp.style.color = ''; sp.style.background = ''; sp.style.boxShadow = '';
-    sp.style.borderRadius = ''; sp.style.transform = ''; sp.style.textShadow = '';
+    sp.style.borderRadius = ''; sp.style.transform = ''; sp.style.textShadow = ''; sp.style.webkitTextStroke = '';
     if (!on) continue;
     if (s.highlightScale && s.highlightScale !== 100) sp.style.transform = `scale(${s.highlightScale / 100})`;
+    // Outline: the active word FILLS solid. Gradient: keep the wash, just let it
+    // pop via the scale above (text-shadow can't show through clipped text).
+    if (s.hollow) { sp.style.color = s.highlightColor; sp.style.webkitTextStroke = '0'; continue; }
+    if (s.gradient) { continue; }
     if (mode === 'box') {
       const sp2 = s.highlightPill ? '.24em' : '.14em';
       sp.style.color = s.highlightColor;
@@ -1226,7 +1259,7 @@ el.frame.addEventListener('pointerdown', (e) => {
     for (const sy2 of [0.12, 0.5, 0.82]) if (Math.abs((y - rowOff) - sy2) < 0.025) y = sy2 + rowOff;
     state.style.posX = x; state.style.posY = y; renderOverlay();
   };
-  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; if (moved) afterStyle(); else { highlightActive(); positionSelBox(); } };
+  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; if (moved) { afterStyle(); refreshPosInputs(); } else { highlightActive(); positionSelBox(); } };
   document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
 });
 // Resize handles. Corners (tl/tr/bl/br) scale FONT size. Side handles (ml/mr)
@@ -1269,6 +1302,11 @@ $$('.cap-handle', el.capSel).forEach((h) => h.addEventListener('pointerdown', (e
   document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
 }));
 function refreshSizeInput() { const i = $('#st-size'); if (i) { i.value = state.style.fontSize; const v = $('#v-size'); if (v) v.textContent = (Math.round(state.style.fontSize * 100) / 100) + 'px'; } }
+function refreshPosInputs() {
+  const s = state.style;
+  const px = $('#st-px'), vx = $('#v-px'); if (px) { px.value = Math.round((s.posX != null ? s.posX : 0.5) * 100); if (vx) vx.textContent = Math.round((s.posX != null ? s.posX : 0.5) * 100) + '%'; }
+  const py = $('#st-py'), vy = $('#v-py'); if (py) { py.value = Math.round((s.posY != null ? s.posY : 0.78) * 100); if (vy) vy.textContent = Math.round((s.posY != null ? s.posY : 0.78) * 100) + '%'; }
+}
 el.frame.addEventListener('dblclick', (e) => {
   const block = e.target.closest('.cap-block'); if (!block) return;
   const i = state.cues.findIndex((c) => c.id === block.dataset.cue); if (i < 0) return;
@@ -1845,7 +1883,8 @@ function sendFeedback(extra, useBeacon) {
     const events = collectFeedbackEvents();
     if (extra) events.push(extra);
     if (!events.length) return;
-    const body = JSON.stringify({ projectId: state.id, engine: state.engine, language: state.language, events });
+    const eu = state.engineUsed || null;
+    const body = JSON.stringify({ projectId: state.id, engine: state.engine, language: state.language, engineProvider: eu && eu.provider, engineModel: eu && eu.model, events });
     if (useBeacon && navigator.sendBeacon) { navigator.sendBeacon('/api/studio/feedback', new Blob([body], { type: 'application/json' })); return; }
     fetch('/api/studio/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => {});
   } catch {}

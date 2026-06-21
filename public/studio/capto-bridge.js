@@ -37,11 +37,21 @@
     ['hi', 'Hindi'], ['ja', 'Japanese'],
   ];
   window.__captoPlanRank = { free: 0, pro: 1, ultra: 2 };
+  function gotoSignin() {
+    // Don't bounce on localhost — keeps the editor testable in local dev.
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return;
+    try { window.top.location.href = '/signin'; } catch { window.location.href = '/signin'; }
+  }
   async function fetchMe() {
     try {
       const r = await realFetch('/api/studio/me');
+      if (r.status === 401) { gotoSignin(); return; }
       if (r.ok) {
         window.__captoUser = await r.json();
+        // The editor is for signed-in accounts only. If someone reaches the raw
+        // /studio/ assets directly (the static files are public), bounce them to
+        // sign in — the real auth gate lives on the /editor route + here.
+        if (window.__captoUser && window.__captoUser.signedIn === false) { gotoSignin(); return; }
         renderQuotaUI(); renderExportOptions();
         // Re-render the editor engine dropdowns now the plan is known, so Pro/Ultra
         // models become selectable for paid users (init ran before this resolved).
@@ -295,19 +305,21 @@
     }
   }
 
-  // Mirrors Subby's server-side defaultStyle(meta) exactly.
+  // The default look for freshly-generated captions: SMALLER text, WIDER lines
+  // (the 4-word chunking does that), sitting a bit UP from the bottom — clean and
+  // social, not a giant block jammed against the bottom edge.
   function defaultStyle(meta) {
     const H = meta.height || 1920;
-    const fontSize = Math.round(H * 0.058);
+    const fontSize = Math.round(H * 0.05);
     return {
-      fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.1, caseMode: 'sentence',
-      primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.06),
+      fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.12, caseMode: 'sentence',
+      primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.04), wordSpacing: 0,
       outlineWidth: 0, outlineColor: '#000000',
       shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
       shadowDistance: Math.max(2, Math.round(H * 0.0025)), shadowBlur: Math.max(2, Math.round(H * 0.0035)),
       highlightEnabled: false, highlightColor: '#A0C1FF', highlightScale: 100,
       highlightMode: 'color', highlightBg: '#FFD233', highlightPill: false,
-      posX: 0.5, posY: 0.82, entrance: 'none', exit: 'none', animMs: 180,
+      posX: 0.5, posY: 0.78, entrance: 'none', exit: 'none', animMs: 180,
     };
   }
 
@@ -328,26 +340,37 @@
       if (!word) continue;
       flat.push({ word, start: +w.start, end: +w.end });
     }
-    // 1) group into clean 1–3 word chunks. A new caption ALWAYS starts when the
-    // previous word ended a sentence (. ! ? …) or after a real pause — we never
-    // stack the first word of a new thought onto the tail of the previous one.
+    // 1) group into clean, readable chunks. A new caption ALWAYS starts at a
+    // sentence end (. ! ? …) or a real pause — we never stack the first word of a
+    // new thought onto the tail of the previous one. We also prefer to break at a
+    // CLAUSE boundary (comma / dash / colon) once a line has some heft, so breaks
+    // land on natural phrase edges instead of mid-thought.
     const endsSentence = (word) => /[.!?…]["'’”\)\]]?$/.test(word);
+    const endsClause = (word) => /[,;:—–]["'’”\)\]]?$/.test(word);
     const groups = [];
     let cur = null;
     for (const w of flat) {
       if (!cur) { cur = [w]; continue; }
       const last = cur[cur.length - 1];
       const text = cur.map((x) => x.word).join(' ');
-      if (
-        endsSentence(last.word) ||                                  // sentence boundary
-        w.start - last.end > MAXGAP ||                              // real pause
-        cur.length >= MAXW ||                                       // max words
-        text.length + w.word.length + 1 > MAXCHARS                  // max chars
-      ) {
-        groups.push(cur); cur = [w];
-      } else cur.push(w);
+      const hardBreak = endsSentence(last.word) || (w.start - last.end > MAXGAP);
+      const full = cur.length >= MAXW || (text.length + w.word.length + 1 > MAXCHARS);
+      const clauseBreak = endsClause(last.word) && cur.length >= 2;
+      if (hardBreak || full || clauseBreak) { groups.push(cur); cur = [w]; }
+      else cur.push(w);
     }
     if (cur) groups.push(cur);
+    // Balance a lone trailing word: pull the previous line's last word down so a
+    // chunk never ends as a single orphan (unless a sentence/clause forces it).
+    for (let i = 1; i < groups.length; i++) {
+      const prev = groups[i - 1];
+      if (groups[i].length === 1 && prev.length >= 3) {
+        const moved = prev[prev.length - 1];
+        if (!endsSentence(moved.word) && !endsClause(moved.word) && (groups[i][0].start - moved.end) <= MAXGAP) {
+          prev.pop(); groups[i].unshift(moved);
+        }
+      }
+    }
     // 2) build cues, extending the end across small pauses but hiding on big ones
     return groups.map((ws, gi) => {
       const start = ws[0].start;
@@ -381,7 +404,9 @@
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return json({ error: data.error || 'Transcription failed.' }, res.status);
-    return json({ cues: wordsToCues(data.words), language: data.language || body.language });
+    // Pass back the engine that ACTUALLY ran (resolved from "Auto" server-side) so
+    // the editor can attribute later edits to the right model for the learning loop.
+    return json({ cues: wordsToCues(data.words), language: data.language || body.language, engine: data.engine || null });
   }
 
   // ───────────────── project persistence (Capto DB, per-account) ─────────────────
@@ -602,9 +627,14 @@
   }
   function scaleStyle(s, k) {
     const out = Object.assign({}, s);
-    for (const key of ['fontSize', 'letterSpacing', 'outlineWidth', 'shadowDistance', 'shadowBlur'])
+    for (const key of ['fontSize', 'letterSpacing', 'wordSpacing', 'outlineWidth', 'shadowDistance', 'shadowBlur'])
       if (typeof s[key] === 'number') out[key] = s[key] * k;
     return out;
+  }
+  function gradientFill(ctx, x, w) {
+    const g = ctx.createLinearGradient(x, 0, x + w, 0);
+    g.addColorStop(0, '#5fe3f5'); g.addColorStop(0.52, '#b8a4ff'); g.addColorStop(1, '#ef79e6');
+    return g;
   }
   function roundRectPath(ctx, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
@@ -617,8 +647,18 @@
     const ow = s.outlineWidth || 0;
     const mode = s.highlightMode || 'color';
     const hot = active && s.highlightEnabled;
-    const fill = hot ? s.highlightColor : s.primaryColor;
     const w = ctx.measureText(text).width;
+
+    // HOLLOW (Outline style): inactive words are a stroke outline; the active
+    // word fills solid.
+    if (s.hollow) {
+      ctx.save();
+      if (hot) { ctx.fillStyle = s.highlightColor || '#fff'; ctx.fillText(text, x, y); }
+      else { ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(1.5, fontPx * 0.045); ctx.strokeStyle = s.primaryColor || '#fff'; ctx.strokeText(text, x, y); }
+      ctx.restore();
+      return;
+    }
+
     // Box highlight — filled (rounded/pill) rect behind the active word.
     if (hot && mode === 'box') {
       const padX = fontPx * 0.16, padY = fontPx * 0.14;
@@ -626,6 +666,8 @@
       const r = s.highlightPill ? bh / 2 : fontPx * 0.16;
       ctx.save(); ctx.fillStyle = s.highlightBg || '#FFD233'; roundRectPath(ctx, bx, by, bw, bh, r); ctx.fill(); ctx.restore();
     }
+    // Fill: gradient wash, active-highlight colour, or the base colour.
+    const fill = s.gradient ? gradientFill(ctx, x, w) : (hot ? s.highlightColor : s.primaryColor);
     ctx.save();
     if (hot && mode === 'glow') {
       ctx.shadowColor = s.highlightColor; ctx.shadowBlur = fontPx * 0.55; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
@@ -670,7 +712,7 @@
     const words = (cue.words && cue.words.length) ? cue.words : [{ word: cue.text, start: cue.start, end: cue.end }];
     let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
     const toks = words.map((w, i) => ({ text: applyCaseLocal(w.word, s.caseMode), idx: i }));
-    const measure = () => { for (const tk of toks) tk.w = ctx.measureText(tk.text).width; return ctx.measureText(' ').width || fontPx * 0.3; };
+    const measure = () => { for (const tk of toks) tk.w = ctx.measureText(tk.text).width; return (ctx.measureText(' ').width || fontPx * 0.3) + (s.wordSpacing || 0); };
     const spaceW = measure();
     const hasBox = (typeof s.boxWidth === 'number' && s.boxWidth > 0);
     const maxW = hasBox ? s.boxWidth * W : 0.92 * W;
@@ -1176,11 +1218,14 @@
     const icBilling = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>';
     const icTheme = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor" stroke="none"/></svg>';
     const icOut = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>';
+    const isAdmin = (u.email || '').toLowerCase() === 'augustas.armalis@aiacquisition.com';
+    const icLearn = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5 10.1 10.9 5.5 9l4.6-1.4z"/></svg>';
     menu.innerHTML =
       `<div class="hd"><div class="nm2">${escHtml(nm)}</div><div class="em">${escHtml(u.email || '')}</div></div>` +
       `<div class="sep"></div>` +
       `<button data-a="settings">${icSettings} Settings</button>` +
       `<button data-a="billing">${icBilling} Billing</button>` +
+      (isAdmin ? `<button data-a="learning">${icLearn} Learning (admin)</button>` : '') +
       `<button data-a="theme">${icTheme} Toggle theme</button>` +
       `<div class="sep"></div>` +
       `<button data-a="signout">${icOut} Sign out</button>`;
@@ -1189,6 +1234,7 @@
     menu.style.right = Math.max(12, window.innerWidth - r.right) + 'px';
     menu.querySelector('[data-a="settings"]').onclick = goTop('/settings');
     menu.querySelector('[data-a="billing"]').onclick = goTop('/billing');
+    if (isAdmin) menu.querySelector('[data-a="learning"]').onclick = goTop('/admin/learning');
     menu.querySelector('[data-a="theme"]').onclick = () => { toggleTheme(); closeProfileMenu(); };
     menu.querySelector('[data-a="signout"]').onclick = () => { closeProfileMenu(); signOut(); };
     setTimeout(() => document.addEventListener('pointerdown', onDocDown, true), 0);
