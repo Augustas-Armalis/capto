@@ -17,6 +17,9 @@ import {
   Users,
   ShieldAlert,
   Lock,
+  ExternalLink,
+  ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +85,7 @@ export function SettingsClient({
 
   const [engine, setEngine] = React.useState(aiProvider);
   const [useOwn, setUseOwn] = React.useState(aiUseOwnKey);
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const [engineSaving, setEngineSaving] = React.useState(false);
   const [engineSaved, setEngineSaved] = React.useState(false);
   const [engineErr, setEngineErr] = React.useState<string | null>(null);
@@ -436,51 +440,111 @@ export function SettingsClient({
 
           {tab === "ai" && (
             <Section title="AI engine">
-              <p className="-mt-1 text-sm text-[var(--color-fg-muted)]">
-                {plan === "free"
-                  ? "Free uses our managed AI within your monthly minutes — or plug in your own key for unlimited."
-                  : "Runs on our managed AI by default. Switch to your own key any time."}
-              </p>
-
-              {usage && (
-                <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-[var(--color-fg-muted)]">AI source minutes this month</span>
-                    <span className="mono tnum text-white">
-                      {usage.unlimited || usage.limitMinutes === null
-                        ? `${usage.usedMinutes} min · Unlimited`
-                        : `${usage.usedMinutes} / ${usage.limitMinutes} min`}
-                    </span>
+              {plan === "free" ? (
+                <>
+                  <p className="-mt-1 text-sm text-[var(--color-fg-muted)]">
+                    Capto Free runs on your own Groq key — you bring the key, transcription is on you and uncapped.
+                  </p>
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex size-9 items-center justify-center rounded-xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+                        <KeyRound className="size-4" />
+                      </span>
+                      <div className="text-sm">
+                        <div className="font-medium text-white">{has("groq") ? "Your Groq key is connected" : "Add your Groq key to start"}</div>
+                        <div className="text-xs text-[var(--color-fg-subtle)]">Manage it under API keys — it's free and takes ~30 seconds.</div>
+                      </div>
+                    </div>
+                    <Button onClick={() => setTab("keys")} variant="secondary" size="sm">
+                      {has("groq") ? "Manage key" : "Add Groq key"}
+                      <ArrowRight className="size-4" />
+                    </Button>
                   </div>
-                  {!usage.unlimited && usage.limitMinutes !== null && (
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-                      <div className="h-full rounded-full bg-[var(--color-brand)] transition-[width]"
-                        style={{ width: `${Math.min(100, (usage.usedMinutes / Math.max(1, usage.limitMinutes)) * 100)}%` }} />
+
+                  <div className="mt-5 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="eyebrow block">Model</label>
+                      <Combobox value={engine} onChange={setEngine} options={engineOptions} searchable={false} ariaLabel="AI model" />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button onClick={saveEngine} loading={engineSaving} size="md" variant="secondary">
+                        {engineSaved ? <Check className="size-4 text-[var(--color-success)]" /> : <Save className="size-4" />}
+                        Save engine
+                      </Button>
+                      {engineErr && <span className="text-xs text-[var(--color-danger)]">{engineErr}</span>}
+                    </div>
+                    <p className="text-xs text-[var(--color-fg-subtle)]">
+                      Free runs on Groq Whisper with your own key. Upgrade to run on Capto's managed AI — no key needed — plus OpenAI, Deepgram and Gemini engines.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="-mt-1 flex items-start gap-3 rounded-2xl border border-[var(--color-brand)]/25 bg-[var(--color-brand-soft)] p-4">
+                    <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+                      <Sparkles className="size-4" />
+                    </span>
+                    <div className="text-sm">
+                      <div className="font-medium text-white">You&apos;re running on Capto&apos;s managed AI — nothing to configure.</div>
+                      <p className="mt-0.5 text-[var(--color-fg-muted)]">We pick the best engine for every clip and keep it improving. Want more control? Open Advanced below.</p>
+                    </div>
+                  </div>
+
+                  {usage && (
+                    <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-4">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-[var(--color-fg-muted)]">AI source minutes this month</span>
+                        <span className="mono tnum text-white">
+                          {usage.unlimited || usage.limitMinutes === null
+                            ? `${usage.usedMinutes} min · Unlimited`
+                            : `${usage.usedMinutes} / ${usage.limitMinutes} min`}
+                        </span>
+                      </div>
+                      {!usage.unlimited && usage.limitMinutes !== null && (
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                          <div className="h-full rounded-full bg-[var(--color-brand)] transition-[width]"
+                            style={{ width: `${Math.min(100, (usage.usedMinutes / Math.max(1, usage.limitMinutes)) * 100)}%` }} />
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
 
-              <div className="mt-5 space-y-4">
-                <div className="space-y-1.5">
-                  <label className="eyebrow block">Model</label>
-                  <Combobox value={engine} onChange={setEngine} options={engineOptions} searchable={false} ariaLabel="AI model" />
-                </div>
-                <label className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm">
-                  <input type="checkbox" checked={useOwn} onChange={(e) => setUseOwn(e.target.checked)} className="size-4 accent-[var(--color-brand)]" />
-                  <span className="text-white">Use my own key when available</span>
-                </label>
-                <div className="flex items-center gap-3">
-                  <Button onClick={saveEngine} loading={engineSaving} size="md" variant="secondary">
-                    {engineSaved ? <Check className="size-4 text-[var(--color-success)]" /> : <Save className="size-4" />}
-                    Save engine
-                  </Button>
-                  {engineErr && <span className="text-xs text-[var(--color-danger)]">{engineErr}</span>}
-                </div>
-                <p className="text-xs text-[var(--color-fg-subtle)]">
-                  Groq Whisper is the default. Add your own key under <strong>API keys</strong> to run any engine on your account.
-                </p>
-              </div>
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      onClick={() => setAdvancedOpen((o) => !o)}
+                      aria-expanded={advancedOpen}
+                      className="flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left text-sm text-white transition-colors hover:border-white/20"
+                    >
+                      <span>Advanced — use your own key or pick a specific engine</span>
+                      <ChevronDown className={cn("size-4 shrink-0 text-[var(--color-fg-subtle)] transition-transform", advancedOpen && "rotate-180")} />
+                    </button>
+
+                    {advancedOpen && (
+                      <div className="mt-4 space-y-4">
+                        <div className="space-y-1.5">
+                          <label className="eyebrow block">Model</label>
+                          <Combobox value={engine} onChange={setEngine} options={engineOptions} searchable={false} ariaLabel="AI model" />
+                        </div>
+                        <label className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm">
+                          <input type="checkbox" checked={useOwn} onChange={(e) => setUseOwn(e.target.checked)} className="size-4 accent-[var(--color-brand)]" />
+                          <span className="text-white">Use my own key when available</span>
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <Button onClick={saveEngine} loading={engineSaving} size="md" variant="secondary">
+                            {engineSaved ? <Check className="size-4 text-[var(--color-success)]" /> : <Save className="size-4" />}
+                            Save engine
+                          </Button>
+                          {engineErr && <span className="text-xs text-[var(--color-danger)]">{engineErr}</span>}
+                        </div>
+                        <p className="text-xs text-[var(--color-fg-subtle)]">
+                          Leave this alone to stay on Capto&apos;s managed AI. To run a specific engine on your own account, add that provider&apos;s key under <strong>API keys</strong>.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </Section>
           )}
 
@@ -488,9 +552,34 @@ export function SettingsClient({
             <Section title="Your API keys" badge={<Badge variant="outline"><KeyRound className="size-3" /> Encrypted</Badge>}>
               <p className="-mt-1 text-sm text-[var(--color-fg-muted)]">
                 {plan === "free"
-                  ? "On Free you can add your own Groq key to run uncapped. Other providers (OpenAI, Deepgram, Gemini) need Pro."
-                  : "Keys are encrypted with AES-256-GCM. Add a Groq key to run uncapped, or any other provider to use its models."}
+                  ? "Capto Free runs on your own Groq key — you're on your own here, and that's the deal. Other providers (OpenAI, Deepgram, Gemini) need Pro."
+                  : "Keys are encrypted with AES-256-GCM. You're on Capto's managed AI by default — add a key here only if you want to run a specific provider on your own account."}
               </p>
+
+              {plan === "free" && (
+                <div className="mt-5 rounded-2xl border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] p-5">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex size-8 items-center justify-center rounded-xl bg-[var(--color-brand)]/15 text-[var(--color-brand)]">
+                      <KeyRound className="size-4" />
+                    </span>
+                    <h3 className="font-semibold text-white">Free runs on your own key</h3>
+                  </div>
+                  <p className="mt-3 text-sm text-[var(--color-fg-muted)]">
+                    Capto Free uses your own Groq key — it&apos;s free and takes ~30 seconds. Create one at{" "}
+                    <a
+                      href="https://console.groq.com/keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 font-medium text-[var(--color-brand)] underline-offset-2 hover:underline"
+                    >
+                      console.groq.com/keys
+                      <ExternalLink className="size-3.5" aria-hidden />
+                    </a>
+                    , paste it below, and you&apos;re set.
+                  </p>
+                </div>
+              )}
+
               <div className="mt-5 space-y-4">
                 {PROVIDERS.map((p) => {
                   // Free users can only use Groq; the paid providers are shown but
@@ -556,7 +645,7 @@ export function SettingsClient({
                 })}
                 {plan === "free" && (
                   <p className="text-xs text-[var(--color-fg-subtle)]">
-                    Bring your own OpenAI / Deepgram / Gemini key on Pro — Groq stays free.
+                    Groq is all you need on Free. Upgrade to Pro to run on Capto&apos;s managed AI or bring your own OpenAI / Deepgram / Gemini key.
                   </p>
                 )}
               </div>

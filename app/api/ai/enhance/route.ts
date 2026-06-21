@@ -5,14 +5,15 @@ import { getDb, user as userTable, userApiKey } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { env, isConfigured } from "@/lib/env";
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
-import { translateLines, emojiLines } from "@/lib/ai/enhance";
+import { translateLines, emojiLines, cleanupLines, type EnhanceEngine } from "@/lib/ai/enhance";
 import { retimeCue, type Cue } from "@/lib/cues";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Premium caption enhancement (translate / emoji). Runs on the house Gemini key
-// for Pro & Ultra, or on the user's own Gemini key for any plan.
+// Caption enhancement (cleanup / translate / emoji). Claude (house Anthropic key)
+// is the brain for EVERYONE; if it isn't configured we fall back to the user's own
+// Gemini key, then to the house Gemini key (paid only).
 export async function POST(req: Request) {
   const rl = await rateLimit(`enhance:${clientIp(req)}`, 30, 60 * 10);
   if (!rl.ok) return tooMany(rl.retryAfter);
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as {
-    action?: "translate" | "emoji";
+    action?: "translate" | "emoji" | "cleanup";
     targetLang?: string;
     cues?: Cue[];
   } | null;
@@ -40,27 +41,36 @@ export async function POST(req: Request) {
     .where(eq(userTable.id, session.user.id))
     .limit(1);
   const plan = u?.plan ?? "free";
-
-  // Resolve a Gemini key: the user's own first, else house (paid only).
-  let geminiKey = "";
-  const [own] = await db
-    .select({ enc: userApiKey.encryptedKey })
-    .from(userApiKey)
-    .where(and(eq(userApiKey.userId, session.user.id), eq(userApiKey.provider, "gemini")))
-    .limit(1);
-  if (own) {
-    try {
-      geminiKey = decrypt(own.enc) || "";
-    } catch {
-      /* ignore */
-    }
-  }
   const paid = plan === "pro" || plan === "ultra";
-  if (!geminiKey && paid) geminiKey = env.houseGeminiKey;
 
-  if (!geminiKey) {
+  // Key resolution priority:
+  //   1) house Anthropic (Claude) — available to ALL signed-in users
+  //   2) the user's own Gemini key
+  //   3) house Gemini key — paid only
+  let engine: EnhanceEngine | null = null;
+  if (env.houseAnthropicKey.length > 10) {
+    engine = { anthropicKey: env.houseAnthropicKey };
+  } else {
+    let geminiKey = "";
+    const [own] = await db
+      .select({ enc: userApiKey.encryptedKey })
+      .from(userApiKey)
+      .where(and(eq(userApiKey.userId, session.user.id), eq(userApiKey.provider, "gemini")))
+      .limit(1);
+    if (own) {
+      try {
+        geminiKey = decrypt(own.enc) || "";
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!geminiKey && paid) geminiKey = env.houseGeminiKey;
+    if (geminiKey) engine = { geminiKey };
+  }
+
+  if (!engine) {
     // Distinguish "feature locked" (free, no own key → upsell) from "server not
-    // configured" (paid, but no house Gemini key set → not their fault).
+    // configured" (paid, but no house key set → not their fault).
     if (paid) {
       return NextResponse.json(
         { error: "AI caption enhancement is temporarily unavailable." },
@@ -81,9 +91,11 @@ export async function POST(req: Request) {
   try {
     let next: string[];
     if (body.action === "translate") {
-      next = await translateLines(geminiKey, lines, body.targetLang || "en");
+      next = await translateLines(engine, lines, body.targetLang || "en");
+    } else if (body.action === "cleanup") {
+      next = await cleanupLines(engine, lines);
     } else {
-      next = await emojiLines(geminiKey, lines);
+      next = await emojiLines(engine, lines);
     }
     const cues = body.cues.map((c, i) => retimeCue(c, next[i] ?? c.text));
     return NextResponse.json({ cues });

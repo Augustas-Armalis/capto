@@ -31,10 +31,36 @@
     { id: 'deepgram-nova-3', label: 'Deepgram Nova-3', minPlan: 'pro' },
     { id: 'openai-whisper-1', label: 'OpenAI Whisper', minPlan: 'pro' },
   ];
+  // Full Whisper language set (~98 langs, ISO-639-1) — searchable in the editor's
+  // custom language dropdown. 'auto' first, then alphabetical by English name.
+  // The transcription API passes the code straight to Whisper/Deepgram.
   window.__captoLangs = [
-    ['auto', 'Auto-detect'], ['en', 'English'], ['es', 'Spanish'], ['fr', 'French'],
-    ['de', 'German'], ['pt', 'Portuguese'], ['it', 'Italian'], ['nl', 'Dutch'],
-    ['hi', 'Hindi'], ['ja', 'Japanese'],
+    ['auto', 'Auto-detect'],
+    ['af', 'Afrikaans'], ['sq', 'Albanian'], ['am', 'Amharic'], ['ar', 'Arabic'],
+    ['hy', 'Armenian'], ['az', 'Azerbaijani'], ['ba', 'Bashkir'], ['eu', 'Basque'],
+    ['be', 'Belarusian'], ['bn', 'Bengali'], ['bs', 'Bosnian'], ['br', 'Breton'],
+    ['bg', 'Bulgarian'], ['my', 'Burmese'], ['ca', 'Catalan'], ['zh', 'Chinese'],
+    ['hr', 'Croatian'], ['cs', 'Czech'], ['da', 'Danish'], ['nl', 'Dutch'],
+    ['en', 'English'], ['et', 'Estonian'], ['fo', 'Faroese'], ['fi', 'Finnish'],
+    ['fr', 'French'], ['gl', 'Galician'], ['ka', 'Georgian'], ['de', 'German'],
+    ['el', 'Greek'], ['gu', 'Gujarati'], ['ht', 'Haitian Creole'], ['ha', 'Hausa'],
+    ['haw', 'Hawaiian'], ['he', 'Hebrew'], ['hi', 'Hindi'], ['hu', 'Hungarian'],
+    ['is', 'Icelandic'], ['id', 'Indonesian'], ['it', 'Italian'], ['ja', 'Japanese'],
+    ['jw', 'Javanese'], ['kn', 'Kannada'], ['kk', 'Kazakh'], ['km', 'Khmer'],
+    ['ko', 'Korean'], ['lo', 'Lao'], ['la', 'Latin'], ['lv', 'Latvian'],
+    ['ln', 'Lingala'], ['lt', 'Lithuanian'], ['lb', 'Luxembourgish'], ['mk', 'Macedonian'],
+    ['mg', 'Malagasy'], ['ms', 'Malay'], ['ml', 'Malayalam'], ['mt', 'Maltese'],
+    ['mi', 'Maori'], ['mr', 'Marathi'], ['mn', 'Mongolian'], ['ne', 'Nepali'],
+    ['no', 'Norwegian'], ['nn', 'Norwegian Nynorsk'], ['oc', 'Occitan'], ['ps', 'Pashto'],
+    ['fa', 'Persian'], ['pl', 'Polish'], ['pt', 'Portuguese'], ['pa', 'Punjabi'],
+    ['ro', 'Romanian'], ['ru', 'Russian'], ['sa', 'Sanskrit'], ['sr', 'Serbian'],
+    ['sn', 'Shona'], ['sd', 'Sindhi'], ['si', 'Sinhala'], ['sk', 'Slovak'],
+    ['sl', 'Slovenian'], ['so', 'Somali'], ['es', 'Spanish'], ['su', 'Sundanese'],
+    ['sw', 'Swahili'], ['sv', 'Swedish'], ['tl', 'Tagalog'], ['tg', 'Tajik'],
+    ['ta', 'Tamil'], ['tt', 'Tatar'], ['te', 'Telugu'], ['th', 'Thai'],
+    ['bo', 'Tibetan'], ['tr', 'Turkish'], ['tk', 'Turkmen'], ['uk', 'Ukrainian'],
+    ['ur', 'Urdu'], ['uz', 'Uzbek'], ['vi', 'Vietnamese'], ['cy', 'Welsh'],
+    ['yi', 'Yiddish'], ['yo', 'Yoruba'],
   ];
   window.__captoPlanRank = { free: 0, pro: 1, ultra: 2 };
   function gotoSignin() {
@@ -385,27 +411,112 @@
     });
   }
 
-  async function transcribe(file, body) {
+  // ───────────────── long-video handling: client-side audio extraction ─────
+  // Whisper (Groq/OpenAI) rejects files over ~25MB and the worker times out at
+  // 60s — so a raw 20-min+ video fails. We decode the audio in the browser,
+  // downmix to mono @16kHz, and split it into ≤10-min WAV chunks (16kHz mono WAV
+  // ≈ 32KB/s → 10min ≈ 19MB, comfortably under the limit). Each chunk is
+  // transcribed and the word timings are stitched back with a time offset. If
+  // extraction isn't possible (codec/oversized/no WebAudio), we fall back to a
+  // single raw upload (the server routes large paid-tier files to Deepgram).
+  const AUDIO_SR = 16000, CHUNK_SEC = 600;
+
+  function encodeWav(samples, sampleRate) {
+    const n = samples.length;
+    const buffer = new ArrayBuffer(44 + n * 2);
+    const view = new DataView(buffer);
+    const ws = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0, 'RIFF'); view.setUint32(4, 36 + n * 2, true); ws(8, 'WAVE');
+    ws(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    ws(36, 'data'); view.setUint32(40, n * 2, true);
+    let o = 44;
+    for (let i = 0; i < n; i++) { const s = Math.max(-1, Math.min(1, samples[i])); view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); o += 2; }
+    return buffer;
+  }
+
+  async function extractAudioChunks(file) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AC || !OAC || !file || !file.size) return null;
+    let decoded;
+    const tmp = new AC();
+    try { decoded = await tmp.decodeAudioData(await file.arrayBuffer()); }
+    finally { try { tmp.close(); } catch {} }
+    if (!decoded || !decoded.length) return null;
+    // One offline render resamples to 16k AND downmixes to mono.
+    const frames = Math.ceil(decoded.duration * AUDIO_SR);
+    const off = new OAC(1, frames, AUDIO_SR);
+    const src = off.createBufferSource();
+    src.buffer = decoded; src.connect(off.destination); src.start();
+    const rendered = await off.startRendering();
+    const mono = rendered.getChannelData(0);
+    const chunkFrames = CHUNK_SEC * AUDIO_SR;
+    const chunks = [];
+    for (let p = 0; p < mono.length; p += chunkFrames) {
+      const slice = mono.subarray(p, Math.min(mono.length, p + chunkFrames));
+      const wav = encodeWav(slice, AUDIO_SR);
+      chunks.push({
+        file: new File([wav], `audio_${chunks.length}.wav`, { type: 'audio/wav' }),
+        startSec: p / AUDIO_SR,
+        durationSec: Math.max(1, Math.round(slice.length / AUDIO_SR)),
+      });
+    }
+    return chunks.length ? chunks : null;
+  }
+
+  async function postOneChunk(file, body, durationSec) {
     const fd = new FormData();
-    fd.append('file', file, file.name || 'clip');
+    fd.append('file', file, file.name || 'audio.wav');
     fd.append('language', body.language || 'auto');
     // Forward the chosen engine/model so /api/transcribe can honour it (Auto =
     // let the server pick). The server falls back to the house Groq model when
     // the id is unknown or the user lacks the key, so this is always safe.
     const eng = body.model || body.engine || '';
     if (eng && eng !== 'auto') fd.append('model', eng);
-    const dur = window.__captoMedia && window.__captoMedia.meta && window.__captoMedia.meta.duration;
-    if (dur) fd.append('durationSec', String(Math.round(dur)));
+    if (durationSec) fd.append('durationSec', String(Math.round(durationSec)));
     let res;
-    try {
-      res = await realFetch('/api/transcribe', { method: 'POST', body: fd });
-    } catch {
-      return json({ error: 'Network error reaching the caption engine.' }, 502);
-    }
+    try { res = await realFetch('/api/transcribe', { method: 'POST', body: fd }); }
+    catch { return { __error: true, error: 'Network error reaching the caption engine.', status: 502 }; }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return json({ error: data.error || 'Transcription failed.' }, res.status);
-    // Pass back the engine that ACTUALLY ran (resolved from "Auto" server-side) so
-    // the editor can attribute later edits to the right model for the learning loop.
+    if (!res.ok) return { __error: true, error: data.error || 'Transcription failed.', status: res.status };
+    return data;
+  }
+
+  function setTranscribeStatus(txt) { const st = document.getElementById('status'); if (st) st.textContent = txt; }
+
+  async function transcribe(file, body) {
+    // Try the extract-and-chunk path first (fixes long videos for every engine).
+    let chunks = null;
+    try { setTranscribeStatus('Preparing audio…'); chunks = await extractAudioChunks(file); } catch { chunks = null; }
+
+    if (chunks && chunks.length) {
+      try {
+        const allWords = [];
+        let language = body.language, engine = null;
+        for (let i = 0; i < chunks.length; i++) {
+          if (chunks.length > 1) setTranscribeStatus(`Transcribing… part ${i + 1} of ${chunks.length}`);
+          const data = await postOneChunk(chunks[i].file, body, chunks[i].durationSec);
+          if (data.__error) return json({ error: data.error }, data.status || 502);
+          language = data.language || language;
+          if (!engine) engine = data.engine || null;
+          const off = chunks[i].startSec;
+          for (const w of (data.words || [])) allWords.push({ word: w.word, start: (w.start || 0) + off, end: (w.end || 0) + off });
+        }
+        if (!allWords.length) return json({ error: 'No speech detected in this clip.' }, 422);
+        return json({ cues: wordsToCues(allWords), language, engine });
+      } catch {
+        /* extraction worked but transcription threw — fall through to raw upload */
+      }
+    }
+
+    // Fallback: upload the original file as one request (server may route large
+    // paid-tier files to Deepgram). Pass the chosen engine/model + duration.
+    const dur = window.__captoMedia && window.__captoMedia.meta && window.__captoMedia.meta.duration;
+    const data = await postOneChunk(file, body, dur || 0);
+    if (data.__error) return json({ error: data.error }, data.status || 502);
+    // Pass back the engine that ACTUALLY ran so the editor can attribute later
+    // edits to the right model for the learning loop.
     return json({ cues: wordsToCues(data.words), language: data.language || body.language, engine: data.engine || null });
   }
 
@@ -1296,7 +1407,26 @@
         wrap.insertBefore(card, anchor);
       }
       const m = u.minutes;
-      if (u.signedIn && m) {
+      if (u.signedIn && u.plan === 'free') {
+        // Free runs on the user's own (free) Groq key — show a key prompt, not minutes.
+        card.style.display = '';
+        card.innerHTML =
+          `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">` +
+            `<div>` +
+              `<div style="display:flex;align-items:center;gap:9px;margin-bottom:5px">` +
+                `<span style="font-size:13.5px;font-weight:650;color:var(--text)">Your own engine</span>` +
+                `<span style="font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:99px;color:#0b0c14;background:linear-gradient(120deg,#a0c1ff,#8983ff)">Free</span>` +
+              `</div>` +
+              `<div style="font-size:12px;color:var(--muted);max-width:46ch">Capto Free runs on your own Groq key — it's free and uncapped. Create one in seconds, paste it in Settings, and caption away. Or upgrade to run on Capto's engines.</div>` +
+            `</div>` +
+            `<div style="display:flex;gap:8px">` +
+              `<button id="capto-byok" class="btn sm">Add key</button>` +
+              `<button id="capto-topup" class="btn primary sm">Upgrade</button>` +
+            `</div>` +
+          `</div>`;
+        const bk = document.getElementById('capto-byok'); if (bk) bk.onclick = goTop('/settings?tab=keys');
+        const tu = document.getElementById('capto-topup'); if (tu) tu.onclick = goTop('/billing');
+      } else if (u.signedIn && m) {
         card.style.display = '';
         const unlimited = m.unlimited || m.limit == null;
         const pct = unlimited ? 12 : Math.min(100, Math.round(((m.used || 0) / Math.max(1, m.limit)) * 100));
@@ -1340,6 +1470,167 @@
       line.style.display = parts.length ? '' : 'none';
     }
   }
+
+  // ───────────────── searchable custom dropdowns ─────────────────
+  // Overlay a styled, searchable menu on top of the native <select> (which stays
+  // in the DOM as the value source so app.js's value reads/writes keep working).
+  // Essential for the ~98-language list; also unifies the engine pickers.
+  const COMBO_SEARCH_MIN = 8; // show the search box once a list has this many options
+  function enhanceSelect(sel) {
+    if (!sel || sel.__captoCombo || sel.tagName !== 'SELECT') return;
+    const wrap = document.createElement('div');
+    wrap.className = 'capto-combo';
+    sel.parentNode.insertBefore(wrap, sel);
+    wrap.appendChild(sel);
+    sel.classList.add('capto-combo-native');
+    sel.setAttribute('tabindex', '-1');
+    sel.setAttribute('aria-hidden', 'true');
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'capto-combo-btn';
+    btn.setAttribute('aria-haspopup', 'listbox');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = '<span class="capto-combo-label"></span><svg class="capto-combo-chev" width="11" height="7" viewBox="0 0 11 7"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const pop = document.createElement('div');
+    pop.className = 'capto-combo-pop';
+    pop.hidden = true;
+    pop.innerHTML = '<div class="capto-combo-search" hidden><input type="text" autocomplete="off" spellcheck="false" placeholder="Search…"></div><ul class="capto-combo-list" role="listbox"></ul>';
+    wrap.appendChild(btn);
+    wrap.appendChild(pop);
+    // The popup is position:fixed (escapes the panel's overflow clipping); park it
+    // on <body> so no ancestor transform/overflow can affect it.
+    document.body.appendChild(pop);
+
+    const labelEl = btn.querySelector('.capto-combo-label');
+    const searchWrap = pop.querySelector('.capto-combo-search');
+    const searchInput = pop.querySelector('input');
+    const list = pop.querySelector('.capto-combo-list');
+    let activeIdx = -1;
+
+    const curLabel = () => { const o = sel.options[sel.selectedIndex]; return o ? o.textContent : ''; };
+    function refresh() { labelEl.textContent = curLabel(); btn.disabled = sel.disabled; }
+
+    function buildList(filter) {
+      const f = (filter || '').trim().toLowerCase();
+      list.innerHTML = '';
+      activeIdx = -1;
+      let firstEnabled = -1;
+      [...sel.options].forEach((o) => {
+        const text = o.textContent || '';
+        if (f && text.toLowerCase().indexOf(f) < 0 && (o.value || '').toLowerCase().indexOf(f) < 0) return;
+        const li = document.createElement('li');
+        li.className = 'capto-combo-opt';
+        li.setAttribute('role', 'option');
+        li.textContent = text;
+        li.dataset.value = o.value;
+        if (o.disabled) { li.classList.add('is-disabled'); li.dataset.disabled = '1'; }
+        if (o.value === sel.value) { li.classList.add('is-selected'); li.setAttribute('aria-selected', 'true'); }
+        if (!o.disabled && firstEnabled < 0) firstEnabled = list.children.length;
+        li.addEventListener('mousedown', (e) => { e.preventDefault(); if (!o.disabled) choose(o.value); });
+        list.appendChild(li);
+      });
+      if (!list.children.length) {
+        const empty = document.createElement('div');
+        empty.className = 'capto-combo-empty';
+        empty.textContent = 'No matches';
+        list.appendChild(empty);
+        return;
+      }
+      const selIdx = [...list.children].findIndex((li) => li.dataset && li.dataset.value === sel.value && !li.dataset.disabled);
+      setActive(selIdx >= 0 ? selIdx : firstEnabled);
+    }
+    function setActive(i) {
+      const items = [...list.children];
+      if (activeIdx >= 0 && items[activeIdx]) items[activeIdx].classList.remove('is-active');
+      activeIdx = i;
+      if (i >= 0 && items[i]) { items[i].classList.add('is-active'); items[i].scrollIntoView({ block: 'nearest' }); }
+    }
+    function moveActive(d) {
+      const items = [...list.children].filter((c) => c.classList.contains('capto-combo-opt'));
+      if (!items.length) return;
+      let idx = items.indexOf(list.children[activeIdx]);
+      for (let k = 0; k < items.length; k++) {
+        idx = (idx + d + items.length) % items.length;
+        if (!items[idx].dataset.disabled) break;
+      }
+      setActive([...list.children].indexOf(items[idx]));
+    }
+    function choose(val) {
+      if (sel.value !== val) {
+        sel.value = val;
+        sel.dispatchEvent(new Event('input', { bubbles: true }));
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      refresh();
+      close();
+    }
+    function place() {
+      const r = btn.getBoundingClientRect();
+      const vh = window.innerHeight, vw = window.innerWidth;
+      const below = vh - r.bottom - 10, above = r.top - 10;
+      const useAbove = below < 220 && above > below;
+      const avail = Math.max(150, Math.min(320, useAbove ? above : below));
+      const width = Math.max(r.width, 150);
+      pop.style.width = width + 'px';
+      pop.style.left = Math.max(8, Math.min(r.left, vw - width - 8)) + 'px';
+      if (useAbove) { pop.style.top = ''; pop.style.bottom = (vh - r.top + 6) + 'px'; pop.style.maxHeight = avail + 'px'; }
+      else { pop.style.bottom = ''; pop.style.top = (r.bottom + 6) + 'px'; pop.style.maxHeight = avail + 'px'; }
+    }
+    function open() {
+      if (!pop.hidden || sel.disabled) return;
+      const many = sel.options.length >= COMBO_SEARCH_MIN;
+      searchWrap.hidden = !many;
+      if (searchInput) searchInput.value = '';
+      buildList('');
+      pop.hidden = false;
+      place();
+      btn.setAttribute('aria-expanded', 'true');
+      wrap.classList.add('is-open');
+      if (many && searchInput) setTimeout(() => searchInput.focus(), 0);
+      document.addEventListener('mousedown', onDocDown, true);
+      window.addEventListener('scroll', onScroll, true);
+      window.addEventListener('resize', onScroll, true);
+    }
+    function close() {
+      if (pop.hidden) return;
+      pop.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      wrap.classList.remove('is-open');
+      document.removeEventListener('mousedown', onDocDown, true);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll, true);
+    }
+    function onDocDown(e) { if (!wrap.contains(e.target) && !pop.contains(e.target)) close(); }
+    function onScroll() { if (!pop.hidden) place(); }
+
+    btn.addEventListener('click', () => { pop.hidden ? open() : close(); });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (pop.hidden) open(); else moveActive(1); }
+      else if (e.key === 'Escape') close();
+    });
+    if (searchInput) {
+      searchInput.addEventListener('input', () => buildList(searchInput.value));
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); moveActive(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); moveActive(-1); }
+        else if (e.key === 'Enter') { e.preventDefault(); const li = list.children[activeIdx]; if (li && li.dataset && !li.dataset.disabled && li.dataset.value != null) choose(li.dataset.value); }
+        else if (e.key === 'Escape') { e.preventDefault(); close(); btn.focus(); }
+      });
+    }
+    // Keep the button label in sync when app.js rebuilds <option>s or flips disabled.
+    try { new MutationObserver(() => { refresh(); if (!pop.hidden) buildList(searchInput ? searchInput.value : ''); }).observe(sel, { childList: true, attributes: true, attributeFilter: ['disabled'] }); } catch {}
+    sel.addEventListener('change', refresh);
+    sel.__captoCombo = { refresh, close };
+    refresh();
+  }
+  function setupCustomDropdowns() {
+    ['homeLang', 'editLang', 'uploadLang', 'setLang', 'homeEngine', 'editEngine', 'uploadEngine', 'setEngine']
+      .forEach((id) => { try { enhanceSelect(document.getElementById(id)); } catch (e) { console.warn('[Capto] combo', id, e); } });
+  }
+  // Re-run after the plan resolves (fetchMe → __captoRefreshEngines repopulates the
+  // engine lists); enhanceSelect is idempotent, so this only catches any new nodes.
+  window.__captoSetupDropdowns = setupCustomDropdowns;
 
   document.addEventListener('DOMContentLoaded', () => {
     // Home "Settings" button jumps to Capto's account settings (legacy; the nav
@@ -1408,6 +1699,7 @@
     setupExportOptions();
     setupThumbPicker();
     setupHandleCapture();
+    setupCustomDropdowns();
     renderQuotaUI();
     fetchMe();
   });

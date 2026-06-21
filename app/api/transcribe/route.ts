@@ -99,7 +99,7 @@ export async function POST(req: Request) {
               {
                 error:
                   plan === "free"
-                    ? "You've used your free AI minutes this month. Add your own free Groq key in Settings, or upgrade for more."
+                    ? "Free captioning runs on your own free Groq key. Add one in Settings → it takes 30 seconds at console.groq.com/keys."
                     : "You've reached this month's transcription minutes.",
                 code: "cap_reached",
                 plan,
@@ -117,13 +117,43 @@ export async function POST(req: Request) {
     }
   }
   if (capError) return capError;
+
+  // Free is BYOK-required: a signed-in Free user with no own key is NOT rescued by
+  // the house Groq fallback — they must add their own free Groq key. The house
+  // fallback still covers paid plans and the anonymous/no-DB dev path below.
+  if (!active && userId && plan === "free") {
+    return NextResponse.json(
+      {
+        error:
+          "Free captioning runs on your own free Groq key. Add one in Settings → it takes 30 seconds at console.groq.com/keys.",
+        code: "byok_required",
+        plan: "free",
+      },
+      { status: 402 },
+    );
+  }
+
   if (!active) active = houseGroq();
   if (!active) {
     return NextResponse.json({ error: "No transcription engine configured." }, { status: 503 });
   }
 
+  // ── large/long-file routing (paid): Groq/OpenAI Whisper reject ~25MB+ uploads.
+  // For a managed Whisper engine on a big file, switch to house Deepgram nova-3
+  // (handles up to ~2GB and long audio in one shot) when the house key exists.
+  if (
+    active.isHouse &&
+    active.model.provider !== "deepgram" &&
+    file.size > 18 * 1024 * 1024 &&
+    (plan === "pro" || plan === "ultra") &&
+    houseKeyFor("deepgram").length > 10
+  ) {
+    const dg = STT_MODELS.find((m) => m.provider === "deepgram");
+    if (dg) active = { model: dg, apiKey: houseKeyFor("deepgram"), isHouse: true };
+  }
+
   const vocab = userId ? await topVocabulary(userId).catch(() => []) : [];
-  return transcribeAndRespond(active, file, language, vocab);
+  return transcribeAndRespond(active, file, language, vocab, plan);
 }
 
 async function transcribeAndRespond(
@@ -131,6 +161,7 @@ async function transcribeAndRespond(
   file: File,
   language: string,
   vocab: string[],
+  plan: PlanId,
 ) {
   const base = "Transcribe accurately with correct spelling, punctuation, and capitalization.";
   const prompt = vocab.length ? `${base} Proper nouns: ${vocab.join(", ")}.` : base;
@@ -163,6 +194,25 @@ async function transcribeAndRespond(
     });
   } catch (e) {
     if (e instanceof TranscribeError) {
+      // File-too-large: Whisper engines hard-cap around 25MB. Surface a friendly,
+      // actionable message instead of a raw provider error.
+      const detail = (e.detail || "").toLowerCase();
+      const tooLarge =
+        e.status === 413 ||
+        ((e.status === 400 || e.status === 422) &&
+          /size|large|too big/.test(detail));
+      if (tooLarge) {
+        const paid = plan === "pro" || plan === "ultra";
+        return NextResponse.json(
+          {
+            error: paid
+              ? "This file is too large for the selected engine. Try the Deepgram engine for long videos."
+              : "This clip is too large for Groq Whisper (~25MB cap). Keep it under ~12 minutes, or upgrade for long videos.",
+            code: "file_too_large",
+          },
+          { status: 413 },
+        );
+      }
       return NextResponse.json(
         { error: `Transcription failed (${e.status}).`, detail: e.detail },
         { status: 502 },

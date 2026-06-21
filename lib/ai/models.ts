@@ -87,3 +87,7 @@ export const PROVIDER_KEY_PREFIX: Partial<Record<AiProvider, string>> = {
 };
 
 export const ENHANCE_MODEL = "gemini-2.5-flash";
+
+// Caption-enhancement brain for everyone. Claude (Anthropic) runs the cleanup /
+// translate / emoji passes on a house key; Gemini stays as the fallback engine.
+export const ANTHROPIC_ENHANCE_MODEL = "claude-haiku-4-5-20251001";

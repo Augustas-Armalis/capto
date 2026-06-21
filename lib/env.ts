@@ -22,6 +22,10 @@ export const env = {
   houseOpenaiKey: read("OPENAI_API_KEY"),
   houseDeepgramKey: read("DEEPGRAM_API_KEY"),
   houseGeminiKey: read("GEMINI_API_KEY"),
+  // House Anthropic (Claude) key. Enhancement-only: Claude cleans up / translates
+  // / emoji-decorates caption TEXT for ALL signed-in users. Claude has no
+  // speech-to-text, so it is NOT part of houseKeyFor (which is STT/Gemini-typed).
+  houseAnthropicKey: read("ANTHROPIC_API_KEY"),
   // Resend transactional email (verification codes). Optional: when unset, email
   // verification is skipped so the app still works without it.
   resendApiKey: read("RESEND_API_KEY"),
@@ -37,6 +41,7 @@ export const isConfigured = {
   auth: () => env.authSecret.length >= 16,
   email: () => env.resendApiKey.startsWith("re_"),
   gemini: () => env.houseGeminiKey.length > 10,
+  anthropic: () => env.houseAnthropicKey.length > 10,
 };
 
 /** Which providers have a usable HOUSE key configured right now. */

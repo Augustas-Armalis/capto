@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Search } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
+import { cn } from "@/lib/utils";
 
 type Plan = "free" | "pro" | "ultra";
 
@@ -17,7 +19,11 @@ export type AdminUser = {
   isAdmin: boolean;
 };
 
-const PLANS: Plan[] = ["free", "pro", "ultra"];
+const PLAN_OPTIONS = [
+  { value: "free", label: "free" },
+  { value: "pro", label: "pro" },
+  { value: "ultra", label: "ultra" },
+];
 
 export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUser[] }) {
   const router = useRouter();
@@ -123,18 +129,25 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUser[] })
                     {new Date(u.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <select
-                      value={u.plan}
-                      disabled={busy === u.id || u.isAdmin}
-                      onChange={(e) => setPlan(u.id, e.target.value as Plan)}
-                      className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-fg)] outline-none disabled:opacity-50"
-                    >
-                      {PLANS.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
+                    {(() => {
+                      const disabled = busy === u.id || u.isAdmin;
+                      return (
+                        <Combobox
+                          value={u.plan}
+                          onChange={(v) => {
+                            // Combobox has no disabled prop — guard here so admin/busy
+                            // rows can't change plan, matching the old <select>.
+                            if (disabled) return;
+                            setPlan(u.id, v as Plan);
+                          }}
+                          options={PLAN_OPTIONS}
+                          searchable={false}
+                          size="sm"
+                          ariaLabel={`Plan for ${u.email}`}
+                          className={cn("w-28", disabled && "pointer-events-none opacity-50")}
+                        />
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button

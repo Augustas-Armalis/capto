@@ -691,3 +691,45 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, 'Se
   .preset-grid { grid-template-columns: 1fr; max-height: 320px; }
   .pb-stage { min-height: 52px; font-size: 16px; }
 }
+
+/* ───────── searchable custom dropdown (overlays the native <select>) ───────── */
+/* Progressive enhancement: the native <select> stays in the DOM (hidden) as the
+   value source so app.js keeps working; we render a styled, searchable menu. */
+.capto-combo { position: relative; width: 100%; }
+.capto-combo-native { position: absolute !important; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; clip: rect(0 0 0 0); }
+.capto-combo-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; appearance: none; cursor: pointer; text-align: left; font: inherit; font-size: 13px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px;
+  transition: border-color .14s var(--ease), box-shadow .14s var(--ease), background .14s var(--ease);
+}
+.capto-combo-btn:hover { border-color: var(--line-2); }
+.capto-combo.is-open .capto-combo-btn { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.capto-combo-btn:disabled { opacity: .5; cursor: not-allowed; }
+.capto-combo-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capto-combo-chev { flex: none; color: #7a7a85; transition: transform .14s var(--ease); }
+.capto-combo.is-open .capto-combo-chev { transform: rotate(180deg); }
+.capto-combo-pop {
+  position: fixed; z-index: 200; box-sizing: border-box;
+  background: var(--surface-2); border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm); box-shadow: 0 16px 44px -10px rgba(0,0,0,.65);
+  padding: 5px; display: flex; flex-direction: column; min-width: 140px;
+}
+.capto-combo-search { padding: 3px 3px 6px; flex: none; }
+.capto-combo-search input {
+  width: 100%; background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 9px; font-size: 12.5px; color: var(--text);
+}
+.capto-combo-search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.capto-combo-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1 1 auto; }
+.capto-combo-opt {
+  padding: 8px 10px; border-radius: 6px; font-size: 13px; color: var(--text);
+  cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.capto-combo-opt.is-active { background: var(--accent-soft); }
+.capto-combo-opt.is-selected { color: var(--accent-2); font-weight: 600; }
+.capto-combo-opt.is-disabled { color: var(--faint); cursor: not-allowed; opacity: .7; }
+.capto-combo-empty { padding: 10px; font-size: 12.5px; color: var(--faint); text-align: center; }
+.capto-combo-list::-webkit-scrollbar { width: 10px; }
+.capto-combo-list::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; border: 3px solid var(--surface-2); }

@@ -70,9 +70,9 @@ export async function resolveEngine(
   const hasOwn = (p: AiProvider) => !!keys[p] && keys[p]!.length > 10;
   const ownTranscribers = (["deepgram", "openai", "groq"] as AiProvider[]).filter(hasOwn);
 
-  // 1) Own key first when: the user opted in, OR they're on Free and have pasted
-  // a key (Free runs uncapped on its own key, falling back to house Groq).
-  const preferOwn = prefs.aiUseOwnKey || plan === "free";
+  // 1) Own key first when: the user is on Free (Free is BYOK-required — it MUST
+  // run on the user's own key, no house fallback), OR a paid user opted in.
+  const preferOwn = plan === "free" || prefs.aiUseOwnKey;
   if (preferOwn && ownTranscribers.length) {
     const picked = getModel(prefs.aiProvider);
     if (picked && hasOwn(picked.provider)) {
@@ -82,6 +82,11 @@ export async function resolveEngine(
     const best = await rankBest(STT_MODELS.filter((m) => hasOwn(m.provider)));
     if (best) return { model: best, apiKey: keys[best.provider]!, isHouse: false };
   }
+
+  // Free is BYOK-required: if we reach here with no own transcriber key, do NOT
+  // fall through to the house/managed engines — return null so the route shows
+  // the "add your own free Groq key" guidance. Paid plans continue below.
+  if (plan === "free") return null;
 
   // 2) Managed / house engine.
   const candidates = houseCandidates(plan);
