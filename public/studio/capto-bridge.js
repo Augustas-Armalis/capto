@@ -367,12 +367,12 @@
     // always ends the caption, so we never stretch a phrase through silence and
     // never break awkwardly mid-flow. MAXGAP is aligned with the hide threshold
     // below, so any gap that ends a caption is also a gap where it disappears.
-    const MAXW = 3, MAXGAP = 0.3, MAXCHARS = 24;
+    const MAXW = 2, MAXGAP = 0.25, MAXCHARS = 20;
     // Timing: a caption tracks the VOICE. It ends right after its last word
     // (+LEAD_OUT) and only bridges to the next caption when they're truly
     // back-to-back (gap < BRIDGE). Any real pause → the caption hides, so the
     // screen is empty during silence instead of a line hanging there.
-    const LEAD_OUT = 0.12, BRIDGE = 0.3;
+    const LEAD_OUT = 0.12, BRIDGE = 0.25;
     // ── sanitize raw word timings ──
     // Whisper (and the chunk-stitching above) occasionally emit NaN/negative,
     // zero-duration, or out-of-order timestamps. Left raw they make the karaoke

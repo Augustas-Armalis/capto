@@ -1206,6 +1206,10 @@ function fitBlockToFrame(block) {
   block.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
 }
 function doRenderOverlay() {
+  // Self-heal a stuck "editing" flag (an inline edit that never committed) —
+  // otherwise editingCaption stays true and EVERY canvas click is ignored, so
+  // you can't select/move/resize captions on the video anymore.
+  if (state.editingCaption && !document.querySelector('.cap-block.editing')) state.editingCaption = false;
   if (!state.meta || state.editingCaption) return;
   const t = el.video.currentTime;
 
@@ -1301,6 +1305,8 @@ function positionSelBox() {
 
 /* caption drag / select / resize / inline-edit (delegated on frame) */
 el.frame.addEventListener('pointerdown', (e) => {
+  // Unstick a stale editing flag so a click always selects (see doRenderOverlay).
+  if (state.editingCaption && !document.querySelector('.cap-block.editing')) state.editingCaption = false;
   const block = e.target.closest('.cap-block'); if (!block || state.editingCaption) return;
   e.preventDefault(); e.stopPropagation();
   const i = state.cues.findIndex((c) => c.id === block.dataset.cue);
