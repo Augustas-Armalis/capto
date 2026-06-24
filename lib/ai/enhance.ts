@@ -1,12 +1,15 @@
 // Caption enhancement. These operate on caption TEXT only (never audio): clean up
 // transcription errors, translate to another language, or sprinkle tasteful emoji.
-// Claude (Anthropic) is the default brain on a house key for everyone; Gemini is
-// the fallback. Timing is preserved by re-distributing words across each cue span.
+// Groq (Llama 3.3 70B) is the default brain on a house key for everyone — it's
+// cheap/free-tier and fast. Gemini is the fallback. Claude support is available
+// when an Anthropic key is configured. Timing is preserved by re-distributing
+// words across each cue's span.
 
-import { ENHANCE_MODEL, ANTHROPIC_ENHANCE_MODEL } from "./models";
+import { ENHANCE_MODEL, ANTHROPIC_ENHANCE_MODEL, GROQ_ENHANCE_MODEL } from "./models";
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 /** Salvage a JSON value from model output that may be wrapped in prose/fences. */
 function parseJsonLoose(text: string, engine: string): unknown {
@@ -67,15 +70,65 @@ async function anthropicJson(apiKey: string, instruction: string, payload: unkno
   return parseJsonLoose(text, "Anthropic");
 }
 
-/** Which engine to run an enhancement on. Claude when an Anthropic key is set,
- * otherwise Gemini. The route resolves exactly one of these per request. */
-export type EnhanceEngine = { anthropicKey?: string; geminiKey?: string };
+/** Which engine to run an enhancement on. Priority: Groq (cheapest, free tier,
+ * fast Llama 3.3 70B) → Claude → Gemini. The route resolves whichever keys are
+ * available and we pick in that order. */
+export type EnhanceEngine = { groqKey?: string; anthropicKey?: string; geminiKey?: string };
+
+async function groqJson(apiKey: string, instruction: string, payload: unknown): Promise<unknown> {
+  const res = await fetch(GROQ_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: GROQ_ENHANCE_MODEL,
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            'Return ONLY valid JSON. The response must be a JSON object with a single key "lines" whose value is an array of strings in the requested order.',
+        },
+        {
+          role: "user",
+          content: `${instruction}\n\nINPUT:\n${JSON.stringify(payload)}\n\nRespond as {"lines": [...]}.`,
+        },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Groq failed (${res.status}). ${detail.slice(0, 200)}`);
+  }
+  const j = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const text = j.choices?.[0]?.message?.content || "";
+  // Groq returns a JSON object (response_format), unwrap the "lines" array.
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && Array.isArray(parsed.lines)) return parsed.lines;
+  } catch { /* fall through to loose parse */ }
+  const loose = parseJsonLoose(text, "Groq");
+  if (Array.isArray(loose)) return loose;
+  if (loose && typeof loose === "object" && Array.isArray((loose as { lines?: unknown }).lines)) {
+    return (loose as { lines: unknown[] }).lines;
+  }
+  throw new Error("Groq returned unexpected shape.");
+}
 
 async function runEnhance(
   opts: EnhanceEngine,
   instruction: string,
   payload: unknown,
 ): Promise<unknown> {
+  if (opts.groqKey && opts.groqKey.length > 10) {
+    return groqJson(opts.groqKey, instruction, payload);
+  }
   if (opts.anthropicKey && opts.anthropicKey.length > 10) {
     return anthropicJson(opts.anthropicKey, instruction, payload);
   }

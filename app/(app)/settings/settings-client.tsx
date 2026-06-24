@@ -59,6 +59,7 @@ export function SettingsClient({
   subscriptionStatus,
   aiProvider = "auto",
   aiUseOwnKey = false,
+  isAdmin = false,
 }: {
   name: string;
   email: string;
@@ -67,9 +68,20 @@ export function SettingsClient({
   subscriptionStatus?: string | null;
   aiProvider?: string;
   aiUseOwnKey?: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
+  // AI/Models + API keys are admin-only — regular users don't see or configure
+  // them. Free plan users provide their Groq key during onboarding instead.
+  const visibleNav = React.useMemo(
+    () => NAV.filter((n) => isAdmin || (n.id !== "ai" && n.id !== "keys")),
+    [isAdmin],
+  );
   const [tab, setTab] = React.useState<Tab>("profile");
+  // If a non-admin lands on the page with ?tab=ai|keys in the URL, snap them back.
+  React.useEffect(() => {
+    if (!isAdmin && (tab === "ai" || tab === "keys")) setTab("profile");
+  }, [tab, isAdmin]);
 
   const avatarInputRef = React.useRef<HTMLInputElement | null>(null);
   const [avatar, setAvatar] = React.useState<string | null>(image);
@@ -309,7 +321,7 @@ export function SettingsClient({
       <div className="mt-8 grid gap-8 md:grid-cols-[200px_1fr]">
         {/* Sidebar nav — horizontal scroll on mobile, vertical on desktop */}
         <nav className="-mx-5 flex gap-1 overflow-x-auto px-5 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:flex-col md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden">
-          {NAV.map((item) => (
+          {visibleNav.map((item) => (
             <button
               key={item.id}
               onClick={() => setTab(item.id)}
@@ -655,14 +667,21 @@ export function SettingsClient({
           {tab === "team" && <TeamSection />}
 
           {tab === "account" && (
-            <Section title="Delete account" danger>
-              <p className="-mt-1 text-sm text-[var(--color-fg-muted)]">
-                Permanently delete your account, projects, and saved keys. Any active subscription is cancelled. This cannot be undone.
-              </p>
-              <Button onClick={deleteAccount} loading={deleting} variant="destructive" size="md" className="mt-5">
-                <Trash2 className="size-4" /> Delete my account
-              </Button>
-            </Section>
+            <section className="rounded-3xl border-2 border-[var(--color-danger)]/60 bg-[var(--color-danger)]/[0.08] p-6 sm:p-7 shadow-[0_0_0_1px_var(--color-danger)]/20">
+              <div className="mb-4 flex items-center gap-2">
+                <ShieldAlert className="size-5 text-[var(--color-danger)]" />
+                <h2 className="text-lg font-semibold text-[var(--color-danger)]">Danger zone</h2>
+              </div>
+              <div className="rounded-2xl border border-[var(--color-danger)]/30 bg-[var(--color-bg)]/40 p-5">
+                <h3 className="text-base font-semibold text-[var(--color-fg)]">Delete account</h3>
+                <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
+                  Permanently delete your account, projects, and saved keys. Any active subscription is cancelled. This cannot be undone.
+                </p>
+                <Button onClick={deleteAccount} loading={deleting} variant="destructive" size="md" className="mt-5">
+                  <Trash2 className="size-4" /> Delete my account
+                </Button>
+              </div>
+            </section>
           )}
         </div>
       </div>

@@ -4,6 +4,7 @@ import { SettingsClient } from "./settings-client";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, user as userTable } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
+import { isAdmin } from "@/lib/admin";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ export default async function SettingsPage() {
       subscriptionStatus={subscriptionStatus}
       aiProvider={aiProvider}
       aiUseOwnKey={aiUseOwnKey}
+      isAdmin={isAdmin(session?.user?.email)}
     />
   );
 }

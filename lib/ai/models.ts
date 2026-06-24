@@ -88,6 +88,8 @@ export const PROVIDER_KEY_PREFIX: Partial<Record<AiProvider, string>> = {
 
 export const ENHANCE_MODEL = "gemini-2.5-flash";
 
-// Caption-enhancement brain for everyone. Claude (Anthropic) runs the cleanup /
-// translate / emoji passes on a house key; Gemini stays as the fallback engine.
+// Caption-enhancement brain for everyone. Default is Groq Llama 3.3 70B —
+// fast, free-tier, plenty good for cleanup / translation / emoji. Claude is a
+// supported backup when ANTHROPIC_API_KEY is set; Gemini stays as the final fallback.
+export const GROQ_ENHANCE_MODEL = "llama-3.3-70b-versatile";
 export const ANTHROPIC_ENHANCE_MODEL = "claude-haiku-4-5-20251001";

@@ -352,14 +352,15 @@
   // Capto's /api/transcribe returns flat word timings; Subby wants grouped cues.
   // Break into caption lines on pauses / max words / max chars (punchy chunks).
   function wordsToCues(words) {
-    // Clean social captions: up to 4 words / ~32 chars per line so lines read
-    // SMALLER + WIDER (not giant 1-word blocks), still broken on sentences/pauses.
-    const MAXW = 4, MAXGAP = 0.45, MAXCHARS = 32;
+    // Snappy social captions like the original Subby: 2–3 words per line, ~22
+    // chars max, broken on sentences / pauses / clauses. Keeps each line
+    // punchy and on-the-word; never balloons into a wide 4-word block.
+    const MAXW = 3, MAXGAP = 0.4, MAXCHARS = 22;
     // Timing polish: a caption lingers a beat past its last word (LEAD_OUT), and
     // through SHORT pauses (extends toward the next word, minus GAP_PAD). But on a
     // BIG pause (> HIDE_GAP of silence) it disappears so captions don't hang on
     // screen during dead air.
-    const LEAD_OUT = 0.15, GAP_PAD = 0.08, HIDE_GAP = 0.7;
+    const LEAD_OUT = 0.18, GAP_PAD = 0.06, HIDE_GAP = 0.7;
     const flat = [];
     for (const w of words || []) {
       const word = String(w.word || w.text || '').trim();
@@ -390,7 +391,7 @@
     // chunk never ends as a single orphan (unless a sentence/clause forces it).
     for (let i = 1; i < groups.length; i++) {
       const prev = groups[i - 1];
-      if (groups[i].length === 1 && prev.length >= 3) {
+      if (groups[i].length === 1 && prev.length >= 2) {
         const moved = prev[prev.length - 1];
         if (!endsSentence(moved.word) && !endsClause(moved.word) && (groups[i][0].start - moved.end) <= MAXGAP) {
           prev.pop(); groups[i].unshift(moved);

@@ -11,8 +11,15 @@ const HAS_BOLD = new Set(['Inter', 'Poppins', 'Lato']);
 // Engines + languages come from the bridge's canonical catalogue (window.__captoModels
 // / __captoLangs), which mirrors lib/ai/models.ts and the dashboard. Fallbacks keep
 // the editor working if the bridge ever fails to load.
-const LANGUAGES = (window.__captoLangs || [['auto', 'Auto-detect'], ['en', 'English']]).map(([code, label]) => ({ code, label }));
-const langLabel = (code) => (LANGUAGES.find((l) => l.code === code) || {}).label || 'audio';
+// Read lazily each call so the bridge's ~98-language set always wins, even if
+// app.js gets evaluated a tick before window.__captoLangs is populated.
+function getLanguages() {
+  const src = window.__captoLangs && window.__captoLangs.length
+    ? window.__captoLangs
+    : [['auto', 'Auto-detect'], ['en', 'English']];
+  return src.map(([code, label]) => ({ code, label }));
+}
+const langLabel = (code) => (getLanguages().find((l) => l.code === code) || {}).label || 'audio';
 const CASES = [{ code: 'lower', label: 'ab' }, { code: 'sentence', label: 'Ab' }, { code: 'title', label: 'Ab Cd' }, { code: 'upper', label: 'AB' }];
 const SWATCHES = ['#FFFFFF', '#111319', '#FFE36E', '#7C6CFF', '#46D39A', '#FF6B81', '#54C7FC', '#FF8FD0'];
 
@@ -122,7 +129,7 @@ function engineOptions(sel) {
 }
 function populateSelectors() {
   [el.uploadEngine, el.setEngine, el.editEngine, el.homeEngine].forEach((s) => s.innerHTML = engineOptions(state.engine));
-  const langHtml = LANGUAGES.map((l) => `<option value="${l.code}"${l.code === state.language ? ' selected' : ''}>${l.label}</option>`).join('');
+  const langHtml = getLanguages().map((l) => `<option value="${l.code}"${l.code === state.language ? ' selected' : ''}>${l.label}</option>`).join('');
   [el.uploadLang, el.setLang, el.editLang, el.homeLang].forEach((s) => s.innerHTML = langHtml);
   syncSelectors();
   el.uploadHint.textContent = 'Auto picks the best engine for your clip. Add your own keys in Settings to unlock more.';
@@ -363,9 +370,12 @@ async function transcribeProject() {
     state.engineUsed = data.engine || null;   // the model that actually ran (for accuracy attribution)
     for (const k of Object.keys(fbSent)) delete fbSent[k];           // fresh baseline
     sendFeedback({ kind: 'regenerate', payload: { count: data.cues.length, language: data.language || state.language } });
-    // Push any overlapping cues to fresh rows (engine occasionally emits two cues
-    // covering the same window — we never want them stacked on the same row).
-    state.rows = distributeRows(state.cues);
+    // Keep first-generation captions on a SINGLE row — the chunker produces
+    // non-overlapping cues and the user explicitly wants the Subby-style
+    // single-line look. If micro-overlaps from raw STT timings slip through,
+    // fixOverlaps() sequentialises them on the same row.
+    state.cues.forEach((c) => { c.row = 0; });
+    state.rows = 1;
     state.capRow = 0; state.scriptRow = 0;
     fixOverlaps();
     setStatus(`Done — ${data.cues.length} captions${data.language ? ` (${data.language})` : ''}.`);

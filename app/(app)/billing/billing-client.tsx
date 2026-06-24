@@ -214,7 +214,7 @@ export function BillingClient({
             <Button onClick={openPortal} loading={loading === "portal"} variant="secondary" size="lg">
               Manage subscription
             </Button>
-            <Button onClick={() => { setShowCancel(true); setRetDone(null); }} variant="ghost" size="lg">
+            <Button onClick={() => { setShowCancel(true); setRetDone(null); }} variant="destructive" size="lg">
               Cancel plan
             </Button>
           </div>

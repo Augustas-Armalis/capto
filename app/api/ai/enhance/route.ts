@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getCurrentSession } from "@/lib/session";
 import { getDb, user as userTable, userApiKey } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
@@ -11,8 +11,8 @@ import { retimeCue, type Cue } from "@/lib/cues";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Caption enhancement (cleanup / translate / emoji). Claude (house Anthropic key)
-// is the brain for EVERYONE; if it isn't configured we fall back to the user's own
+// Caption enhancement (cleanup / translate / emoji). Groq Llama 3.3 70B (house
+// GROQ_API_KEY) is the brain for EVERYONE — cheap, fast, free-tier. We fall back
 // Gemini key, then to the house Gemini key (paid only).
 export async function POST(req: Request) {
   const rl = await rateLimit(`enhance:${clientIp(req)}`, 30, 60 * 10);
@@ -43,29 +43,34 @@ export async function POST(req: Request) {
   const plan = u?.plan ?? "free";
   const paid = plan === "pro" || plan === "ultra";
 
-  // Key resolution priority:
-  //   1) house Anthropic (Claude) — available to ALL signed-in users
-  //   2) the user's own Gemini key
-  //   3) house Gemini key — paid only
+  // Key resolution priority (cheapest first — caption polish is text-only and
+  // doesn't need a premium model):
+  //   1) house Groq (Llama 3.3 70B) — fast, free-tier, the default for everyone
+  //   2) the user's own Groq key — same engine on their account
+  //   3) house Anthropic (Claude) — only if explicitly configured
+  //   4) the user's own Gemini key, then house Gemini (paid only)
   let engine: EnhanceEngine | null = null;
-  if (env.houseAnthropicKey.length > 10) {
-    engine = { anthropicKey: env.houseAnthropicKey };
+  if (env.houseGroqKey.length > 10) {
+    engine = { groqKey: env.houseGroqKey };
   } else {
-    let geminiKey = "";
-    const [own] = await db
-      .select({ enc: userApiKey.encryptedKey })
+    // Check BYOK keys (Groq first, then Gemini) before paid house Gemini.
+    const own = await db
+      .select({ provider: userApiKey.provider, enc: userApiKey.encryptedKey })
       .from(userApiKey)
-      .where(and(eq(userApiKey.userId, session.user.id), eq(userApiKey.provider, "gemini")))
-      .limit(1);
-    if (own) {
-      try {
-        geminiKey = decrypt(own.enc) || "";
-      } catch {
-        /* ignore */
-      }
+      .where(eq(userApiKey.userId, session.user.id));
+    const decrypted: Partial<Record<string, string>> = {};
+    for (const row of own) {
+      try { const k = decrypt(row.enc); if (k) decrypted[row.provider] = k; } catch { /* ignore */ }
     }
-    if (!geminiKey && paid) geminiKey = env.houseGeminiKey;
-    if (geminiKey) engine = { geminiKey };
+    if (decrypted.groq && decrypted.groq.length > 10) {
+      engine = { groqKey: decrypted.groq };
+    } else if (env.houseAnthropicKey.length > 10) {
+      engine = { anthropicKey: env.houseAnthropicKey };
+    } else {
+      let geminiKey = decrypted.gemini || "";
+      if (!geminiKey && paid) geminiKey = env.houseGeminiKey;
+      if (geminiKey) engine = { geminiKey };
+    }
   }
 
   if (!engine) {
@@ -80,7 +85,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "AI caption enhancement is a Pro feature. Upgrade, or add your own Gemini key in Settings.",
+          "AI caption enhancement needs a Groq key. Add one in Settings (it's free), or upgrade for managed enhancement.",
         code: "upgrade",
       },
       { status: 402 },
