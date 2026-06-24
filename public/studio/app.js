@@ -1152,7 +1152,16 @@ function styleBlock(block, cue) {
 function paintActiveWord(block, cue, t) {
   const s = state.style;
   const words = (cue.words && cue.words.length) ? cue.words : [{ word: cue.text, start: cue.start, end: cue.end }];
-  let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
+  // The active word is the last one that has STARTED by time t…
+  let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start - 0.015) aw = k;
+  // …but don't let it linger far past when it was actually spoken. If we're in a
+  // real silent gap before the next word (> ~0.12s past this word's end), light
+  // nothing — so the highlight tracks the voice precisely instead of overshooting.
+  if (aw >= 0) {
+    const w = words[aw];
+    const nextStart = aw + 1 < words.length ? words[aw + 1].start : Infinity;
+    if (t > (w.end || w.start) + 0.12 && t < nextStart - 0.02) aw = -1;
+  }
   const mode = s.highlightMode || 'color';
   const bg = s.highlightBg || '#FFE36E';
   const sig = `${aw}|${s.highlightEnabled}|${mode}|${s.highlightColor}|${bg}|${s.highlightPill}|${s.highlightScale}|${s.hollow?1:0}|${s.gradient?1:0}`;
@@ -2109,8 +2118,10 @@ if (el.projectName) {
     // so Enter (or a pasted multi-line string) can't insert one. Enter just commits.
     const onBeforeInput = (ev) => { if (ev.inputType === 'insertLineBreak' || ev.inputType === 'insertParagraph') ev.preventDefault(); };
     const onKey = (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); el.projectName.blur(); }
-      else if (ev.key === 'Escape') { ev.preventDefault(); done = true; restore(); el.projectName.blur(); }
+      // Enter saves immediately (commit also runs on blur; guarded by `done` so it
+      // can't double-fire). Esc cancels back to the original name.
+      if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); commit(); el.projectName.blur(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); done = true; restore(); el.projectName.blur(); }
     };
     el.projectName.addEventListener('beforeinput', onBeforeInput);
     el.projectName.addEventListener('blur', commit, { once: true });

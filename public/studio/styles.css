@@ -115,7 +115,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.18); box-shadow: 0 0 0 4px var(--accent-soft); }
 
 /* ---------- topbar ---------- */
-.topbar { height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid var(--line); background: rgba(8,8,10,.7); backdrop-filter: blur(14px) saturate(140%); position: relative; z-index: 30; }
+/* Centre the logo + profile to the same max-width band as the platform AppNav
+   (settings/billing use Tailwind max-w-6xl = 1152px with ~24px inset), so the
+   editor's top bar lines up with the rest of the app on wide screens. */
+.topbar { height: 54px; display: flex; align-items: center; justify-content: space-between; padding-block: 0; padding-inline: max(16px, calc(50% - 552px)); border-bottom: 1px solid var(--line); background: rgba(8,8,10,.7); backdrop-filter: blur(14px) saturate(140%); position: relative; z-index: 30; }
 body.theme-light .topbar { background: rgba(255,255,255,.7); }
 .topbar-left { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
 .brand { display: flex; align-items: center; gap: 9px; background: none; border: none; cursor: pointer; padding: 4px 8px; border-radius: 8px; transition: .14s var(--ease); flex-shrink: 0; }

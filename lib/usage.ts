@@ -175,3 +175,26 @@ export async function topVocabulary(userId: string, limit = 40): Promise<string[
     return [];
   }
 }
+
+/**
+ * Collective learning: terms that MULTIPLE users have corrected to (≥2 distinct
+ * users, enough total weight) — a shared dictionary that biases EVERY user's
+ * transcriptions, so the engine gets better for everyone as people edit. The
+ * multi-user threshold keeps one person's noise out of the global list.
+ */
+export async function globalVocabulary(limit = 25): Promise<string[]> {
+  if (!isConfigured.db()) return [];
+  try {
+    const sql = db();
+    const rows = (await sql`
+      SELECT term FROM user_vocabulary
+      GROUP BY term
+      HAVING count(DISTINCT user_id) >= 2 AND sum(weight) >= 4
+      ORDER BY sum(weight) DESC
+      LIMIT ${limit}
+    `) as { term: string }[];
+    return rows.map((r) => r.term);
+  } catch {
+    return [];
+  }
+}

@@ -75,50 +75,58 @@ async function anthropicJson(apiKey: string, instruction: string, payload: unkno
  * available and we pick in that order. */
 export type EnhanceEngine = { groqKey?: string; anthropicKey?: string; geminiKey?: string };
 
-async function groqJson(apiKey: string, instruction: string, payload: unknown): Promise<unknown> {
+async function groqCall(apiKey: string, instruction: string, payload: unknown, jsonMode: boolean): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: GROQ_ENHANCE_MODEL,
+    temperature: 0.3,
+    messages: [
+      {
+        role: "system",
+        content:
+          'Return ONLY valid JSON. The response must be a JSON object with a single key "lines" whose value is an array of strings in the requested order.',
+      },
+      {
+        role: "user",
+        content: `${instruction}\n\nINPUT:\n${JSON.stringify(payload)}\n\nRespond as {"lines": [...]}.`,
+      },
+    ],
+  };
+  if (jsonMode) body.response_format = { type: "json_object" };
   const res = await fetch(GROQ_URL, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: GROQ_ENHANCE_MODEL,
-      temperature: 0.3,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            'Return ONLY valid JSON. The response must be a JSON object with a single key "lines" whose value is an array of strings in the requested order.',
-        },
-        {
-          role: "user",
-          content: `${instruction}\n\nINPUT:\n${JSON.stringify(payload)}\n\nRespond as {"lines": [...]}.`,
-        },
-      ],
-    }),
+    headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`Groq failed (${res.status}). ${detail.slice(0, 200)}`);
   }
-  const j = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const text = j.choices?.[0]?.message?.content || "";
-  // Groq returns a JSON object (response_format), unwrap the "lines" array.
+  const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  return j.choices?.[0]?.message?.content || "";
+}
+
+function unwrapLines(text: string): unknown {
   try {
     const parsed = JSON.parse(text);
     if (Array.isArray(parsed)) return parsed;
     if (parsed && Array.isArray(parsed.lines)) return parsed.lines;
-  } catch { /* fall through to loose parse */ }
+  } catch { /* fall through */ }
   const loose = parseJsonLoose(text, "Groq");
   if (Array.isArray(loose)) return loose;
   if (loose && typeof loose === "object" && Array.isArray((loose as { lines?: unknown }).lines)) {
     return (loose as { lines: unknown[] }).lines;
   }
   throw new Error("Groq returned unexpected shape.");
+}
+
+async function groqJson(apiKey: string, instruction: string, payload: unknown): Promise<unknown> {
+  // Try strict JSON mode first; if the model/endpoint rejects response_format,
+  // retry once in plain mode and salvage the array — so Polish never silently no-ops.
+  try {
+    return unwrapLines(await groqCall(apiKey, instruction, payload, true));
+  } catch {
+    return unwrapLines(await groqCall(apiKey, instruction, payload, false));
+  }
 }
 
 async function runEnhance(

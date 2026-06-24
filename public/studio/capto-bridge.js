@@ -336,7 +336,7 @@
   // social, not a giant block jammed against the bottom edge.
   function defaultStyle(meta) {
     const H = meta.height || 1920;
-    const fontSize = Math.round(H * 0.046);
+    const fontSize = Math.round(H * 0.041);
     return {
       fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.12, caseMode: 'sentence',
       primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.04), wordSpacing: 0,
@@ -362,7 +362,7 @@
     // through SHORT pauses (extends toward the next word, minus GAP_PAD). But on a
     // BIG pause (> HIDE_GAP of silence) it disappears so captions don't hang on
     // screen during dead air.
-    const LEAD_OUT = 0.18, GAP_PAD = 0.06, HIDE_GAP = 0.7;
+    const LEAD_OUT = 0.10, GAP_PAD = 0.06, HIDE_GAP = 0.6;
     // ── sanitize raw word timings ──
     // Whisper (and the chunk-stitching above) occasionally emit NaN/negative,
     // zero-duration, or out-of-order timestamps. Left raw they make the karaoke

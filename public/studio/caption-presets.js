@@ -15,20 +15,20 @@
   //   font     → override the family (default Inter)
   //   scale    → how much the active word grows (100 = none)
   window.CAPTO_PRESETS = [
-    { id: 'inter-bold', name: 'Inter Bold', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', scale: 120, sizeRatio: 0.052, shadow: true, popular: true, sample: 'keep it simple' },
-    { id: 'hormozi', name: 'Hormozi', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, sizeRatio: 0.056, shadow: true, popular: true, sample: 'this changed everything' },
-    { id: 'karaoke', name: 'Karaoke', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#7c5cff', sizeRatio: 0.05, shadow: true, popular: true, sample: 'follow every word' },
-    { id: 'editorial', name: 'Editorial', fontWeight: 600, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: CYAN, highlightMode: 'color', scale: 112, sizeRatio: 0.046, shadow: true, sample: 'words that earn attention' },
-    { id: 'clean-sans', name: 'Clean Sans', fontWeight: 500, caseMode: 'lower', tracking: -0.01, fill: '#f2f3f7', highlightFill: '#f2f3f7', highlightMode: 'underline', accent: CYAN, sizeRatio: 0.044, shadow: true, sample: 'simple is stronger' },
-    { id: 'word-by-word', name: 'Word by Word', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', scale: 124, sizeRatio: 0.07, shadow: true, sample: 'every word hits' },
-    { id: 'beasty', name: 'Beasty', fontWeight: 900, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, outline: 0.02, sizeRatio: 0.062, shadow: true, sample: 'you wont believe this' },
-    { id: 'neon', name: 'Neon', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: CYAN, highlightMode: 'glow', accent: CYAN, scale: 110, sizeRatio: 0.052, shadow: true, sample: 'turn it up loud' },
-    { id: 'pop', name: 'Pop', fontWeight: 700, caseMode: 'none', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: FUCHSIA, pill: true, sizeRatio: 0.05, shadow: true, sample: 'made this for you' },
-    { id: 'outline', name: 'Outline', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', hollow: true, sizeRatio: 0.058, shadow: false, sample: 'big bold outline' },
-    { id: 'gradient', name: 'Gradient', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'glow', accent: VIOLET, gradient: true, scale: 108, sizeRatio: 0.058, shadow: true, sample: 'make it pop' },
-    { id: 'highlighter', name: 'Highlighter', fontWeight: 700, caseMode: 'none', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#8b6cffcc', sizeRatio: 0.05, shadow: true, sample: 'read this part' },
-    { id: 'bubble', name: 'Bubble', fontWeight: 700, caseMode: 'none', tracking: 0, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: WHITE, pill: true, sizeRatio: 0.05, shadow: true, sample: 'so clean right' },
-    { id: 'typewriter', name: 'Typewriter', font: 'Courier New', fontWeight: 500, caseMode: 'none', tracking: 0, fill: WHITE, highlightFill: CYAN, highlightMode: 'color', scale: 108, sizeRatio: 0.046, shadow: true, sample: 'type every word' },
+    { id: 'inter-bold', name: 'Inter Bold', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', scale: 118, sizeRatio: 0.043, shadow: true, popular: true, sample: 'keep it simple' },
+    { id: 'hormozi', name: 'Hormozi', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, sizeRatio: 0.046, shadow: true, popular: true, sample: 'this changed everything' },
+    { id: 'karaoke', name: 'Karaoke', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#7c5cff', sizeRatio: 0.042, shadow: true, popular: true, sample: 'follow every word' },
+    { id: 'editorial', name: 'Editorial', fontWeight: 600, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: CYAN, highlightMode: 'color', scale: 110, sizeRatio: 0.04, shadow: true, sample: 'words that earn attention' },
+    { id: 'clean-sans', name: 'Clean Sans', fontWeight: 500, caseMode: 'lower', tracking: -0.01, fill: '#f2f3f7', highlightFill: '#f2f3f7', highlightMode: 'underline', accent: CYAN, sizeRatio: 0.038, shadow: true, sample: 'simple is stronger' },
+    { id: 'word-by-word', name: 'Word by Word', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', scale: 120, sizeRatio: 0.058, shadow: true, sample: 'every word hits' },
+    { id: 'beasty', name: 'Beasty', fontWeight: 900, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, outline: 0.02, sizeRatio: 0.052, shadow: true, sample: 'you wont believe this' },
+    { id: 'neon', name: 'Neon', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: CYAN, highlightMode: 'glow', accent: CYAN, scale: 108, sizeRatio: 0.043, shadow: true, sample: 'turn it up loud' },
+    { id: 'pop', name: 'Pop', fontWeight: 700, caseMode: 'none', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: FUCHSIA, pill: true, sizeRatio: 0.042, shadow: true, sample: 'made this for you' },
+    { id: 'outline', name: 'Outline', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', hollow: true, sizeRatio: 0.048, shadow: false, sample: 'big bold outline' },
+    { id: 'gradient', name: 'Gradient', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'glow', accent: VIOLET, gradient: true, scale: 106, sizeRatio: 0.048, shadow: true, sample: 'make it pop' },
+    { id: 'highlighter', name: 'Highlighter', fontWeight: 700, caseMode: 'none', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#8b6cffcc', sizeRatio: 0.042, shadow: true, sample: 'read this part' },
+    { id: 'bubble', name: 'Bubble', fontWeight: 700, caseMode: 'none', tracking: 0, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: WHITE, pill: true, sizeRatio: 0.042, shadow: true, sample: 'so clean right' },
+    { id: 'typewriter', name: 'Typewriter', font: 'Courier New', fontWeight: 500, caseMode: 'none', tracking: 0, fill: WHITE, highlightFill: CYAN, highlightMode: 'color', scale: 106, sizeRatio: 0.04, shadow: true, sample: 'type every word' },
   ];
 
   // Map a preset → the studio's flat style object (defaultStyle shape).

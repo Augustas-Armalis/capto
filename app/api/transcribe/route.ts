@@ -6,7 +6,7 @@ import { isConfigured, houseKeyFor } from "@/lib/env";
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
 import { resolveEngine, resolveByokEngine, type ResolvedEngine } from "@/lib/ai/select";
 import { runTranscription, TranscribeError } from "@/lib/ai/transcribe";
-import { consumeTranscribeSeconds, recordRun, topVocabulary } from "@/lib/usage";
+import { consumeTranscribeSeconds, recordRun, topVocabulary, globalVocabulary } from "@/lib/usage";
 import { STT_MODELS, getModel } from "@/lib/ai/models";
 import type { PlanId } from "@/lib/pricing";
 
@@ -152,7 +152,14 @@ export async function POST(req: Request) {
     if (dg) active = { model: dg, apiKey: houseKeyFor("deepgram"), isHouse: true };
   }
 
-  const vocab = userId ? await topVocabulary(userId).catch(() => []) : [];
+  // Bias the engine with BOTH this user's learned terms and the collective
+  // dictionary (terms many users have corrected) — so transcription improves for
+  // everyone as people edit. User terms first (higher priority), then global.
+  const [own, global] = await Promise.all([
+    userId ? topVocabulary(userId).catch(() => []) : Promise.resolve([]),
+    globalVocabulary().catch(() => []),
+  ]);
+  const vocab = [...new Set([...own, ...global])].slice(0, 60);
   return transcribeAndRespond(active, file, language, vocab, plan);
 }
 
