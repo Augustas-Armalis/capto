@@ -70,7 +70,7 @@ const el = {};
 ['uploadView','dropzone','fileInput','pickBtn','topActions','exportBtn','editor','canvasArea','canvasContent',
  'frame','video','capGhost','capLayer','capSel','zOut','zIn','zFit','zLabel','previewQ','playBtn','timeLabel','loopChk','tlZoom',
  'timeline','tlInner','tlResize','addRowBtn','status','resizer','panel','cues','addCueBtn','capRowSel','capRow',
- 'retranscribeBtn','editEngine','editLang','editModel','setEngine','setModel','setLang','setModelField','engineHint',
+ 'retranscribeBtn','polishBtn','editEngine','editLang','editModel','setEngine','setModel','setLang','setModelField','engineHint',
  'uploadEngine','uploadLang','uploadModel','uploadModelField','uploadHint','homeEngine','homeLang','homeModel','homeModelField','scriptPara','scriptSegs','scriptClear',
  'scriptRewrite','scriptCopy','scriptRowSel','scriptRow','tlAddCueBtn','linkChk','exportModal','tiers','exBar','exBarWrap','exTitle','exSub','exMainActions',
  'exDoneActions','exStart','exCancel','exClose','exError','toast','exDest',
@@ -374,6 +374,52 @@ async function transcribeProject() {
   finally { el.retranscribeBtn.disabled = false; }
 }
 el.retranscribeBtn.onclick = async () => { if (state.cues.length && !(await confirmDialog('Re-transcribe from audio? This replaces the current captions.', { okLabel: 'Re-transcribe' }))) return; transcribeProject(); };
+
+// AI cleanup pass — sends the cues to Claude (or Gemini fallback) on the server,
+// gets back corrected punctuation/spelling/casing, preserves timing.
+el.polishBtn.onclick = async () => {
+  if (!state.cues.length) return toast('Generate captions first.', true);
+  if (!(await confirmDialog('Polish captions with AI? Fixes punctuation, casing and misheard words. Keeps your timing.', { okLabel: 'Polish' }))) return;
+  el.polishBtn.disabled = true;
+  const orig = el.polishBtn.textContent;
+  el.polishBtn.textContent = '✨ Polishing…';
+  try {
+    // Send a copy of just what the server needs — id/start/end/text/words.
+    const payload = {
+      action: 'cleanup',
+      cues: state.cues.map((c) => ({
+        id: c.id, start: c.start, end: c.end, text: c.text,
+        words: (c.words || []).map((w) => ({ word: w.word, start: w.start, end: w.end })),
+      })),
+    };
+    const r = await fetch('/api/ai/enhance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(data.error || 'Polish failed.', true); return; }
+    if (!Array.isArray(data.cues) || !data.cues.length) { toast('Nothing changed.'); return; }
+    // Map polished text back onto our cues by id (preserving row + extras the
+    // server doesn't know about); fall back to index match if ids drift.
+    const byId = new Map(data.cues.map((c) => [c.id, c]));
+    const changed = [];
+    state.cues = state.cues.map((c, i) => {
+      const pol = byId.get(c.id) || data.cues[i];
+      if (!pol) return c;
+      if (pol.text && pol.text !== c.text) changed.push(c.id);
+      return { ...c, text: pol.text || c.text, words: pol.words && pol.words.length ? pol.words : c.words };
+    });
+    state.activeCue = -1;
+    renderAll(); renderScript(); saveSoon();
+    toast(changed.length ? `Polished ${changed.length} captions.` : 'Captions already clean.');
+  } catch {
+    toast('Polish failed — try again.', true);
+  } finally {
+    el.polishBtn.disabled = false;
+    el.polishBtn.textContent = orig;
+  }
+};
 // (the old topbar "New" button was removed — back chevron handles going home)
 
 /* ============================ cue model ============================ */
