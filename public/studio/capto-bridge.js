@@ -1445,7 +1445,9 @@
       nav.className = 'capto-nav';
       topbar.appendChild(nav);
       const homeView = document.getElementById('homeView');
-      const sync = () => { nav.style.display = homeView && !homeView.hidden ? '' : 'none'; };
+      // body.capto-home → CSS centres the top bar like the platform AppNav, but
+      // ONLY on the home view; inside the editor the top bar stays full-width.
+      const sync = () => { const onHome = !!(homeView && !homeView.hidden); nav.style.display = onHome ? '' : 'none'; document.body.classList.toggle('capto-home', onHome); };
       sync();
       if (homeView && !homeNavObserver) {
         homeNavObserver = new MutationObserver(sync);
