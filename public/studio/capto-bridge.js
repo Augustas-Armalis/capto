@@ -386,33 +386,27 @@
     // (+LEAD_OUT) and only bridges to the next caption when they're truly
     // back-to-back (gap < BRIDGE). Any real pause → the caption hides, so the
     // screen is empty during silence instead of a line hanging there.
-    const LEAD_OUT = 0.12, BRIDGE = 0.25;
-    // ── sanitize raw word timings ──
-    // Whisper (and the chunk-stitching above) occasionally emit NaN/negative,
-    // zero-duration, or out-of-order timestamps. Left raw they make the karaoke
-    // highlight jump around and the chunker misbehave. Normalize to a clean,
-    // monotonic, non-overlapping stream before grouping.
-    const raw = [];
+    // A caption appears a hair BEFORE its first word (LEAD_IN) — Whisper marks
+    // word onsets a touch late, so this lands the caption right on the voice —
+    // lingers a beat after the last word (LEAD_OUT), and only bridges to the next
+    // caption across an imperceptible gap (< BRIDGE). Any real gap → it hides.
+    const LEAD_IN = 0.08, LEAD_OUT = 0.08;
+    // ── sanitize raw word timings (KEEP the real starts — don't shift words) ──
+    // Only drop empties/NaN and guarantee a minimum visible duration. We do NOT
+    // push overlapping words forward (that drifted captions behind the audio);
+    // Whisper's real per-word starts are what make the timing land.
+    const MIN_WORD = 0.04;
+    const flat = [];
     for (const w of words || []) {
       const word = String(w.word || w.text || '').trim();
       if (!word) continue;
       let start = +w.start, end = +w.end;
-      if (!isFinite(start)) start = raw.length ? raw[raw.length - 1].end : 0;
-      if (!isFinite(end)) end = start;
-      raw.push({ word, start, end });
+      if (!isFinite(start)) start = flat.length ? flat[flat.length - 1].end : 0;
+      start = Math.max(0, start);
+      if (!isFinite(end) || end <= start) end = start + MIN_WORD;
+      flat.push({ word, start, end });
     }
-    raw.sort((a, b) => a.start - b.start);
-    const flat = [];
-    const MIN_WORD = 0.04; // floor so every word has a visible highlight window
-    let cursor = 0;
-    for (const w of raw) {
-      let start = Math.max(w.start, 0);
-      if (start < cursor - 0.02) start = cursor;        // pull a backwards word forward
-      let end = Math.max(w.end, start + MIN_WORD);
-      if (end <= start) end = start + MIN_WORD;
-      flat.push({ word: w.word, start, end });
-      cursor = end;
-    }
+    flat.sort((a, b) => a.start - b.start);
     // 1) group into clean, readable chunks. A new caption ALWAYS starts at a
     // sentence end (. ! ? …) or a real pause — we never stack the first word of a
     // new thought onto the tail of the previous one. We also prefer to break at a
@@ -445,18 +439,16 @@
       }
     }
     // 2) build cues, extending the end across small pauses but hiding on big ones
-    return groups.map((ws, gi) => {
-      const start = ws[0].start;
-      const lastEnd = ws[ws.length - 1].end;
-      const nextStart = gi + 1 < groups.length ? groups[gi + 1][0].start : Infinity;
-      const gap = nextStart - lastEnd;
-      let end;
-      // Back-to-back (no real pause) → run straight into the next caption so it
-      // doesn't flicker. Otherwise end just after the last word → the caption
-      // hides during the pause (exact, voice-tracking timing).
-      if (gap < BRIDGE) end = nextStart - 0.01;
-      else end = lastEnd + LEAD_OUT;
-      if (!(end > start)) end = start + 0.12;                            // guard
+    // Each caption is on screen for its OWN words' span: from (firstWord − lead-in)
+    // to (lastWord + lead-out). We clamp each start to the previous caption's end,
+    // so back-to-back speech runs continuously (no flicker) while a real pause
+    // leaves the screen empty — and a caption NEVER disappears mid-word.
+    let prevEnd = 0;
+    return groups.map((ws) => {
+      const realStart = ws[0].start, realEnd = ws[ws.length - 1].end;
+      const start = Math.max(prevEnd, realStart - LEAD_IN, 0);
+      const end = Math.max(realEnd + LEAD_OUT, start + 0.10);
+      prevEnd = end;
       return { start, end, text: ws.map((w) => w.word).join(' '), words: ws };
     });
   }
