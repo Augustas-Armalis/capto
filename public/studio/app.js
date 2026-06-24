@@ -2181,9 +2181,9 @@ async function pollJob(jobId) {
       el.exBar.style.width = '100%'; el.exBarWrap.hidden = true;
       lastSavedPath = j.savedPath || null;
       el.exTitle.textContent = 'Exported ✓';
-      el.exSub.textContent = j.savedPath ? `Saved to ${prettyDir(j.savedPath)}` : 'Your captioned video is ready.';
+      el.exSub.textContent = j.savedPath ? `Saved to ${j.savedPath}.` : 'Saved to your Downloads folder.';
       el.exDoneActions.hidden = false;
-      toast('Video exported');
+      toast(j.savedPath ? `Saved to ${j.savedPath}` : 'Saved to your Downloads folder');
     }
     else exErr(j.error || 'Export failed');
   } catch (err) { exErr(err.message); }

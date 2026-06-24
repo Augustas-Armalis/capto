@@ -773,6 +773,7 @@
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 15000);
+    return `your Downloads folder (${name})`;
   }
   const supportsSavePicker = typeof window.showSaveFilePicker === 'function';
   // Desktop: the user picks the save location up front (File System Access);
@@ -786,10 +787,10 @@
         await w.write(blob);
         await w.close();
         window.__captoSaveHandle = null;
-        return;
+        return h.name || name;            // saved exactly where the user chose
       } catch { window.__captoSaveHandle = null; /* user revoked / error → fall back to download */ }
     }
-    downloadBlob(blob, name);
+    return downloadBlob(blob, name);      // → "your Downloads folder (name)"
   }
   async function chooseSaveLocation() {
     if (!supportsSavePicker) return;
@@ -1051,8 +1052,8 @@
       const sel = 'width:auto;min-width:88px;display:inline-block;padding:7px 26px 7px 10px;font-size:12.5px';
       opts.innerHTML =
         `<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">` +
-        `<label style="font-size:12px;color:var(--muted)">Resolution <select id="capto-res" ${lock} style="${sel}"><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></label>` +
-        `<label style="font-size:12px;color:var(--muted)">FPS <select id="capto-fps" ${lock} style="${sel}"><option value="24">24</option><option value="30" selected>30</option><option value="60">60</option></select></label>` +
+        `<label style="font-size:12px;color:var(--muted)">Resolution <select id="capto-res" ${lock} style="${sel}"><option value="2160" ${free ? 'disabled' : ''}>4K (2160p)${free ? ' · Pro' : ''}</option><option value="1440" ${free ? 'disabled' : ''}>1440p${free ? ' · Pro' : ''}</option><option value="1080" selected>1080p</option><option value="720">720p</option><option value="480">480p</option></select></label>` +
+        `<label style="font-size:12px;color:var(--muted)">FPS <select id="capto-fps" ${lock} style="${sel}"><option value="24">24</option><option value="30" selected>30</option><option value="60">60</option><option value="120" ${free ? 'disabled' : ''}>120${free ? ' · Pro' : ''}</option></select></label>` +
         `<label style="font-size:12px;color:var(--muted)">Bitrate <select id="capto-bitrate-sel" style="${sel}">` +
           `<option value="3">Lower</option>` +
           `<option value="6">Medium</option>` +
@@ -1244,7 +1245,7 @@
     });
     try { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } catch {}
     const base = (media.file.name || 'video').replace(/\.[^.]+$/, '');
-    await saveBlob(blob, `${base}-captioned.${extFor(mime)}`);
+    job.dest = await saveBlob(blob, `${base}-captioned.${extFor(mime)}`);
     return blob;
   }
   function startExportJob(id, body) {
@@ -1377,7 +1378,7 @@
     if (jm) {
       const job = jobs[jm[1]];
       if (!job) return Promise.resolve(json({ status: 'error', error: 'Job expired.' }));
-      return Promise.resolve(json({ status: job.status, progress: job.progress, error: job.error }));
+      return Promise.resolve(json({ status: job.status, progress: job.progress, error: job.error, savedPath: job.dest || null }));
     }
 
     // desktop-only endpoints (download/folder pickers) — not on web.
