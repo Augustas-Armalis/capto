@@ -1294,13 +1294,18 @@ function positionSelBox() {
   const cueId = i >= 0 && state.cues[i] ? state.cues[i].id : null;
   const block = cueId ? el.capLayer.querySelector(`.cap-block[data-cue="${cueId}"]`) : null;
   if (!block) { el.capSel.classList.remove('on'); return; }
-  // The block uses transform:translate(-50%,-50%) with left/top in px relative to
-  // .frame. The sel box does the same, so we mirror left/top exactly + measure
-  // the rendered size.
-  el.capSel.style.left = block.style.left;
-  el.capSel.style.top = block.style.top;
-  el.capSel.style.width = block.offsetWidth + 'px';
-  el.capSel.style.height = block.offsetHeight + 'px';
+  // Mirror the block's ACTUAL on-screen box (getBoundingClientRect includes the
+  // fitBlockToFrame scale transform). Both the block and the sel box centre via
+  // translate(-50%,-50%), so we set left/top to the rendered centre relative to
+  // the frame and width/height to the rendered size — handles always hug the
+  // caption exactly, even when it's auto-shrunk to fit.
+  const fr = el.frame.getBoundingClientRect();
+  const br = block.getBoundingClientRect();
+  if (!br.width || !br.height) { el.capSel.classList.remove('on'); return; }
+  el.capSel.style.left = (br.left - fr.left + br.width / 2) + 'px';
+  el.capSel.style.top = (br.top - fr.top + br.height / 2) + 'px';
+  el.capSel.style.width = br.width + 'px';
+  el.capSel.style.height = br.height + 'px';
   el.capSel.classList.add('on');
 }
 
@@ -1439,6 +1444,7 @@ function renderTimeline() {
   }
   html += '</div><div class="tl-playhead" id="playhead"></div><div class="tl-grab" id="phGrab"></div>';
   el.tlInner.innerHTML = html; updatePlayhead();
+  autoSizeTl();   // keep the timeline height fitted to the current row count
 }
 function updatePlayhead() { const ph = $('#playhead'), gr = $('#phGrab'); if (!ph || !state.duration) return; const innerW = el.tlInner.offsetWidth, x = (el.video.currentTime / state.duration) * innerW; ph.style.left = x + 'px'; if (gr) gr.style.left = x + 'px'; }
 el.tlZoom.oninput = () => { state.zoom = parseFloat(el.tlZoom.value); renderTimeline(); };
@@ -1741,11 +1747,32 @@ function renderScriptSegs() {
 }
 el.scriptClear.onclick = () => { scriptSegs = []; scriptSel = null; renderScriptSegs(); highlightScript(); };
 const scriptOneWordBtn = document.getElementById('scriptOneWord');
-if (scriptOneWordBtn) scriptOneWordBtn.onclick = () => {
+if (scriptOneWordBtn) scriptOneWordBtn.onclick = async () => {
+  // Completely REGENERATE the captions: one cue per spoken word, using the REAL
+  // per-word timings from the transcription (not a re-chunk of the current
+  // boxes). Pulls words from every cue's word list so it works on the whole clip.
+  const words = [];
+  for (const c of state.cues) {
+    const ws = (c.words && c.words.length) ? c.words : [{ word: c.text, start: c.start, end: c.end }];
+    for (const w of ws) { const word = String(w.word || '').trim(); if (word) words.push({ word, start: +w.start, end: +w.end }); }
+  }
+  if (!words.length) return toast('Generate captions first.', true);
+  if (!(await confirmDialog(`Regenerate as ${words.length} one-word captions? This rebuilds all captions from the original word timings.`, { okLabel: 'Regenerate' }))) return;
+  words.sort((a, b) => a.start - b.start);
+  const stamp = Date.now();
+  state.cues = words.map((w, k) => ({
+    id: `w${stamp}-${k}`, row: 0,
+    start: w.start, end: Math.max(w.end, w.start + 0.06),
+    text: w.word,
+    words: [{ word: w.word, start: w.start, end: w.end }],
+  }));
+  state.rows = 1; state.capRow = 0; state.scriptRow = 0;
+  state.activeCue = -1; state.selCue = -1; state.pinnedCueId = null; state.selectedSet.clear();
   scriptSegs = []; scriptSel = null;
-  for (let k = 0; k < scriptWords.length; k++) scriptSegs.push({ from: k, to: k, text: scriptWords[k].word });
-  renderScriptSegs(); highlightScript();
-  toast(`${scriptSegs.length} segments — one per word. Hit Rewrite to apply.`);
+  ensureRows(); fixOverlaps();
+  renderRowSelectors(); renderAll(); renderScript(); saveSoon();
+  switchTab('captions');
+  toast(`Regenerated — ${state.cues.length} captions, one per word.`);
 };
 el.scriptRewrite.onclick = () => {
   if (!scriptSegs.length) return toast('Select some words first.', true);
@@ -1830,8 +1857,8 @@ el.linkChk.addEventListener('change', () => renderTimeline());
 // ── Timeline vertical resize: grab the strip above the timeline and drag.
 // Persisted in localStorage. Past the cap (3 rows visible), the timeline
 // internally scrolls — never pushes the canvas up.
-const TL_MIN = 100, TL_MAX_FACTOR = 0.65;   // up to 65% of window height
-function applyTlHeight(px) {
+const TL_MIN = 82, TL_MAX_FACTOR = 0.65;   // up to 65% of window height
+function applyTlHeight(px, fromUser) {
   const max = Math.max(TL_MIN + 50, Math.round(window.innerHeight * TL_MAX_FACTOR));
   const h = clamp(px, TL_MIN, max);
   document.documentElement.style.setProperty('--tl-h', h + 'px');
@@ -1839,17 +1866,27 @@ function applyTlHeight(px) {
   // rows (max ~76px), so you get more readable blocks when expanded.
   const rowH = clamp(56 + Math.round((h - 188) * 0.10), 56, 76);
   document.documentElement.style.setProperty('--tl-row-h', rowH + 'px');
-  localStorage.setItem('subby-tl-h', String(h));
+  // Only PERSIST + lock the height when the user dragged it themselves. Auto-fit
+  // calls (after generating/loading) must not clobber their manual preference.
+  if (fromUser) { localStorage.setItem('subby-tl-h', String(h)); localStorage.setItem('subby-tl-userset', '1'); }
 }
+// Natural timeline height for the current row count — ruler + one lane per row.
+function naturalTlH() { return clamp(26 + (state.rows || 1) * 56, TL_MIN, Math.round(window.innerHeight * TL_MAX_FACTOR)); }
+// Fit the timeline to its rows unless the user has manually resized it.
+function autoSizeTl() {
+  if (localStorage.getItem('subby-tl-userset') === '1') applyTlHeight(+localStorage.getItem('subby-tl-h') || naturalTlH());
+  else applyTlHeight(naturalTlH());
+}
+autoSizeTl();   // initial: compact, sized to the (single) starting row
 applyTlHeight(+localStorage.getItem('subby-tl-h') || 188);   // ~3 rows by default
 el.tlResize.addEventListener('pointerdown', (e) => {
   e.preventDefault(); el.tlResize.classList.add('active');
   const startY = e.clientY, startH = el.timeline.getBoundingClientRect().height;
-  const mv = (ev) => applyTlHeight(startH + (startY - ev.clientY));   // drag UP grows
+  const mv = (ev) => applyTlHeight(startH + (startY - ev.clientY), true);   // drag UP grows; fromUser → persist
   const up = () => { el.tlResize.classList.remove('active'); document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
   document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
 });
-window.addEventListener('resize', () => applyTlHeight(+localStorage.getItem('subby-tl-h') || 188));
+window.addEventListener('resize', autoSizeTl);
 
 // ── Resilient playback through system audio interruptions (FaceTime/Zoom focus,
 // AirPods switch, screen lock). WKWebView/Safari suspend the <video> when

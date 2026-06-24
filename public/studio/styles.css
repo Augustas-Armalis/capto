@@ -233,9 +233,12 @@ body.theme-light .topbar { background: rgba(255,255,255,.7); }
 .cap-block {
   position: absolute; transform: translate(-50%, -50%);
   text-align: center; line-height: 1.12;
-  white-space: normal; word-break: normal; overflow-wrap: normal;
+  /* Keep a caption on ONE line (2–3 word chunks shouldn't wrap). Manual line
+     breaks still work via <br>; an over-wide caption is auto-shrunk to fit by
+     fitBlockToFrame() instead of wrapping. */
+  white-space: nowrap; word-break: normal; overflow-wrap: normal;
   pointer-events: auto; cursor: grab; user-select: none;
-  max-width: 96%;
+  max-width: none;
   will-change: transform; /* smooth movement */
 }
 .cap-block.dragging { cursor: grabbing; }

@@ -336,14 +336,16 @@
   // social, not a giant block jammed against the bottom edge.
   function defaultStyle(meta) {
     const H = meta.height || 1920;
-    const fontSize = Math.round(H * 0.05);
+    const fontSize = Math.round(H * 0.046);
     return {
       fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.12, caseMode: 'sentence',
       primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.04), wordSpacing: 0,
       outlineWidth: 0, outlineColor: '#000000',
       shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
       shadowDistance: Math.max(2, Math.round(H * 0.0025)), shadowBlur: Math.max(2, Math.round(H * 0.0035)),
-      highlightEnabled: false, highlightColor: '#A0C1FF', highlightScale: 100,
+      // Default look: clean Inter that pops the spoken word in yellow (no zoom) —
+      // the classic readable social-caption highlight, on by default.
+      highlightEnabled: true, highlightColor: '#FFD233', highlightScale: 100,
       highlightMode: 'color', highlightBg: '#FFD233', highlightPill: false,
       posX: 0.5, posY: 0.78, entrance: 'none', exit: 'none', animMs: 180,
     };
@@ -613,10 +615,11 @@
   function safeZone(l, t, w, h, label, labelTop) {
     return (
       `<div style="position:absolute;left:${l};top:${t};width:${w};height:${h};` +
-      `background:repeating-linear-gradient(45deg,rgba(251,113,133,.10),rgba(251,113,133,.10) 7px,transparent 7px,transparent 15px);` +
-      `border:1px dashed rgba(251,113,133,.55)">` +
-      `<span style="position:absolute;${labelTop ? 'top' : 'bottom'}:4px;left:6px;font-size:9px;font-weight:700;` +
-      `letter-spacing:.04em;text-transform:uppercase;color:#ffc4cc;background:rgba(0,0,0,.45);padding:1px 6px;border-radius:5px">${label}</span></div>`
+      // Much more visible over busy video: denser hatch + a brighter solid border.
+      `background:repeating-linear-gradient(45deg,rgba(255,86,110,.28),rgba(255,86,110,.28) 9px,rgba(255,86,110,.07) 9px,rgba(255,86,110,.07) 19px);` +
+      `border:2px solid rgba(255,86,110,.9);box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)">` +
+      `<span style="position:absolute;${labelTop ? 'top' : 'bottom'}:5px;left:6px;font-size:11px;font-weight:800;` +
+      `letter-spacing:.04em;text-transform:uppercase;color:#fff;background:rgba(214,40,69,.92);padding:2px 8px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.5)">${label}</span></div>`
     );
   }
   function setupSafeZones() {
