@@ -362,6 +362,17 @@ async function transcribeProject() {
   setStatus(`<span class="spinner"></span> Generating ${lang} captions…`);
   el.cues.innerHTML = '<div class="cue-empty"><span class="spinner"></span><br>Generating captions…</div>';
   el.retranscribeBtn.disabled = true;
+  showTranscribeProgress(0, 1);
+  // Live progress: the bridge streams partial captions per chunk so they fill
+  // into the timeline as they're generated, with a progress bar.
+  window.__captoOnTranscribeProgress = ({ done, total, cues }) => {
+    showTranscribeProgress(done, total);
+    if (cues && cues.length) {
+      state.cues = cues.map((c) => ({ row: 0, ...c }));
+      state.rows = 1; state.capRow = 0;
+      try { ensureRows(); renderTimeline(); renderCues(); renderOverlay(); } catch {}
+    }
+  };
   try {
     const res = await fetch(`/api/projects/${state.id}/transcribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: state.language, engine: state.engine, model: state.engine }) });
     const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Transcription failed');
@@ -383,8 +394,33 @@ async function transcribeProject() {
     renderAll(); renderScript();
     saveSoon();   // PERSIST freshly-generated captions immediately (don't wait for an edit)
   } catch (err) { setStatus(err.message, true); el.cues.innerHTML = `<div class="cue-empty">⚠️ ${escapeHtml(err.message)}</div>`; }
-  finally { el.retranscribeBtn.disabled = false; }
+  finally { el.retranscribeBtn.disabled = false; window.__captoOnTranscribeProgress = null; hideTranscribeProgress(); }
 }
+// ── live transcription progress bar (fills as captions are generated) ──
+function transcribeProgressEl() {
+  let bar = document.getElementById('capto-tr-progress');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'capto-tr-progress';
+    bar.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:200;background:var(--surface-2,#17171b);border:1px solid var(--line-2,rgba(255,255,255,.12));border-radius:12px;padding:11px 16px;box-shadow:0 16px 44px -10px rgba(0,0,0,.6);display:none;min-width:260px;text-align:center';
+    bar.innerHTML = '<div id="capto-tr-label" style="font-size:13px;color:var(--text,#f1f1f4);margin-bottom:9px;font-weight:600">Generating captions…</div><div style="height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden"><div id="capto-tr-fill" style="height:100%;width:8%;border-radius:99px;background:linear-gradient(90deg,#82a5ff,#62d8ff);transition:width .35s"></div></div>';
+    document.body.appendChild(bar);
+  }
+  return bar;
+}
+function showTranscribeProgress(done, total) {
+  const bar = transcribeProgressEl(); bar.style.display = 'block';
+  const fill = document.getElementById('capto-tr-fill'), label = document.getElementById('capto-tr-label');
+  if (total > 1) {
+    const pct = Math.max(4, Math.round((done / total) * 100));
+    if (fill) fill.style.width = pct + '%';
+    if (label) label.textContent = done >= total ? 'Finishing up…' : `Generating captions… ${done} / ${total} (${pct}%)`;
+  } else {
+    if (fill) fill.style.width = done > 0 ? '92%' : '20%';
+    if (label) label.textContent = 'Generating captions…';
+  }
+}
+function hideTranscribeProgress() { const bar = document.getElementById('capto-tr-progress'); if (bar) bar.style.display = 'none'; }
 el.retranscribeBtn.onclick = async () => { if (state.cues.length && !(await confirmDialog('Re-transcribe from audio? This replaces the current captions.', { okLabel: 'Re-transcribe' }))) return; transcribeProject(); };
 // (the old topbar "New" button was removed — back chevron handles going home)
 

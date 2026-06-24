@@ -455,7 +455,10 @@
   // transcribed and the word timings are stitched back with a time offset. If
   // extraction isn't possible (codec/oversized/no WebAudio), we fall back to a
   // single raw upload (the server routes large paid-tier files to Deepgram).
-  const AUDIO_SR = 16000, CHUNK_SEC = 600;
+  // ~3-min chunks: small enough that long videos show smooth live progress and
+  // captions fill into the timeline chunk-by-chunk, big enough to keep accuracy
+  // + stay well under the per-request limits.
+  const AUDIO_SR = 16000, CHUNK_SEC = 180;
 
   function encodeWav(samples, sampleRate) {
     const n = samples.length;
@@ -574,6 +577,8 @@
       try {
         const allWords = [];
         let language = body.language, engine = null;
+        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords) : [], language, engine }); } catch {} };
+        report(0);
         for (let i = 0; i < chunks.length; i++) {
           if (chunks.length > 1) setTranscribeStatus(`Transcribing… part ${i + 1} of ${chunks.length}`);
           const data = await postOneChunk(chunks[i].file, body, chunks[i].durationSec);
@@ -582,6 +587,8 @@
           if (!engine) engine = data.engine || null;
           const off = chunks[i].startSec;
           for (const w of (data.words || [])) allWords.push({ word: w.word, start: (w.start || 0) + off, end: (w.end || 0) + off });
+          // Stream progress + the captions-so-far to the editor → live timeline fill.
+          report(i + 1);
         }
         if (!allWords.length) return json({ error: 'No speech detected in this clip.' }, 422);
         return json({ cues: wordsToCues(allWords), language, engine });
