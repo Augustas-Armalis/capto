@@ -78,7 +78,7 @@ const el = {};
 ['uploadView','dropzone','fileInput','pickBtn','topActions','exportBtn','editor','canvasArea','canvasContent',
  'frame','video','capGhost','capLayer','capSel','zOut','zIn','zFit','zLabel','previewQ','playBtn','timeLabel','loopChk','tlZoom',
  'timeline','tlInner','tlResize','addRowBtn','status','resizer','panel','cues','addCueBtn','capRowSel','capRow',
- 'retranscribeBtn','polishBtn','editEngine','editLang','editModel','setEngine','setModel','setLang','setModelField','engineHint',
+ 'retranscribeBtn','editEngine','editLang','editModel','setEngine','setModel','setLang','setModelField','engineHint',
  'uploadEngine','uploadLang','uploadModel','uploadModelField','uploadHint','homeEngine','homeLang','homeModel','homeModelField','scriptPara','scriptSegs','scriptClear',
  'scriptRewrite','scriptCopy','scriptRowSel','scriptRow','tlAddCueBtn','linkChk','exportModal','tiers','exBar','exBarWrap','exTitle','exSub','exMainActions',
  'exDoneActions','exStart','exCancel','exClose','exError','toast','exDest',
@@ -385,52 +385,6 @@ async function transcribeProject() {
   finally { el.retranscribeBtn.disabled = false; }
 }
 el.retranscribeBtn.onclick = async () => { if (state.cues.length && !(await confirmDialog('Re-transcribe from audio? This replaces the current captions.', { okLabel: 'Re-transcribe' }))) return; transcribeProject(); };
-
-// AI cleanup pass — sends the cues to Claude (or Gemini fallback) on the server,
-// gets back corrected punctuation/spelling/casing, preserves timing.
-el.polishBtn.onclick = async () => {
-  if (!state.cues.length) return toast('Generate captions first.', true);
-  if (!(await confirmDialog('Polish captions with AI? Fixes punctuation, casing and misheard words. Keeps your timing.', { okLabel: 'Polish' }))) return;
-  el.polishBtn.disabled = true;
-  const orig = el.polishBtn.textContent;
-  el.polishBtn.textContent = '✨ Polishing…';
-  try {
-    // Send a copy of just what the server needs — id/start/end/text/words.
-    const payload = {
-      action: 'cleanup',
-      cues: state.cues.map((c) => ({
-        id: c.id, start: c.start, end: c.end, text: c.text,
-        words: (c.words || []).map((w) => ({ word: w.word, start: w.start, end: w.end })),
-      })),
-    };
-    const r = await fetch('/api/ai/enhance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) { toast(data.error || 'Polish failed.', true); return; }
-    if (!Array.isArray(data.cues) || !data.cues.length) { toast('Nothing changed.'); return; }
-    // Map polished text back onto our cues by id (preserving row + extras the
-    // server doesn't know about); fall back to index match if ids drift.
-    const byId = new Map(data.cues.map((c) => [c.id, c]));
-    const changed = [];
-    state.cues = state.cues.map((c, i) => {
-      const pol = byId.get(c.id) || data.cues[i];
-      if (!pol) return c;
-      if (pol.text && pol.text !== c.text) changed.push(c.id);
-      return { ...c, text: pol.text || c.text, words: pol.words && pol.words.length ? pol.words : c.words };
-    });
-    state.activeCue = -1;
-    renderAll(); renderScript(); saveSoon();
-    toast(changed.length ? `Polished ${changed.length} captions.` : 'Captions already clean.');
-  } catch {
-    toast('Polish failed — try again.', true);
-  } finally {
-    el.polishBtn.disabled = false;
-    el.polishBtn.textContent = orig;
-  }
-};
 // (the old topbar "New" button was removed — back chevron handles going home)
 
 /* ============================ cue model ============================ */
@@ -439,6 +393,20 @@ function cuesInRow(r) { return state.cues.map((c, i) => ({ c, i })).filter((x) =
 function redistributeWords(cue) {
   const toks = cue.text.split(/\s+/).filter(Boolean); const span = Math.max(0.001, cue.end - cue.start), per = span / Math.max(1, toks.length);
   cue.words = toks.map((w, k) => ({ word: w, start: cue.start + k * per, end: cue.start + (k + 1) * per }));
+}
+// Re-fit EXISTING (real) word timings into a cue whose bounds just changed —
+// proportional remap, NOT equal division. Preserves which word is spoken when
+// (so the karaoke highlight stays accurate) while keeping them inside the cue.
+function clampWordsToCue(cue) {
+  const ws = cue.words; if (!ws || !ws.length) return;
+  const wStart = ws[0].start, wEnd = ws[ws.length - 1].end;
+  const wSpan = Math.max(1e-3, wEnd - wStart);
+  const scale = Math.max(1e-3, cue.end - cue.start) / wSpan;
+  cue.words = ws.map((w) => ({
+    word: w.word,
+    start: cue.start + (w.start - wStart) * scale,
+    end: cue.start + (w.end - wStart) * scale,
+  }));
 }
 // clamp a cue's [start,end] so it doesn't overlap same-row neighbors
 function neighborBounds(idx) {
@@ -480,12 +448,17 @@ function fixOverlaps() {
     let cursor = 0;
     for (let k = 0; k < rowCues.length; k++) {
       const c = rowCues[k].c;
+      const os = c.start, oe = c.end;
       if (c.start < cursor) c.start = cursor;
       if (c.end < c.start + MIN_DUR) c.end = c.start + MIN_DUR;
       if (c.end > state.duration) c.end = state.duration;
       if (c.start >= c.end) c.start = Math.max(0, c.end - MIN_DUR);
       cursor = c.end + OVERLAP_EPS;
-      if (c.words && c.words.length) redistributeWords(c);
+      // Only re-distribute the word timings if we ACTUALLY moved the cue. For a
+      // normal (non-overlapping) cue we KEEP the engine's real per-word
+      // timestamps, so the karaoke highlight lands exactly on the spoken word
+      // instead of being equal-divided (which felt generic).
+      if ((c.start !== os || c.end !== oe) && c.words && c.words.length) clampWordsToCue(c);
     }
   }
 }

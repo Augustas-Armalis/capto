@@ -337,16 +337,16 @@
   // social, not a giant block jammed against the bottom edge.
   function defaultStyle(meta) {
     const H = meta.height || 1920;
-    const fontSize = Math.round(H * 0.036);
+    const fontSize = Math.round(H * 0.046);
     return {
       fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.12, caseMode: 'sentence',
       primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.04), wordSpacing: 0,
       outlineWidth: 0, outlineColor: '#000000',
       shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
       shadowDistance: Math.max(2, Math.round(H * 0.0025)), shadowBlur: Math.max(2, Math.round(H * 0.0035)),
-      // Default look: clean Inter that pops the spoken word in yellow (no zoom) —
-      // the classic readable social-caption highlight, on by default.
-      highlightEnabled: true, highlightColor: '#FFD233', highlightScale: 100,
+      // Classic Subby default: the spoken word POPS — turns yellow AND scales up
+      // as it's said. The karaoke effect that makes captions feel alive.
+      highlightEnabled: true, highlightColor: '#FFD233', highlightScale: 116,
       highlightMode: 'color', highlightBg: '#FFD233', highlightPill: false,
       posX: 0.5, posY: 0.78, entrance: 'none', exit: 'none', animMs: 180,
     };
@@ -547,10 +547,10 @@
     // if the device can comfortably run it. Any failure falls through to cloud.
     const eng = body.model || body.engine || '';
     const lw = window.__captoLocalWhisper;
-    // Explicit "Capto Engine" → always try on-device. "Auto" → only on a WebGPU
-    // device (the fast, reliable path); everything else uses the cloud engine.
-    const wantLocal = (eng === 'capto-local' && lw) ||
-                      ((eng === '' || eng === 'auto') && lw && lw.available() && !!navigator.gpu);
+    // On-device runs ONLY when the user explicitly picks "Capto Engine". Auto and
+    // everything else use the reliable cloud Whisper (the on-device engine is
+    // still maturing — opt-in until it's rock-solid on every machine).
+    const wantLocal = (eng === 'capto-local' && lw);
     if (wantLocal) {
       const local = await localTranscribe(file, body);
       if (local) return local;

@@ -30,8 +30,10 @@
   // available only if a power user opts into it explicitly.
   function pickAuto() {
     if (!available()) return null;
-    if (hasGPU) return 'small';
-    return mem >= 16 ? 'small' : 'base';
+    // Default to the small, stable 'base' model — verified to load + run without
+    // OOM-crashing. (Bigger tiers stay available but aren't the default until the
+    // on-device path is proven solid across machines.)
+    return 'base';
   }
 
   function resolveModel(tier) {
