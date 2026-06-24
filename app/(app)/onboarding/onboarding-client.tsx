@@ -69,7 +69,9 @@ export function OnboardingClient({
         const res = await fetch("/api/user/api-keys", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ provider: "groq", key: groqKey.trim() }),
+          // validate:true → server does a live test call so a typo'd/revoked key
+          // is caught right here, not on the first failed transcription.
+          body: JSON.stringify({ provider: "groq", key: groqKey.trim(), validate: true }),
         });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));

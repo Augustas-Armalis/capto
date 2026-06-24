@@ -41,7 +41,38 @@ const PostSchema = z.object({
   provider: z.enum(["groq", "openai", "deepgram", "gemini"]),
   key: z.string().min(10).max(512),
   label: z.string().max(80).optional(),
+  validate: z.boolean().optional(),
 });
+
+// Lightweight "is this key real?" check — a cheap authenticated GET that returns
+// 200 on a good key and 401/403 on a bad one. Network failures pass (fail-open)
+// so a flaky provider never blocks onboarding. Returns null when valid, or a
+// human error string when the provider actively rejected the key.
+async function verifyKey(provider: string, key: string): Promise<string | null> {
+  try {
+    if (provider === "groq" || provider === "openai") {
+      const base = provider === "groq" ? "https://api.groq.com/openai/v1" : "https://api.openai.com/v1";
+      const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+      if (res.status === 401 || res.status === 403) {
+        return `That ${provider === "groq" ? "Groq" : "OpenAI"} key was rejected. Double-check you copied the whole key.`;
+      }
+      return null;
+    }
+    if (provider === "deepgram") {
+      const res = await fetch("https://api.deepgram.com/v1/projects", { headers: { Authorization: `Token ${key}` } });
+      if (res.status === 401 || res.status === 403) return "That Deepgram key was rejected. Double-check it and try again.";
+      return null;
+    }
+    if (provider === "gemini") {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+      if (res.status === 400 || res.status === 401 || res.status === 403) return "That Gemini key was rejected. Double-check it and try again.";
+      return null;
+    }
+  } catch {
+    /* network hiccup — don't block on it */
+  }
+  return null;
+}
 
 export async function POST(req: Request) {
   if (!isConfigured.db()) return notConfigured();
@@ -80,6 +111,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "OpenAI keys start with sk-." }, { status: 400 });
   }
   // Deepgram and Gemini keys have no stable public prefix — accept as-is.
+
+  // Opt-in live validation (onboarding sends this) — catch a typo'd/revoked key
+  // up front instead of letting the first transcription fail mysteriously.
+  if (parsed.data.validate) {
+    const verifyErr = await verifyKey(provider, key);
+    if (verifyErr) return NextResponse.json({ error: verifyErr, code: "key_invalid" }, { status: 400 });
+  }
 
   const encrypted = encrypt(key);
   const db = getDb();

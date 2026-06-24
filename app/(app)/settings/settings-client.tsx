@@ -275,7 +275,7 @@ export function SettingsClient({
     try {
       const r = await fetch("/api/user/api-keys", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider, key: key.trim() }),
+        body: JSON.stringify({ provider, key: key.trim(), validate: true }),
       });
       if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || "Could not save that key."); return; }
       setSavedAt((s) => ({ ...s, [provider]: Date.now() }));

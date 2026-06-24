@@ -361,11 +361,31 @@
     // BIG pause (> HIDE_GAP of silence) it disappears so captions don't hang on
     // screen during dead air.
     const LEAD_OUT = 0.18, GAP_PAD = 0.06, HIDE_GAP = 0.7;
-    const flat = [];
+    // ── sanitize raw word timings ──
+    // Whisper (and the chunk-stitching above) occasionally emit NaN/negative,
+    // zero-duration, or out-of-order timestamps. Left raw they make the karaoke
+    // highlight jump around and the chunker misbehave. Normalize to a clean,
+    // monotonic, non-overlapping stream before grouping.
+    const raw = [];
     for (const w of words || []) {
       const word = String(w.word || w.text || '').trim();
       if (!word) continue;
-      flat.push({ word, start: +w.start, end: +w.end });
+      let start = +w.start, end = +w.end;
+      if (!isFinite(start)) start = raw.length ? raw[raw.length - 1].end : 0;
+      if (!isFinite(end)) end = start;
+      raw.push({ word, start, end });
+    }
+    raw.sort((a, b) => a.start - b.start);
+    const flat = [];
+    const MIN_WORD = 0.04; // floor so every word has a visible highlight window
+    let cursor = 0;
+    for (const w of raw) {
+      let start = Math.max(w.start, 0);
+      if (start < cursor - 0.02) start = cursor;        // pull a backwards word forward
+      let end = Math.max(w.end, start + MIN_WORD);
+      if (end <= start) end = start + MIN_WORD;
+      flat.push({ word: w.word, start, end });
+      cursor = end;
     }
     // 1) group into clean, readable chunks. A new caption ALWAYS starts at a
     // sentence end (. ! ? …) or a real pause — we never stack the first word of a
@@ -1139,10 +1159,23 @@
       if (!v.paused && !v.ended) raf = requestAnimationFrame(frame);
     }
     const blob = await new Promise((resolve, reject) => {
-      rec.onstop = () => { cancelAnimationFrame(raf); resolve(new Blob(chunks, { type: mime })); };
-      rec.onerror = (e) => reject((e && e.error) || new Error('Recorder error.'));
+      // Stall watchdog: if the playhead stops advancing (buffering, an audio-less
+      // clip the browser parks, a backgrounded tab) for too long, stop cleanly so
+      // an export can never hang forever. Uses an interval (less throttled than RAF).
+      let lastT = -1, stalled = 0;
+      const watch = setInterval(() => {
+        if (v.ended) return;
+        if (Math.abs(v.currentTime - lastT) < 0.02) {
+          stalled++;
+          if (stalled >= 12) { clearInterval(watch); try { rec.stop(); } catch {} } // ~6s of no progress
+        } else { stalled = 0; lastT = v.currentTime; }
+      }, 500);
+      rec.onstop = () => { clearInterval(watch); cancelAnimationFrame(raf); resolve(new Blob(chunks, { type: mime })); };
+      rec.onerror = (e) => { clearInterval(watch); reject((e && e.error) || new Error('Recorder error.')); };
       v.onended = () => { try { rec.stop(); } catch {} };
-      v.play().then(() => { rec.start(); frame(); }).catch(reject);
+      // timeslice → MediaRecorder flushes a chunk every second instead of holding
+      // the whole recording in one buffer (memory-safe for long exports).
+      v.play().then(() => { rec.start(1000); frame(); }).catch(reject);
     });
     try { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } catch {}
     const base = (media.file.name || 'video').replace(/\.[^.]+$/, '');

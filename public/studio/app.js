@@ -1878,6 +1878,25 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape' && state.selectedSet.size) clearCueSel();
+  // ←/→ : step to the previous/next caption (by start time) and seek there. Pins
+  // it so the canvas move/resize handles follow, and selects it in the list.
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing) {
+    if (!state.cues.length) return;
+    e.preventDefault();
+    const order = state.cues.map((c, i) => ({ i, start: c.start })).sort((a, b) => a.start - b.start);
+    const t = el.video.currentTime;
+    let target = null;
+    if (e.key === 'ArrowRight') target = order.find((o) => o.start > t + 0.02);
+    else { for (const o of order) if (o.start < t - 0.05) target = o; }
+    if (!target) target = e.key === 'ArrowRight' ? order[order.length - 1] : order[0];
+    const i = target.i, cue = state.cues[i];
+    state.selectedSet.clear(); state.selectedSet.add(i); state.selAnchor = i; state.selCue = i;
+    state.pinnedCueId = cue.id; state.capRow = cue.row || 0;
+    el.video.currentTime = cue.start + 0.01;
+    paintSelected(); renderOverlay();
+    const card = el.cues.querySelector(`.cue[data-i="${i}"]`); if (card) card.scrollIntoView({ block: 'nearest' });
+    return;
+  }
 });
 
 // ── Timeline "Add caption" button (mirror of the sidebar button)
