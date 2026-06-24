@@ -63,7 +63,7 @@ const state = {
   id: null, meta: null, originalName: '', cues: [], style: null,
   language: 'en', engine: 'auto', model: 'auto',
   rows: 1, capRow: 0, scriptRow: 0,
-  activeCue: -1, selCue: -1, duration: 0, zoom: 1,
+  activeCue: -1, selCue: -1, pinnedCueId: null, duration: 0, zoom: 1,
   view: { zoom: 1, panX: 0, panY: 0 },
   editingCaption: false, loopCue: -1, playUntil: -1, exportQuality: 'lossless',
   previewOnClick: localStorage.getItem('subby-preview-on-click') === '1',
@@ -514,7 +514,7 @@ function selectAllCues() {
   state.selAnchor = state.cues.length ? 0 : -1;
   paintSelected();
 }
-function clearCueSel() { state.selectedSet.clear(); state.selAnchor = -1; state.selCue = -1; paintSelected(); }
+function clearCueSel() { state.selectedSet.clear(); state.selAnchor = -1; state.selCue = -1; state.pinnedCueId = null; paintSelected(); }
 function renderRowSelectors() {
   const show = state.rows > 1;
   el.capRowSel.hidden = !show; el.scriptRowSel.hidden = !show;
@@ -572,7 +572,10 @@ el.cues.addEventListener('pointerdown', (e) => {
   }
   // Plain click on the card body (not the input) — single-select + seek to the
   // caption's start. Auto-play preview is OPT-IN via the setting (default off).
-  state.selectedSet.clear(); state.selectedSet.add(i); state.selAnchor = i; state.selCue = i; paintSelected();
+  state.selectedSet.clear(); state.selectedSet.add(i); state.selAnchor = i; state.selCue = i;
+  // Pin it + focus its row so the canvas handles land on THIS caption.
+  state.pinnedCueId = cue.id; state.capRow = cue.row || 0;
+  paintSelected();
   el.video.currentTime = cue.start + 0.01;
   if (state.previewOnClick) {
     if (el.loopChk.checked) { state.loopCue = i; state.playUntil = -1; }
@@ -1048,6 +1051,8 @@ el.zFit.onclick = () => { state.view = { zoom: 1, panX: 0, panY: 0 }; applyView(
 el.canvasArea.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(state.view.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX, e.clientY); }, { passive: false });
 el.canvasArea.addEventListener('pointerdown', (e) => {
   if (e.target.closest('.cap-block') || e.target.closest('.cap-handle')) return;
+  // Click on empty canvas unpins; the always-on handles will re-pick the active caption.
+  state.pinnedCueId = null;
   if (state.selCue !== -1) { state.selCue = -1; positionSelBox(); }
   el.canvasArea.classList.add('grabbing');
   const sx = e.clientX, sy = e.clientY, px = state.view.panX, py = state.view.panY;
@@ -1252,13 +1257,25 @@ function doRenderOverlay() {
   // resize the font, a side to resize the box. (Skipped while inline-editing or
   // mid-drag, where selCue already points at the caption being worked on.)
   if (!state.editingCaption && !state.draggingCaption) {
-    const cur = state.selCue;
-    const stillActive = cur >= 0 && state.cues[cur] && activeCueInRow(state.cues[cur].row || 0, t) === cur;
-    if (!stillActive) {
-      let pick = -1;
-      for (let r = 0; r < state.rows; r++) { const a = activeCueInRow(r, t); if (a >= 0) { pick = a; break; } }
-      state.selCue = pick;
+    // Choose which on-screen caption owns the move/resize handles. Priority:
+    //   1) the caption you explicitly pinned (clicked/dragged) — if still on screen
+    //   2) the current selection — if still on screen
+    //   3) the active caption in the row you're editing (capRow)
+    //   4) the lowest active row
+    // This keeps the handles glued to the caption you're working with across
+    // rows, instead of always snapping back to row 0 when several are visible.
+    const activeByRow = [];
+    for (let r = 0; r < state.rows; r++) activeByRow[r] = activeCueInRow(r, t);
+    const visible = (idx) => idx >= 0 && state.cues[idx] && activeByRow[state.cues[idx].row || 0] === idx;
+    let pick = -1;
+    if (state.pinnedCueId) {
+      const pi = state.cues.findIndex((c) => c.id === state.pinnedCueId);
+      if (visible(pi)) pick = pi; else state.pinnedCueId = null;
     }
+    if (pick < 0 && visible(state.selCue)) pick = state.selCue;
+    if (pick < 0 && activeByRow[state.capRow] >= 0) pick = activeByRow[state.capRow];
+    if (pick < 0) for (let r = 0; r < state.rows; r++) if (activeByRow[r] >= 0) { pick = activeByRow[r]; break; }
+    state.selCue = pick;
   }
   highlightActive();
   positionSelBox();
@@ -1293,7 +1310,11 @@ el.frame.addEventListener('pointerdown', (e) => {
   e.preventDefault(); e.stopPropagation();
   const i = state.cues.findIndex((c) => c.id === block.dataset.cue);
   if (i < 0) return;
-  state.selCue = i; state.draggingCaption = true; positionSelBox();
+  // Pin the caption you grabbed so the handles/selection stay on IT — even when
+  // another row's caption is also on screen (otherwise the auto-pick snaps the
+  // selection back to the lowest row and you can never grab the upper ones).
+  state.selCue = i; state.pinnedCueId = state.cues[i].id; state.capRow = state.cues[i].row || 0;
+  state.draggingCaption = true; positionSelBox();
   const fr = el.frame.getBoundingClientRect();
   const sx = e.clientX, sy = e.clientY;
   let moved = false;
