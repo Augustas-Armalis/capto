@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check, KeyRound, Sparkles, ExternalLink, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { PoweredByContles } from "@/components/marketing/powered-by-contles";
@@ -145,9 +146,8 @@ export function OnboardingClient({
                   <label htmlFor="pwd" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">
                     Password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="pwd"
-                    type="password"
                     placeholder="At least 8 characters"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -158,9 +158,8 @@ export function OnboardingClient({
                   <label htmlFor="pwd2" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">
                     Confirm password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="pwd2"
-                    type="password"
                     placeholder="Repeat it"
                     value={password2}
                     onChange={(e) => setPassword2(e.target.value)}

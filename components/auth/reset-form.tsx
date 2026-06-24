@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 
 type Phase = "email" | "code" | "done";
 
@@ -171,9 +172,8 @@ export function ResetForm() {
         <label htmlFor="reset-pwd" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">
           New password
         </label>
-        <Input
+        <PasswordInput
           id="reset-pwd"
-          type="password"
           autoComplete="new-password"
           minLength={8}
           placeholder="At least 8 characters"
@@ -185,9 +185,8 @@ export function ResetForm() {
         <label htmlFor="reset-pwd2" className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)]">
           Confirm password
         </label>
-        <Input
+        <PasswordInput
           id="reset-pwd2"
-          type="password"
           autoComplete="new-password"
           minLength={8}
           placeholder="Repeat it"

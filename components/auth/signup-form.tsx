@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { signUp } from "@/lib/auth-client";
 
 export function SignUpForm() {
@@ -79,9 +80,8 @@ export function SignUpForm() {
         <label htmlFor="password" className="text-xs font-medium text-[var(--color-fg-muted)] uppercase tracking-wider">
           Password
         </label>
-        <Input
+        <PasswordInput
           id="password"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}

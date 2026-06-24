@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { signIn } from "@/lib/auth-client";
 
 export function SignInForm() {
@@ -58,9 +59,8 @@ export function SignInForm() {
             Forgot?
           </Link>
         </label>
-        <Input
+        <PasswordInput
           id="password"
-          type="password"
           autoComplete="current-password"
           required
           placeholder="••••••••"
