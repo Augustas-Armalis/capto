@@ -26,6 +26,7 @@
   // and the dashboard/settings language list, so the editor's Captions tab shows
   // exactly the same options as the rest of Capto (plan-gated the same way).
   window.__captoModels = [
+    { id: 'capto-local', label: 'Capto Engine · on your device (free, private)', minPlan: 'free' },
     { id: 'groq-whisper-large-v3', label: 'Whisper Large v3 · Groq', minPlan: 'free' },
     { id: 'groq-whisper-large-v3-turbo', label: 'Whisper v3 Turbo · Groq', minPlan: 'free' },
     { id: 'deepgram-nova-3', label: 'Deepgram Nova-3', minPlan: 'pro' },
@@ -458,7 +459,9 @@
     return buffer;
   }
 
-  async function extractAudioChunks(file) {
+  // Decode any media file → mono Float32 PCM @16kHz (what both Whisper and the
+  // WAV chunker want). Returns a fresh copy so it can be transferred zero-copy.
+  async function decodeMono16k(file) {
     const AC = window.AudioContext || window.webkitAudioContext;
     const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!AC || !OAC || !file || !file.size) return null;
@@ -473,7 +476,12 @@
     const src = off.createBufferSource();
     src.buffer = decoded; src.connect(off.destination); src.start();
     const rendered = await off.startRendering();
-    const mono = rendered.getChannelData(0);
+    return Float32Array.from(rendered.getChannelData(0));
+  }
+
+  async function extractAudioChunks(file) {
+    const mono = await decodeMono16k(file);
+    if (!mono || !mono.length) return null;
     const chunkFrames = CHUNK_SEC * AUDIO_SR;
     const chunks = [];
     for (let p = 0; p < mono.length; p += chunkFrames) {
@@ -508,8 +516,45 @@
 
   function setTranscribeStatus(txt) { const st = document.getElementById('status'); if (st) st.textContent = txt; }
 
+  // Capto's own on-device engine (Whisper via Transformers.js). Returns a cues
+  // response, or null on ANY problem so the caller falls back to the cloud.
+  async function localTranscribe(file, body) {
+    const lw = window.__captoLocalWhisper;
+    if (!lw) return null;
+    let samples = null;
+    try { setTranscribeStatus('Preparing audio…'); samples = await decodeMono16k(file); } catch { return null; }
+    if (!samples || samples.length < AUDIO_SR) return null; // decode failed / < 1s
+    try {
+      const res = await lw.transcribe(samples, {
+        model: body.localTier || 'auto',
+        language: body.language || 'auto',
+        onProgress: (p) => {
+          if (p.phase === 'download' && typeof p.progress === 'number') setTranscribeStatus(`Downloading Capto engine… ${Math.round(p.progress)}% (one-time)`);
+          else if (p.phase === 'transcribing') setTranscribeStatus('Transcribing on your device…');
+          else setTranscribeStatus('Starting Capto engine…');
+        },
+      });
+      if (!res || !res.words || res.words.length === 0) return null; // empty → fall back
+      return json({ cues: wordsToCues(res.words), language: body.language, engine: { id: 'capto-local', provider: 'capto', model: res.model, label: 'Capto Engine', managed: false } });
+    } catch (e) { console.warn('[Capto] on-device engine failed → cloud fallback', e); return null; }
+  }
+
   async function transcribe(file, body) {
-    // Try the extract-and-chunk path first (fixes long videos for every engine).
+    // Capto's own on-device engine first — when explicitly chosen, or on "Auto"
+    // if the device can comfortably run it. Any failure falls through to cloud.
+    const eng = body.model || body.engine || '';
+    const lw = window.__captoLocalWhisper;
+    // Explicit "Capto Engine" → always try on-device. "Auto" → only on a WebGPU
+    // device (the fast, reliable path); everything else uses the cloud engine.
+    const wantLocal = (eng === 'capto-local' && lw) ||
+                      ((eng === '' || eng === 'auto') && lw && lw.available() && !!navigator.gpu);
+    if (wantLocal) {
+      const local = await localTranscribe(file, body);
+      if (local) return local;
+      setTranscribeStatus('Using cloud engine…');
+    }
+
+    // Cloud path: extract-and-chunk (fixes long videos for every engine).
     let chunks = null;
     try { setTranscribeStatus('Preparing audio…'); chunks = await extractAudioChunks(file); } catch { chunks = null; }
 

@@ -223,6 +223,7 @@
   <!-- Capto web bridge: reroutes Capto's /api/* data layer to Capto's
        client-side model (local video, Groq transcription, browser export).
        MUST load before app.js so the fetch override is in place at init(). -->
+  <script src="/studio/capto-whisper.js"></script>
   <script src="/studio/capto-bridge.js"></script>
   <script src="/studio/caption-presets.js"></script>
   <script src="/studio/app.js"></script>
