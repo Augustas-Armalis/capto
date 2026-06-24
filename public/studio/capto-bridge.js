@@ -359,11 +359,11 @@
     // chars max, broken on sentences / pauses / clauses. Keeps each line
     // punchy and on-the-word; never balloons into a wide 4-word block.
     const MAXW = 3, MAXGAP = 0.4, MAXCHARS = 22;
-    // Timing polish: a caption lingers a beat past its last word (LEAD_OUT), and
-    // through SHORT pauses (extends toward the next word, minus GAP_PAD). But on a
-    // BIG pause (> HIDE_GAP of silence) it disappears so captions don't hang on
-    // screen during dead air.
-    const LEAD_OUT = 0.10, GAP_PAD = 0.06, HIDE_GAP = 0.6;
+    // Timing: a caption tracks the VOICE. It ends right after its last word
+    // (+LEAD_OUT) and only bridges to the next caption when they're truly
+    // back-to-back (gap < BRIDGE). Any real pause → the caption hides, so the
+    // screen is empty during silence instead of a line hanging there.
+    const LEAD_OUT = 0.12, BRIDGE = 0.18;
     // ── sanitize raw word timings ──
     // Whisper (and the chunk-stitching above) occasionally emit NaN/negative,
     // zero-duration, or out-of-order timestamps. Left raw they make the karaoke
@@ -428,9 +428,12 @@
       const nextStart = gi + 1 < groups.length ? groups[gi + 1][0].start : Infinity;
       const gap = nextStart - lastEnd;
       let end;
-      if (gap > HIDE_GAP) end = lastEnd + LEAD_OUT;                      // big pause → vanish
-      else end = Math.min(lastEnd + LEAD_OUT, nextStart - GAP_PAD);      // small pause → persist
-      if (!(end > lastEnd)) end = lastEnd + Math.min(LEAD_OUT, 0.06);    // guard
+      // Back-to-back (no real pause) → run straight into the next caption so it
+      // doesn't flicker. Otherwise end just after the last word → the caption
+      // hides during the pause (exact, voice-tracking timing).
+      if (gap < BRIDGE) end = nextStart - 0.01;
+      else end = lastEnd + LEAD_OUT;
+      if (!(end > start)) end = start + 0.12;                            // guard
       return { start, end, text: ws.map((w) => w.word).join(' '), words: ws };
     });
   }

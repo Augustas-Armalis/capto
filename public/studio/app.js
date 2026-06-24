@@ -1315,18 +1315,13 @@ function positionSelBox() {
   const cueId = i >= 0 && state.cues[i] ? state.cues[i].id : null;
   const block = cueId ? el.capLayer.querySelector(`.cap-block[data-cue="${cueId}"]`) : null;
   if (!block) { el.capSel.classList.remove('on'); return; }
-  // Mirror the block's ACTUAL on-screen box (getBoundingClientRect includes the
-  // fitBlockToFrame scale transform). Both the block and the sel box centre via
-  // translate(-50%,-50%), so we set left/top to the rendered centre relative to
-  // the frame and width/height to the rendered size — handles always hug the
-  // caption exactly, even when it's auto-shrunk to fit.
-  const fr = el.frame.getBoundingClientRect();
-  const br = block.getBoundingClientRect();
-  if (!br.width || !br.height) { el.capSel.classList.remove('on'); return; }
-  el.capSel.style.left = (br.left - fr.left + br.width / 2) + 'px';
-  el.capSel.style.top = (br.top - fr.top + br.height / 2) + 'px';
-  el.capSel.style.width = br.width + 'px';
-  el.capSel.style.height = br.height + 'px';
+  // The block uses transform:translate(-50%,-50%) with left/top in px relative to
+  // .frame; the sel box does the same, so mirror left/top exactly + measure the
+  // rendered size. (Simple + reliable — the version that always worked.)
+  el.capSel.style.left = block.style.left;
+  el.capSel.style.top = block.style.top;
+  el.capSel.style.width = block.offsetWidth + 'px';
+  el.capSel.style.height = block.offsetHeight + 'px';
   el.capSel.classList.add('on');
 }
 
