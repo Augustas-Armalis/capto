@@ -24,6 +24,7 @@ export async function GET() {
       name: session.user.name ?? null,
       email: session.user.email ?? null,
       plan: "ultra",
+      admin: true,
       watermark: false,
       minutes: { used: 0, limit: null, remaining: null, unlimited: true },
     });
@@ -36,6 +37,7 @@ export async function GET() {
     name: session.user.name ?? null,
     email: session.user.email ?? null,
     plan,
+    admin: isAdmin(session.user.email),
     watermark: plan === "free",
     minutes: usage
       ? {

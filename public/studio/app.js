@@ -357,7 +357,8 @@ if (el.previewQ) {
   };
 }
 
-async function transcribeProject() {
+async function transcribeProject(opts) {
+  const oneWord = !!(opts && opts.oneWord);
   const lang = langLabel(state.language);
   setStatus(`<span class="spinner"></span> Generating ${lang} captions…`);
   el.cues.innerHTML = '<div class="cue-empty"><span class="spinner"></span><br>Generating captions…</div>';
@@ -374,7 +375,7 @@ async function transcribeProject() {
     }
   };
   try {
-    const res = await fetch(`/api/projects/${state.id}/transcribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: state.language, engine: state.engine, model: state.engine }) });
+    const res = await fetch(`/api/projects/${state.id}/transcribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: state.language, engine: state.engine, model: state.engine, oneWord }) });
     const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Transcription failed');
     // Tag each cue with the AI's ORIGINAL text + timing so later user edits can be
     // diffed against it for the learning telemetry (see sendFeedback).
@@ -1780,31 +1781,14 @@ function renderScriptSegs() {
 el.scriptClear.onclick = () => { scriptSegs = []; scriptSel = null; renderScriptSegs(); highlightScript(); };
 const scriptOneWordBtn = document.getElementById('scriptOneWord');
 if (scriptOneWordBtn) scriptOneWordBtn.onclick = async () => {
-  // Completely REGENERATE the captions: one cue per spoken word, using the REAL
-  // per-word timings from the transcription (not a re-chunk of the current
-  // boxes). Pulls words from every cue's word list so it works on the whole clip.
-  const words = [];
-  for (const c of state.cues) {
-    const ws = (c.words && c.words.length) ? c.words : [{ word: c.text, start: c.start, end: c.end }];
-    for (const w of ws) { const word = String(w.word || '').trim(); if (word) words.push({ word, start: +w.start, end: +w.end }); }
-  }
-  if (!words.length) return toast('Generate captions first.', true);
-  if (!(await confirmDialog(`Regenerate as ${words.length} one-word captions? This rebuilds all captions from the original word timings.`, { okLabel: 'Regenerate' }))) return;
-  words.sort((a, b) => a.start - b.start);
-  const stamp = Date.now();
-  state.cues = words.map((w, k) => ({
-    id: `w${stamp}-${k}`, row: 0,
-    start: w.start, end: Math.max(w.end, w.start + 0.06),
-    text: w.word,
-    words: [{ word: w.word, start: w.start, end: w.end }],
-  }));
-  state.rows = 1; state.capRow = 0; state.scriptRow = 0;
-  state.activeCue = -1; state.selCue = -1; state.pinnedCueId = null; state.selectedSet.clear();
-  scriptSegs = []; scriptSel = null;
-  ensureRows(); fixOverlaps();
-  renderRowSelectors(); renderAll(); renderScript(); saveSoon();
+  // Completely RE-RUN the transcription, one caption per spoken word — fresh from
+  // the engine so every word gets its real start/end (no equal-divide). Needs the
+  // local video, same as Regenerate.
+  if (!window.__captoMedia || !window.__captoMedia.file) return toast('Locate the video first.', true);
+  if (state.cues.length && !(await confirmDialog('Regenerate one word per word? Re-runs the engine so each word is timed exactly.', { okLabel: 'Regenerate' }))) return;
   switchTab('captions');
-  toast(`Regenerated — ${state.cues.length} captions, one per word.`);
+  scriptSegs = []; scriptSel = null;
+  await transcribeProject({ oneWord: true });
 };
 el.scriptRewrite.onclick = () => {
   if (!scriptSegs.length) return toast('Select some words first.', true);

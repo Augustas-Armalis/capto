@@ -90,9 +90,22 @@
         // Re-render the editor engine dropdowns now the plan is known, so Pro/Ultra
         // models become selectable for paid users (init ran before this resolved).
         if (typeof window.__captoRefreshEngines === 'function') { try { window.__captoRefreshEngines(); } catch {} }
+        applyEngineVisibility();
       }
     } catch { /* keep defaults */ }
   }
+  // Regular users don't pick a transcription engine — they just get Whisper.
+  // The engine selectors only show for admins; everyone else sees language only.
+  function applyEngineVisibility() {
+    const admin = !!(window.__captoUser && window.__captoUser.admin);
+    ['homeEngine', 'editEngine', 'uploadEngine', 'setEngine'].forEach((id) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const box = sel.closest('label') || sel.closest('.capto-combo') || sel;
+      box.style.display = admin ? '' : 'none';
+    });
+  }
+  window.__captoApplyEngineVisibility = applyEngineVisibility;
 
   const LS_KEY = 'capto-studio-projects';
   const loadStore = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; } };
@@ -361,13 +374,14 @@
 
   // Capto's /api/transcribe returns flat word timings; Subby wants grouped cues.
   // Break into caption lines on pauses / max words / max chars (punchy chunks).
-  function wordsToCues(words) {
-    // Built from real per-word timing, then grouped into short 2–3 word displays
+  function wordsToCues(words, maxWordsOverride) {
+    // Built from real per-word timing, then grouped into short 1–2 word displays
     // — but ONLY across words spoken back-to-back. A natural pause (> MAXGAP)
     // always ends the caption, so we never stretch a phrase through silence and
     // never break awkwardly mid-flow. MAXGAP is aligned with the hide threshold
     // below, so any gap that ends a caption is also a gap where it disappears.
-    const MAXW = 2, MAXGAP = 0.25, MAXCHARS = 20;
+    // maxWordsOverride=1 → strict one-word-per-caption (the "One word" regen).
+    const MAXW = maxWordsOverride || 2, MAXGAP = 0.25, MAXCHARS = 20;
     // Timing: a caption tracks the VOICE. It ends right after its last word
     // (+LEAD_OUT) and only bridges to the next caption when they're truly
     // back-to-back (gap < BRIDGE). Any real pause → the caption hides, so the
@@ -550,7 +564,7 @@
         },
       });
       if (!res || !res.words || res.words.length === 0) return null; // empty → fall back
-      return json({ cues: wordsToCues(res.words), language: body.language, engine: { id: 'capto-local', provider: 'capto', model: res.model, label: 'Capto Engine', managed: false } });
+      return json({ cues: wordsToCues(res.words, body.oneWord ? 1 : 0), language: body.language, engine: { id: 'capto-local', provider: 'capto', model: res.model, label: 'Capto Engine', managed: false } });
     } catch (e) { console.warn('[Capto] on-device engine failed → cloud fallback', e); return null; }
   }
 
@@ -577,7 +591,7 @@
       try {
         const allWords = [];
         let language = body.language, engine = null;
-        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords) : [], language, engine }); } catch {} };
+        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, body.oneWord ? 1 : 0) : [], language, engine }); } catch {} };
         report(0);
         for (let i = 0; i < chunks.length; i++) {
           if (chunks.length > 1) setTranscribeStatus(`Transcribing… part ${i + 1} of ${chunks.length}`);
@@ -591,7 +605,7 @@
           report(i + 1);
         }
         if (!allWords.length) return json({ error: 'No speech detected in this clip.' }, 422);
-        return json({ cues: wordsToCues(allWords), language, engine });
+        return json({ cues: wordsToCues(allWords, body.oneWord ? 1 : 0), language, engine });
       } catch {
         /* extraction worked but transcription threw — fall through to raw upload */
       }
@@ -604,7 +618,7 @@
     if (data.__error) return json({ error: data.error }, data.status || 502);
     // Pass back the engine that ACTUALLY ran so the editor can attribute later
     // edits to the right model for the learning loop.
-    return json({ cues: wordsToCues(data.words), language: data.language || body.language, engine: data.engine || null });
+    return json({ cues: wordsToCues(data.words, body.oneWord ? 1 : 0), language: data.language || body.language, engine: data.engine || null });
   }
 
   // ───────────────── project persistence (Capto DB, per-account) ─────────────────
