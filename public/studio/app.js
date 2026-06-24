@@ -381,6 +381,7 @@ async function transcribeProject() {
     fixOverlaps();
     setStatus(`Done — ${data.cues.length} captions${data.language ? ` (${data.language})` : ''}.`);
     renderAll(); renderScript();
+    saveSoon();   // PERSIST freshly-generated captions immediately (don't wait for an edit)
   } catch (err) { setStatus(err.message, true); el.cues.innerHTML = `<div class="cue-empty">⚠️ ${escapeHtml(err.message)}</div>`; }
   finally { el.retranscribeBtn.disabled = false; }
 }
@@ -1965,12 +1966,24 @@ el.resizer.addEventListener('pointerdown', (e) => {
 });
 
 /* ============================ save ============================ */
-var saveTimer = null;
+var saveTimer = null, savePending = false;
+function doSave() {
+  savePending = false;
+  if (!state.id) return;
+  fetch(`/api/projects/${state.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues: state.cues, style: state.style }) }).catch(() => {});
+  sendFeedback();
+}
 function saveSoon() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { fetch(`/api/projects/${state.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues: state.cues, style: state.style }) }).catch(() => {}); sendFeedback(); }, 450);
+  savePending = true;
+  saveTimer = setTimeout(doSave, 450);
   pushHistory();
 }
+// Flush any pending save the instant the user leaves/hides the tab, so freshly
+// generated or edited captions are never lost to a quick reload or close.
+function flushSave() { if (savePending) { clearTimeout(saveTimer); doSave(); } }
+window.addEventListener('pagehide', flushSave);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
 
 /* ============================ learning telemetry ============================ */
 // Every AI-generated cue is tagged with the model's ORIGINAL text + timing

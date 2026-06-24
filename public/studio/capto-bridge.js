@@ -33,33 +33,40 @@
     { id: 'groq-whisper-large-v3', label: 'Whisper Large v3 · Cloud', minPlan: 'free' },
   ];
   // Full Whisper language set (~98 langs, ISO-639-1) — searchable in the editor's
-  // custom language dropdown. 'auto' first, then alphabetical by English name.
-  // The transcription API passes the code straight to Whisper/Deepgram.
+  // custom language dropdown. Auto-detect + the most-used languages (incl.
+  // Lithuanian) are pinned to the TOP; the rest follow alphabetically.
   window.__captoLangs = [
     ['auto', 'Auto-detect'],
-    ['af', 'Afrikaans'], ['sq', 'Albanian'], ['am', 'Amharic'], ['ar', 'Arabic'],
+    // ── pinned: most popular first ──
+    ['en', 'English'], ['es', 'Spanish'], ['pt', 'Portuguese'], ['fr', 'French'],
+    ['de', 'German'], ['it', 'Italian'], ['nl', 'Dutch'], ['ru', 'Russian'],
+    ['pl', 'Polish'], ['uk', 'Ukrainian'], ['lt', 'Lithuanian'], ['tr', 'Turkish'],
+    ['ar', 'Arabic'], ['hi', 'Hindi'], ['ja', 'Japanese'], ['ko', 'Korean'],
+    ['zh', 'Chinese'],
+    // ── the rest, alphabetical ──
+    ['af', 'Afrikaans'], ['sq', 'Albanian'], ['am', 'Amharic'],
     ['hy', 'Armenian'], ['az', 'Azerbaijani'], ['ba', 'Bashkir'], ['eu', 'Basque'],
     ['be', 'Belarusian'], ['bn', 'Bengali'], ['bs', 'Bosnian'], ['br', 'Breton'],
-    ['bg', 'Bulgarian'], ['my', 'Burmese'], ['ca', 'Catalan'], ['zh', 'Chinese'],
-    ['hr', 'Croatian'], ['cs', 'Czech'], ['da', 'Danish'], ['nl', 'Dutch'],
-    ['en', 'English'], ['et', 'Estonian'], ['fo', 'Faroese'], ['fi', 'Finnish'],
-    ['fr', 'French'], ['gl', 'Galician'], ['ka', 'Georgian'], ['de', 'German'],
+    ['bg', 'Bulgarian'], ['my', 'Burmese'], ['ca', 'Catalan'],
+    ['hr', 'Croatian'], ['cs', 'Czech'], ['da', 'Danish'],
+    ['et', 'Estonian'], ['fo', 'Faroese'], ['fi', 'Finnish'],
+    ['gl', 'Galician'], ['ka', 'Georgian'],
     ['el', 'Greek'], ['gu', 'Gujarati'], ['ht', 'Haitian Creole'], ['ha', 'Hausa'],
-    ['haw', 'Hawaiian'], ['he', 'Hebrew'], ['hi', 'Hindi'], ['hu', 'Hungarian'],
-    ['is', 'Icelandic'], ['id', 'Indonesian'], ['it', 'Italian'], ['ja', 'Japanese'],
+    ['haw', 'Hawaiian'], ['he', 'Hebrew'], ['hu', 'Hungarian'],
+    ['is', 'Icelandic'], ['id', 'Indonesian'],
     ['jw', 'Javanese'], ['kn', 'Kannada'], ['kk', 'Kazakh'], ['km', 'Khmer'],
-    ['ko', 'Korean'], ['lo', 'Lao'], ['la', 'Latin'], ['lv', 'Latvian'],
-    ['ln', 'Lingala'], ['lt', 'Lithuanian'], ['lb', 'Luxembourgish'], ['mk', 'Macedonian'],
+    ['lo', 'Lao'], ['la', 'Latin'], ['lv', 'Latvian'],
+    ['ln', 'Lingala'], ['lb', 'Luxembourgish'], ['mk', 'Macedonian'],
     ['mg', 'Malagasy'], ['ms', 'Malay'], ['ml', 'Malayalam'], ['mt', 'Maltese'],
     ['mi', 'Maori'], ['mr', 'Marathi'], ['mn', 'Mongolian'], ['ne', 'Nepali'],
     ['no', 'Norwegian'], ['nn', 'Norwegian Nynorsk'], ['oc', 'Occitan'], ['ps', 'Pashto'],
-    ['fa', 'Persian'], ['pl', 'Polish'], ['pt', 'Portuguese'], ['pa', 'Punjabi'],
-    ['ro', 'Romanian'], ['ru', 'Russian'], ['sa', 'Sanskrit'], ['sr', 'Serbian'],
+    ['fa', 'Persian'], ['pa', 'Punjabi'],
+    ['ro', 'Romanian'], ['sa', 'Sanskrit'], ['sr', 'Serbian'],
     ['sn', 'Shona'], ['sd', 'Sindhi'], ['si', 'Sinhala'], ['sk', 'Slovak'],
-    ['sl', 'Slovenian'], ['so', 'Somali'], ['es', 'Spanish'], ['su', 'Sundanese'],
+    ['sl', 'Slovenian'], ['so', 'Somali'], ['su', 'Sundanese'],
     ['sw', 'Swahili'], ['sv', 'Swedish'], ['tl', 'Tagalog'], ['tg', 'Tajik'],
     ['ta', 'Tamil'], ['tt', 'Tatar'], ['te', 'Telugu'], ['th', 'Thai'],
-    ['bo', 'Tibetan'], ['tr', 'Turkish'], ['tk', 'Turkmen'], ['uk', 'Ukrainian'],
+    ['bo', 'Tibetan'], ['tk', 'Turkmen'],
     ['ur', 'Urdu'], ['uz', 'Uzbek'], ['vi', 'Vietnamese'], ['cy', 'Welsh'],
     ['yi', 'Yiddish'], ['yo', 'Yoruba'],
   ];
@@ -344,9 +351,9 @@
       outlineWidth: 0, outlineColor: '#000000',
       shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
       shadowDistance: Math.max(2, Math.round(H * 0.0025)), shadowBlur: Math.max(2, Math.round(H * 0.0035)),
-      // Classic Subby default: the spoken word POPS — turns yellow AND scales up
-      // as it's said. The karaoke effect that makes captions feel alive.
-      highlightEnabled: true, highlightColor: '#FFD233', highlightScale: 116,
+      // Plain Subby default: clean Inter, the spoken word just turns yellow as
+      // it's said — NO zoom, no size jump, no animation. Readable + premium.
+      highlightEnabled: true, highlightColor: '#FFD233', highlightScale: 100,
       highlightMode: 'color', highlightBg: '#FFD233', highlightPill: false,
       posX: 0.5, posY: 0.78, entrance: 'none', exit: 'none', animMs: 180,
     };
@@ -355,15 +362,17 @@
   // Capto's /api/transcribe returns flat word timings; Subby wants grouped cues.
   // Break into caption lines on pauses / max words / max chars (punchy chunks).
   function wordsToCues(words) {
-    // Snappy social captions like the original Subby: 2–3 words per line, ~22
-    // chars max, broken on sentences / pauses / clauses. Keeps each line
-    // punchy and on-the-word; never balloons into a wide 4-word block.
-    const MAXW = 3, MAXGAP = 0.4, MAXCHARS = 22;
+    // Built from real per-word timing, then grouped into short 2–3 word displays
+    // — but ONLY across words spoken back-to-back. A natural pause (> MAXGAP)
+    // always ends the caption, so we never stretch a phrase through silence and
+    // never break awkwardly mid-flow. MAXGAP is aligned with the hide threshold
+    // below, so any gap that ends a caption is also a gap where it disappears.
+    const MAXW = 3, MAXGAP = 0.3, MAXCHARS = 24;
     // Timing: a caption tracks the VOICE. It ends right after its last word
     // (+LEAD_OUT) and only bridges to the next caption when they're truly
     // back-to-back (gap < BRIDGE). Any real pause → the caption hides, so the
     // screen is empty during silence instead of a line hanging there.
-    const LEAD_OUT = 0.12, BRIDGE = 0.18;
+    const LEAD_OUT = 0.12, BRIDGE = 0.3;
     // ── sanitize raw word timings ──
     // Whisper (and the chunk-stitching above) occasionally emit NaN/negative,
     // zero-duration, or out-of-order timestamps. Left raw they make the karaoke
