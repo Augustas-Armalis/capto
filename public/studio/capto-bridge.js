@@ -381,7 +381,10 @@
     // never break awkwardly mid-flow. MAXGAP is aligned with the hide threshold
     // below, so any gap that ends a caption is also a gap where it disappears.
     // maxWordsOverride=1 → strict one-word-per-caption (the "One word" regen).
-    const MAXW = maxWordsOverride || 2, MAXGAP = 0.25, MAXCHARS = 20;
+    // MAXGAP is the pause that ENDS a caption: words spoken within 0.14s of each
+    // other group together (continuous flow); a longer gap splits them so the
+    // caption stops and the pause shows as empty space. Bigger pause → bigger gap.
+    const MAXW = maxWordsOverride || 2, MAXGAP = 0.14, MAXCHARS = 20;
     // Timing: a caption tracks the VOICE. It ends right after its last word
     // (+LEAD_OUT) and only bridges to the next caption when they're truly
     // back-to-back (gap < BRIDGE). Any real pause → the caption hides, so the
@@ -390,7 +393,7 @@
     // word onsets a touch late, so this lands the caption right on the voice —
     // lingers a beat after the last word (LEAD_OUT), and only bridges to the next
     // caption across an imperceptible gap (< BRIDGE). Any real gap → it hides.
-    const LEAD_IN = 0.08, LEAD_OUT = 0.08;
+    const LEAD_IN = 0.06, LEAD_OUT = 0.06;
     // ── sanitize raw word timings (KEEP the real starts — don't shift words) ──
     // Only drop empties/NaN and guarantee a minimum visible duration. We do NOT
     // push overlapping words forward (that drifted captions behind the audio);
