@@ -20,7 +20,7 @@ export const user = pgTable("user", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 
   // Capto app fields
-  plan: text("plan", { enum: ["free", "pro", "ultra"] }).notNull().default("free"),
+  plan: text("plan", { enum: ["free", "pro", "ultra", "friend"] }).notNull().default("free"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   subscriptionStatus: text("subscription_status"),

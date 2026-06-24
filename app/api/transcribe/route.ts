@@ -145,7 +145,7 @@ export async function POST(req: Request) {
     active.isHouse &&
     active.model.provider !== "deepgram" &&
     file.size > 18 * 1024 * 1024 &&
-    (plan === "pro" || plan === "ultra") &&
+    plan !== "free" && // pro / ultra / friend
     houseKeyFor("deepgram").length > 10
   ) {
     const dg = STT_MODELS.find((m) => m.provider === "deepgram");
@@ -209,7 +209,7 @@ async function transcribeAndRespond(
         ((e.status === 400 || e.status === 422) &&
           /size|large|too big/.test(detail));
       if (tooLarge) {
-        const paid = plan === "pro" || plan === "ultra";
+        const paid = plan !== "free"; // pro / ultra / friend
         return NextResponse.json(
           {
             error: paid

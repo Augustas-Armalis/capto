@@ -63,10 +63,11 @@ export const STT_MODELS: SttModel[] = [
 export const getModel = (id: string): SttModel | undefined =>
   STT_MODELS.find((m) => m.id === id);
 
-export const PLAN_RANK: Record<"free" | "pro" | "ultra", number> = {
+export const PLAN_RANK: Record<"free" | "pro" | "ultra" | "friend", number> = {
   free: 0,
   pro: 1,
   ultra: 2,
+  friend: 2, // comped — same access as Ultra
 };
 
 /** Providers a user can plug their own key into. */

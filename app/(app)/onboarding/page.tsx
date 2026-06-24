@@ -34,7 +34,7 @@ export default async function OnboardingPage() {
       .from(userTable)
       .where(eq(userTable.id, session.user.id))
       .limit(1);
-    if (u?.plan) plan = u.plan;
+    if (u?.plan) plan = u.plan === "friend" ? "ultra" : u.plan; // friend = ultra-level access
     // Require email verification only when an email provider is configured.
     if (isConfigured.email()) needsEmailVerify = !!u && !u.verified;
   }

@@ -6,7 +6,7 @@ import { Trash2, Search } from "lucide-react";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 
-type Plan = "free" | "pro" | "ultra";
+type Plan = "free" | "pro" | "ultra" | "friend";
 
 export type AdminUser = {
   id: string;
@@ -23,6 +23,7 @@ const PLAN_OPTIONS = [
   { value: "free", label: "free" },
   { value: "pro", label: "pro" },
   { value: "ultra", label: "ultra" },
+  { value: "friend", label: "friend 💛" },
 ];
 
 export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUser[] }) {

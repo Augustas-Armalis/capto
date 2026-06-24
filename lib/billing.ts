@@ -21,7 +21,7 @@ export function currencyFromString(c?: string | null): Currency {
 
 /** Resolve a plan + interval + currency to the configured Stripe price ID. */
 export function priceIdFor(plan: PlanId, interval: Interval, currency: Currency): string | null {
-  if (plan === "free") return null;
+  if (plan === "free" || plan === "friend") return null; // neither is sold via Stripe
   const name = PRICE_ENV[plan]?.[interval]?.[currency];
   return name ? process.env[name] || null : null;
 }

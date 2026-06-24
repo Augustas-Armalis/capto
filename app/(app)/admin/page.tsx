@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
   let users = 0;
-  let byPlan: Record<string, number> = { free: 0, pro: 0, ultra: 0 };
+  let byPlan: Record<string, number> = { free: 0, pro: 0, ultra: 0, friend: 0 };
   let projects = 0;
   let openFeedback = 0;
   let totalFeedback = 0;
@@ -31,14 +31,14 @@ export default async function AdminOverviewPage() {
         .select({ plan: userTable.plan, n: sql<number>`count(*)` })
         .from(userTable)
         .groupBy(userTable.plan);
-      byPlan = { free: 0, pro: 0, ultra: 0 };
+      byPlan = { free: 0, pro: 0, ultra: 0, friend: 0 };
       for (const p of plans) byPlan[p.plan] = Number(p.n);
     } catch {}
     try {
       const subs = await db
         .select({ plan: userTable.plan, n: sql<number>`count(*)` })
         .from(userTable)
-        .where(sql`${userTable.plan} in ('pro','ultra') and ${userTable.subscriptionStatus} in ('active','trialing')`)
+        .where(sql`${userTable.plan} in ('pro','ultra') and ${userTable.subscriptionStatus} in ('active','trialing') and ${userTable.stripeSubscriptionId} is not null`)
         .groupBy(userTable.plan);
       for (const s of subs) activePaid[s.plan] = Number(s.n);
       mrr = activePaid.pro * PRICE.pro + activePaid.ultra * PRICE.ultra;
@@ -125,16 +125,17 @@ export default async function AdminOverviewPage() {
         </div>
       </div>
       <p className="mt-2 text-xs text-[var(--color-fg-subtle)]">
-        Estimated from active subscriptions at list price (Pro €{PRICE.pro} · Ultra €{PRICE.ultra}/mo). Admins on Ultra without a subscription aren&rsquo;t counted.
+        From <strong>live Stripe subscriptions only</strong> at list price (Pro €{PRICE.pro} · Ultra €{PRICE.ultra}/mo). Comped friends 💛 and admin/Ultra accounts without a real subscription aren&rsquo;t counted.
       </p>
 
       {/* plan breakdown */}
       <h2 className="heading mt-10 mb-3 text-lg">Plans</h2>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Free", value: byPlan.free, tone: "text-[var(--color-fg-muted)]" },
           { label: "Pro", value: byPlan.pro, tone: "text-[var(--color-brand)]" },
           { label: "Ultra", value: byPlan.ultra, tone: "text-white" },
+          { label: "Friends 💛", value: byPlan.friend, tone: "text-[var(--color-warning,#facc15)]" },
         ].map((p) => (
           <div key={p.label} className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-5">
             <div className={`text-sm font-medium ${p.tone}`}>{p.label}</div>

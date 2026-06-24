@@ -48,7 +48,7 @@ export async function GET(req: Request) {
 
 const PatchSchema = z.object({
   id: z.string().min(1),
-  plan: z.enum(["free", "pro", "ultra"]),
+  plan: z.enum(["free", "pro", "ultra", "friend"]),
 });
 
 // PATCH /api/admin/users — change a user's plan.

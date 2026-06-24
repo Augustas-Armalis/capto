@@ -106,6 +106,7 @@
     });
   }
   window.__captoApplyEngineVisibility = applyEngineVisibility;
+  window.__captoRenderQuotaUI = function () { try { renderQuotaUI(); } catch {} };
 
   const LS_KEY = 'capto-studio-projects';
   const loadStore = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; } };
@@ -1544,6 +1545,21 @@
           `</div>`;
         const bk = document.getElementById('capto-byok'); if (bk) bk.onclick = goTop('/settings?tab=keys');
         const tu = document.getElementById('capto-topup'); if (tu) tu.onclick = goTop('/billing');
+      } else if (u.signedIn && u.plan === 'friend') {
+        // A comped friend — no minute meter, just a warm (and slightly cheeky) note.
+        const who = (u.name || '').split(' ')[0];
+        card.style.display = '';
+        card.style.background = 'linear-gradient(120deg, rgba(255,209,51,.12), rgba(255,138,170,.07) 60%, rgba(137,131,255,.06))';
+        card.innerHTML =
+          `<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">` +
+            `<span style="font-size:13.5px;font-weight:650;color:var(--text)">${who ? 'Hey ' + who + ' 👋' : 'Hey friend 👋'}</span>` +
+            `<span style="font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:99px;color:#0b0c14;background:linear-gradient(120deg,#ffd233,#ff8aaa)">Friend 💛</span>` +
+          `</div>` +
+          `<div style="font-size:12.5px;color:var(--muted);max-width:54ch;line-height:1.55">` +
+            `You're on the house — unlimited captions, no watermark, all the good stuff. ` +
+            `Just… <b style="color:var(--text)">pretty please don't melt my API credits</b> 😅 go easy on the 2-hour 4K marathons. ` +
+            `And if anything breaks, <b style="color:var(--text)">tell me</b> so I can fix it. Thanks for trying it out, legend.` +
+          `</div>`;
       } else if (u.signedIn && m) {
         card.style.display = '';
         const unlimited = m.unlimited || m.limit == null;
@@ -1583,7 +1599,8 @@
       }
       const parts = [];
       if (u.watermark) parts.push('Free exports include a “Made with Capto” watermark');
-      if (lbl) parts.push(lbl);
+      if (u.plan === 'friend') parts.push('Friend perk: unlimited exports, no watermark — go easy on my credits 💛');
+      else if (lbl) parts.push(lbl);
       line.textContent = parts.join(' · ');
       line.style.display = parts.length ? '' : 'none';
     }

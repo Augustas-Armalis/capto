@@ -1,4 +1,5 @@
-export type PlanId = "free" | "pro" | "ultra";
+// "friend" = a comped, admin-only tier (full access, no payment). Never sold.
+export type PlanId = "free" | "pro" | "ultra" | "friend";
 
 export type Plan = {
   id: PlanId;

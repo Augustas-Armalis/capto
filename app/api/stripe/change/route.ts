@@ -9,7 +9,9 @@ import type { PlanId } from "@/lib/pricing";
 
 export const runtime = "nodejs";
 
-const RANK: Record<PlanId, number> = { free: 0, pro: 1, ultra: 2 };
+// "friend" is admin-comped and never sold, so it never reaches this Stripe route;
+// it's listed only to satisfy the exhaustive PlanId map.
+const RANK: Record<PlanId, number> = { free: 0, pro: 1, ultra: 2, friend: 2 };
 
 /**
  * Change an EXISTING paid subscription between paid plans, in-place — never a

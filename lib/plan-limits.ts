@@ -11,6 +11,7 @@ export const PLAN_LIMITS: Record<
   free: { minutes: 15, exports: 3 },
   pro: { minutes: 600, exports: null },
   ultra: { minutes: null, exports: null },
+  friend: { minutes: null, exports: null }, // comped — unlimited, on the house
 };
 
 // Hidden safety ceiling for "unlimited" plans so an abuse case can't bill us

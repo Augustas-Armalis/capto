@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     .where(eq(userTable.id, session.user.id))
     .limit(1);
   const plan = u?.plan ?? "free";
-  const paid = plan === "pro" || plan === "ultra";
+  const paid = plan !== "free"; // pro / ultra / friend all get the house enhancer
 
   // Key resolution priority (cheapest first — caption polish is text-only and
   // doesn't need a premium model):

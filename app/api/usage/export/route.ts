@@ -40,7 +40,7 @@ async function readUsage(): Promise<{ usage: Usage; userId: string } | null> {
   return {
     userId: session.user.id,
     usage: {
-      plan: row.plan,
+      plan: row.plan === "friend" ? "ultra" : row.plan, // friend = ultra-level limits
       used,
       limit,
       watermark: isFree,
