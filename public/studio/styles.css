@@ -256,7 +256,7 @@ body.theme-light .topbar { background: rgba(255,255,255,.7); }
 .cap-block.anim-slide-up   { animation: capSlideUp   var(--anim-ms,200ms) var(--ease) both; }
 .cap-block.anim-slide-down { animation: capSlideDown var(--anim-ms,200ms) var(--ease) both; }
 .cap-block.editing { cursor: text; outline: 2px solid var(--accent); border-radius: 4px; background: rgba(0,0,0,.25); white-space: pre-wrap; }
-.cap-word { display: inline-block; white-space: nowrap; }
+.cap-word { display: inline-block; white-space: nowrap; transition: opacity .22s var(--ease), transform .22s var(--ease); }
 
 .cap-sel-box {
   position: absolute; transform: translate(-50%, -50%);

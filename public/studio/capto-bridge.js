@@ -25,12 +25,12 @@
   // Canonical engine + language catalogue — mirrors lib/ai/models.ts STT_MODELS
   // and the dashboard/settings language list, so the editor's Captions tab shows
   // exactly the same options as the rest of Capto (plan-gated the same way).
+  // Only engines Capto can actually run out of the box: our on-device Whisper
+  // (free, private) + the managed Groq engines (house key). Deepgram/OpenAI were
+  // removed — we don't hold those house keys, so offering them just fails.
   window.__captoModels = [
     { id: 'capto-local', label: 'Capto Engine · on your device (free, private)', minPlan: 'free' },
-    { id: 'groq-whisper-large-v3', label: 'Whisper Large v3 · Groq', minPlan: 'free' },
-    { id: 'groq-whisper-large-v3-turbo', label: 'Whisper v3 Turbo · Groq', minPlan: 'free' },
-    { id: 'deepgram-nova-3', label: 'Deepgram Nova-3', minPlan: 'pro' },
-    { id: 'openai-whisper-1', label: 'OpenAI Whisper', minPlan: 'pro' },
+    { id: 'groq-whisper-large-v3', label: 'Whisper Large v3 · Cloud', minPlan: 'free' },
   ];
   // Full Whisper language set (~98 langs, ISO-639-1) — searchable in the editor's
   // custom language dropdown. 'auto' first, then alphabetical by English name.
@@ -337,7 +337,7 @@
   // social, not a giant block jammed against the bottom edge.
   function defaultStyle(meta) {
     const H = meta.height || 1920;
-    const fontSize = Math.round(H * 0.041);
+    const fontSize = Math.round(H * 0.036);
     return {
       fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.12, caseMode: 'sentence',
       primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.04), wordSpacing: 0,
@@ -910,7 +910,12 @@
     let y = cy - (lines.length * lineH) / 2 + lineH / 2;
     for (const ln of lines) {
       let x = cx - ln.w / 2;
-      for (const it of ln.items) { drawWord(ctx, it.text, x, y, s, it.idx === aw, fontPx); x += it.w + spaceW; }
+      for (const it of ln.items) {
+        // Word-by-word reveal: a word not yet spoken (idx > aw) is left blank but
+        // still reserves its space, so the line builds up in place as in preview.
+        if (!(s.wordReveal && it.idx > aw)) drawWord(ctx, it.text, x, y, s, it.idx === aw, fontPx);
+        x += it.w + spaceW;
+      }
       y += lineH;
     }
     ctx.restore();

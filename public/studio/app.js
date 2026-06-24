@@ -54,6 +54,7 @@ function normalizeStyle(s) {
   if (typeof s.wordSpacing !== 'number') s.wordSpacing = 0;
   if (typeof s.hollow !== 'boolean') s.hollow = false;
   if (typeof s.gradient !== 'boolean') s.gradient = false;
+  if (typeof s.wordReveal !== 'boolean') s.wordReveal = false;
   return s;
 }
 const optList = (items, sel) => items.map((i) => i.code === '__sep' ? `<option disabled>${i.label}</option>` : `<option value="${i.code}"${i.code === sel ? ' selected' : ''}>${i.label}</option>`).join('');
@@ -787,6 +788,7 @@ function renderStylePanel() {
         <button data-v="none">None</button><button data-v="fade">Fade</button>
       </div></div>
       <div class="field"><label>Speed <span class="val" id="v-animms"></span></label><input type="range" id="st-animms" min="60" max="600" step="20"></div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="st-wordreveal"><span>Reveal words one by one (build the line as it's spoken)</span></label>
     </div>
     <div class="section">
       <p class="sec-title">Position</p>
@@ -854,6 +856,8 @@ function renderStylePanel() {
   seg('#st-entrance', 'entrance', 'v');
   seg('#st-exit', 'exit', 'v');
   rng('#st-animms', 'animMs', '#v-animms', (v) => `${Math.round(v)}ms`);
+  const wrChk = $('#st-wordreveal');
+  if (wrChk) { wrChk.checked = !!state.style.wordReveal; wrChk.onchange = () => { state.style.wordReveal = wrChk.checked; afterStyle(); }; }
 
   refreshShadowInputs();
   $('#savePreset').onclick = async () => {
@@ -1154,6 +1158,7 @@ function paintActiveWord(block, cue, t) {
   const words = (cue.words && cue.words.length) ? cue.words : [{ word: cue.text, start: cue.start, end: cue.end }];
   // The active word is the last one that has STARTED by time t…
   let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start - 0.015) aw = k;
+  const started = aw; // last word that has begun — used for the word-by-word reveal
   // …but don't let it linger far past when it was actually spoken. If we're in a
   // real silent gap before the next word (> ~0.12s past this word's end), light
   // nothing — so the highlight tracks the voice precisely instead of overshooting.
@@ -1164,7 +1169,8 @@ function paintActiveWord(block, cue, t) {
   }
   const mode = s.highlightMode || 'color';
   const bg = s.highlightBg || '#FFE36E';
-  const sig = `${aw}|${s.highlightEnabled}|${mode}|${s.highlightColor}|${bg}|${s.highlightPill}|${s.highlightScale}|${s.hollow?1:0}|${s.gradient?1:0}`;
+  const reveal = !!s.wordReveal;
+  const sig = `${aw}|${reveal ? started : 'x'}|${s.highlightEnabled}|${mode}|${s.highlightColor}|${bg}|${s.highlightPill}|${s.highlightScale}|${s.hollow?1:0}|${s.gradient?1:0}`;
   if (block.dataset.awsig === sig) return; // no change — no DOM mutation
   block.dataset.awsig = sig;
   const spans = block.children;
@@ -1174,6 +1180,12 @@ function paintActiveWord(block, cue, t) {
     // reset everything we might set (textShadow falls back to the block's)
     sp.style.color = ''; sp.style.background = ''; sp.style.boxShadow = '';
     sp.style.borderRadius = ''; sp.style.transform = ''; sp.style.textShadow = ''; sp.style.webkitTextStroke = '';
+    // Word-by-word reveal: words appear (fade + tiny rise) only once they've been
+    // spoken; the sentence builds up smoothly. CSS transitions make it glide.
+    if (reveal) {
+      if (k <= started) { sp.style.opacity = '1'; }
+      else { sp.style.opacity = '0'; sp.style.transform = 'translateY(0.18em)'; }
+    } else if (sp.style.opacity) { sp.style.opacity = ''; }
     if (!on) continue;
     if (s.highlightScale && s.highlightScale !== 100) sp.style.transform = `scale(${s.highlightScale / 100})`;
     // Outline: the active word FILLS solid. Gradient: keep the wash, just let it

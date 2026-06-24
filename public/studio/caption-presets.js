@@ -15,7 +15,7 @@
   //   font     → override the family (default Inter)
   //   scale    → how much the active word grows (100 = none)
   window.CAPTO_PRESETS = [
-    { id: 'inter-bold', name: 'Inter Bold', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', scale: 118, sizeRatio: 0.043, shadow: true, popular: true, sample: 'keep it simple' },
+    { id: 'inter-bold', name: 'Inter Bold', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', scale: 100, sizeRatio: 0.043, shadow: true, popular: true, sample: 'keep it simple' },
     { id: 'hormozi', name: 'Hormozi', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, sizeRatio: 0.046, shadow: true, popular: true, sample: 'this changed everything' },
     { id: 'karaoke', name: 'Karaoke', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#7c5cff', sizeRatio: 0.042, shadow: true, popular: true, sample: 'follow every word' },
     { id: 'editorial', name: 'Editorial', fontWeight: 600, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: CYAN, highlightMode: 'color', scale: 110, sizeRatio: 0.04, shadow: true, sample: 'words that earn attention' },

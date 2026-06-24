@@ -24,10 +24,12 @@
     return mem >= 8;                             // CPU/WASM only worth it with decent RAM
   }
 
-  // "Auto" model pick — best quality the device can comfortably handle.
+  // "Auto" model pick — a STABLE quality the device can comfortably handle.
+  // Note: we deliberately never auto-pick 'turbo' (1.5GB) — it OOM-crashes many
+  // GPUs. 'small' is the sweet spot; 'base' for lighter machines. Turbo stays
+  // available only if a power user opts into it explicitly.
   function pickAuto() {
     if (!available()) return null;
-    if (hasGPU && mem >= 8) return 'turbo';
     if (hasGPU) return 'small';
     return mem >= 16 ? 'small' : 'base';
   }
