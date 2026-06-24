@@ -25,12 +25,12 @@
   // Canonical engine + language catalogue — mirrors lib/ai/models.ts STT_MODELS
   // and the dashboard/settings language list, so the editor's Captions tab shows
   // exactly the same options as the rest of Capto (plan-gated the same way).
-  // Only engines Capto can actually run out of the box: our on-device Whisper
-  // (free, private) + the managed Groq engines (house key). Deepgram/OpenAI were
-  // removed — we don't hold those house keys, so offering them just fails.
+  // Capto runs ONE engine for everyone: Whisper Large v3 (managed, house key).
+  // Regular/free/friend users never see this picker (it's admin-only) and always
+  // get Whisper. The on-device engine was removed — it was unreliable across
+  // machines and Whisper is simply better. Admins can still inspect the model.
   window.__captoModels = [
-    { id: 'capto-local', label: 'Capto Engine · on your device (free, private)', minPlan: 'free' },
-    { id: 'groq-whisper-large-v3', label: 'Whisper Large v3 · Cloud', minPlan: 'free' },
+    { id: 'groq-whisper-large-v3', label: 'Whisper Large v3', minPlan: 'free' },
   ];
   // Full Whisper language set (~98 langs, ISO-639-1) — searchable in the editor's
   // custom language dropdown. Auto-detect + the most-used languages (incl.
@@ -107,6 +107,9 @@
   }
   window.__captoApplyEngineVisibility = applyEngineVisibility;
   window.__captoRenderQuotaUI = function () { try { renderQuotaUI(); } catch {} };
+  // Exposed for debugging/verification of the caption engine.
+  window.__captoWordsToCues = function (w, mw, sil) { return wordsToCues(w, mw, sil); };
+  window.__captoDetectSilences = function (s, sr) { return detectSilences(s, sr || 16000); };
 
   const LS_KEY = 'capto-studio-projects';
   const loadStore = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; } };
@@ -375,7 +378,27 @@
 
   // Capto's /api/transcribe returns flat word timings; Subby wants grouped cues.
   // Break into caption lines on pauses / max words / max chars (punchy chunks).
-  function wordsToCues(words, maxWordsOverride) {
+  // Trim each word's [start,end] to the actual voiced region using detected
+  // silences — kills Whisper's habit of stretching a word's end across a pause,
+  // so the caption hides right when the speaker stops. `silences` is sorted by
+  // start (output of detectSilences). Mutates `flat` in place.
+  function trimWordsToSilence(flat, silences) {
+    if (!silences || !silences.length || !flat || !flat.length) return;
+    const MIN = 0.04;
+    let si = 0;
+    for (const w of flat) {
+      while (si < silences.length && silences[si].end <= w.start) si++;
+      for (let k = si; k < silences.length && silences[k].start < w.end; k++) {
+        const s = silences[k];
+        // Silence begins partway through the word → the voice stopped there.
+        if (s.start > w.start + MIN && s.start < w.end) w.end = Math.max(w.start + MIN, s.start);
+        // Silence covers the word's onset → the voice actually starts at s.end.
+        if (s.start <= w.start && s.end > w.start + MIN && s.end < w.end) w.start = Math.min(w.end - MIN, s.end);
+      }
+    }
+  }
+
+  function wordsToCues(words, maxWordsOverride, silences) {
     // Built from real per-word timing, then grouped into short 1–2 word displays
     // — but ONLY across words spoken back-to-back. A natural pause (> MAXGAP)
     // always ends the caption, so we never stretch a phrase through silence and
@@ -411,6 +434,10 @@
       flat.push({ word, start, end });
     }
     flat.sort((a, b) => a.start - b.start);
+    // Snap word timings to the real voice using audio-detected silences, THEN
+    // group — so a pause Whisper papered over becomes a true gap that ends the
+    // caption and shows empty space.
+    trimWordsToSilence(flat, silences);
     // 1) group into clean, readable chunks. A new caption ALWAYS starts at a
     // sentence end (. ! ? …) or a real pause — we never stack the first word of a
     // new thought onto the tail of the previous one. We also prefer to break at a
@@ -504,8 +531,9 @@
     return Float32Array.from(rendered.getChannelData(0));
   }
 
-  async function extractAudioChunks(file) {
-    const mono = await decodeMono16k(file);
+  // Split already-decoded mono PCM into ≤CHUNK_SEC WAV chunks (we decode once and
+  // reuse the samples for BOTH chunking and silence detection).
+  function chunksFromMono(mono) {
     if (!mono || !mono.length) return null;
     const chunkFrames = CHUNK_SEC * AUDIO_SR;
     const chunks = [];
@@ -519,6 +547,53 @@
       });
     }
     return chunks.length ? chunks : null;
+  }
+
+  // ───────────────── silence detection (the real pause fix) ────────────────
+  // Whisper often stretches a word's END across the following silence, so the
+  // caption hangs on screen through a pause. We can't trust its timestamps for
+  // that — so we look at the ACTUAL audio energy. We frame the PCM at 20ms,
+  // compute RMS per frame, derive an adaptive threshold from the clip's own
+  // loud/quiet levels, and return every silent stretch ≥ MIN_SIL seconds. These
+  // intervals are then used to trim each word back to where the voice really
+  // stops, which makes captions hide exactly on the pause.
+  const SIL_FRAME_SEC = 0.02;   // 20ms analysis frames
+  const SIL_MIN = 0.16;         // shortest gap we treat as a real pause (s)
+  function detectSilences(samples, sr) {
+    if (!samples || samples.length < sr * 0.2) return [];
+    const frame = Math.max(1, Math.round(sr * SIL_FRAME_SEC));
+    const nFrames = Math.floor(samples.length / frame);
+    if (nFrames < 4) return [];
+    const rms = new Float32Array(nFrames);
+    let peak = 0;
+    for (let f = 0; f < nFrames; f++) {
+      let sum = 0; const base = f * frame;
+      for (let i = 0; i < frame; i++) { const v = samples[base + i]; sum += v * v; }
+      const r = Math.sqrt(sum / frame);
+      rms[f] = r; if (r > peak) peak = r;
+    }
+    if (peak <= 0) return [];
+    // Adaptive threshold from the clip's own distribution: the 12th-percentile
+    // frame is "quiet", the 85th is "loud". Silence sits just above the quiet
+    // floor but well below speech, so it survives background hiss without eating
+    // soft speech.
+    const sorted = Float32Array.from(rms).sort();
+    const pct = (p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * p)))];
+    const quiet = pct(0.12), loud = Math.max(pct(0.85), peak * 0.4);
+    const thresh = Math.max(quiet * 1.6, loud * 0.06, 1e-4);
+    const out = [];
+    const frameSec = frame / sr;
+    let runStart = -1;
+    for (let f = 0; f <= nFrames; f++) {
+      const silent = f < nFrames && rms[f] < thresh;
+      if (silent) { if (runStart < 0) runStart = f; }
+      else if (runStart >= 0) {
+        const a = runStart * frameSec, b = f * frameSec;
+        if (b - a >= SIL_MIN) out.push({ start: a, end: b });
+        runStart = -1;
+      }
+    }
+    return out;
   }
 
   async function postOneChunk(file, body, durationSec) {
@@ -541,53 +616,20 @@
 
   function setTranscribeStatus(txt) { const st = document.getElementById('status'); if (st) st.textContent = txt; }
 
-  // Capto's own on-device engine (Whisper via Transformers.js). Returns a cues
-  // response, or null on ANY problem so the caller falls back to the cloud.
-  async function localTranscribe(file, body) {
-    const lw = window.__captoLocalWhisper;
-    if (!lw) return null;
-    let samples = null;
-    try { setTranscribeStatus('Preparing audio…'); samples = await decodeMono16k(file); } catch { return null; }
-    if (!samples || samples.length < AUDIO_SR) return null; // decode failed / < 1s
-    try {
-      const res = await lw.transcribe(samples, {
-        model: body.localTier || 'auto',
-        language: body.language || 'auto',
-        onProgress: (p) => {
-          if (p.phase === 'download' && typeof p.progress === 'number') setTranscribeStatus(`Downloading Capto engine… ${Math.round(p.progress)}% (one-time)`);
-          else if (p.phase === 'transcribing') setTranscribeStatus('Transcribing on your device…');
-          else setTranscribeStatus('Starting Capto engine…');
-        },
-      });
-      if (!res || !res.words || res.words.length === 0) return null; // empty → fall back
-      return json({ cues: wordsToCues(res.words, body.oneWord ? 1 : 0), language: body.language, engine: { id: 'capto-local', provider: 'capto', model: res.model, label: 'Capto Engine', managed: false } });
-    } catch (e) { console.warn('[Capto] on-device engine failed → cloud fallback', e); return null; }
-  }
-
   async function transcribe(file, body) {
-    // Capto's own on-device engine first — when explicitly chosen, or on "Auto"
-    // if the device can comfortably run it. Any failure falls through to cloud.
-    const eng = body.model || body.engine || '';
-    const lw = window.__captoLocalWhisper;
-    // On-device runs ONLY when the user explicitly picks "Capto Engine". Auto and
-    // everything else use the reliable cloud Whisper (the on-device engine is
-    // still maturing — opt-in until it's rock-solid on every machine).
-    const wantLocal = (eng === 'capto-local' && lw);
-    if (wantLocal) {
-      const local = await localTranscribe(file, body);
-      if (local) return local;
-      setTranscribeStatus('Using cloud engine…');
-    }
-
-    // Cloud path: extract-and-chunk (fixes long videos for every engine).
-    let chunks = null;
-    try { setTranscribeStatus('Preparing audio…'); chunks = await extractAudioChunks(file); } catch { chunks = null; }
+    const oneW = body.oneWord ? 1 : 0;
+    // Decode the audio ONCE, up front — the same mono PCM feeds both the chunker
+    // (long-video splitting) and the silence detector (pause-accurate timing).
+    let mono = null;
+    try { setTranscribeStatus('Preparing audio…'); mono = await decodeMono16k(file); } catch { mono = null; }
+    const silences = mono ? detectSilences(mono, AUDIO_SR) : [];
+    const chunks = mono ? chunksFromMono(mono) : null;
 
     if (chunks && chunks.length) {
       try {
         const allWords = [];
         let language = body.language, engine = null;
-        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, body.oneWord ? 1 : 0) : [], language, engine }); } catch {} };
+        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, oneW, silences) : [], language, engine }); } catch {} };
         report(0);
         for (let i = 0; i < chunks.length; i++) {
           if (chunks.length > 1) setTranscribeStatus(`Transcribing… part ${i + 1} of ${chunks.length}`);
@@ -601,20 +643,21 @@
           report(i + 1);
         }
         if (!allWords.length) return json({ error: 'No speech detected in this clip.' }, 422);
-        return json({ cues: wordsToCues(allWords, body.oneWord ? 1 : 0), language, engine });
+        return json({ cues: wordsToCues(allWords, oneW, silences), language, engine });
       } catch {
         /* extraction worked but transcription threw — fall through to raw upload */
       }
     }
 
     // Fallback: upload the original file as one request (server may route large
-    // paid-tier files to Deepgram). Pass the chosen engine/model + duration.
+    // paid-tier files to Deepgram). No decoded audio here → no silence map, so
+    // captions fall back to Whisper's own gap timing (still hides on big pauses).
     const dur = window.__captoMedia && window.__captoMedia.meta && window.__captoMedia.meta.duration;
     const data = await postOneChunk(file, body, dur || 0);
     if (data.__error) return json({ error: data.error }, data.status || 502);
     // Pass back the engine that ACTUALLY ran so the editor can attribute later
     // edits to the right model for the learning loop.
-    return json({ cues: wordsToCues(data.words, body.oneWord ? 1 : 0), language: data.language || body.language, engine: data.engine || null });
+    return json({ cues: wordsToCues(data.words, oneW, silences), language: data.language || body.language, engine: data.engine || null });
   }
 
   // ───────────────── project persistence (Capto DB, per-account) ─────────────────
