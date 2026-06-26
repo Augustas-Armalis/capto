@@ -1231,6 +1231,217 @@
     if (eb) eb.addEventListener('click', () => setTimeout(reset, 0));
   }
 
+  // ───────────── WebCodecs MP4 encoder (frame-accurate, NOT real-time) ────────
+  // The old export PLAYED the clip and screen-grabbed the canvas in real time via
+  // canvas.captureStream(fps) + requestAnimationFrame. That broke badly: rAF (and
+  // the off-screen <video>) get throttled/paused the moment the tab loses focus,
+  // so the video froze while the audio track kept recording → frozen/choppy video,
+  // audio drift, and tiny VFR files. WebCodecs fixes it at the root: we SEEK to
+  // each frame time, draw, and encode it with an exact presentation timestamp —
+  // deterministic, constant-frame-rate H.264 + AAC in a faststart MP4 that plays
+  // smoothly everywhere. No real time, no rAF, no throttling. MediaRecorder stays
+  // as the fallback for browsers without VideoEncoder/AudioEncoder.
+
+  // Pick a supported H.264 (AVC) codec string for the output size: High profile
+  // first (best quality/byte), then Main, then Baseline; level scales with res so
+  // 720p/1080p/4K stay in-spec. Returns null if none encode (→ use MediaRecorder).
+  async function pickAvcCodec(W, H) {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoEncoder.isConfigSupported !== 'function') return null;
+    const px = W * H;
+    const lvl = px > 1920 * 1088 ? '33' /*5.1*/ : px > 1280 * 720 ? '28' /*4.0*/ : '1f' /*3.1*/;
+    for (const codec of ['avc1.6400' + lvl, 'avc1.4D40' + lvl, 'avc1.4200' + lvl]) {
+      try { const s = await VideoEncoder.isConfigSupported({ codec, width: W, height: H, bitrate: 4000000 }); if (s && s.supported) return codec; } catch {}
+    }
+    return null;
+  }
+  // Seek the element to an exact time and resolve once the frame is ready. Has a
+  // hard timeout so a non-seekable/odd source can never hang the export.
+  function seekExact(v, t) {
+    return new Promise((resolve) => {
+      if (Math.abs(v.currentTime - t) < 1e-3 && v.readyState >= 2) { resolve(); return; }
+      let done = false;
+      const fin = () => { if (done) return; done = true; clearTimeout(to); v.removeEventListener('seeked', fin); resolve(); };
+      const to = setTimeout(fin, 2500);
+      v.addEventListener('seeked', fin);
+      try { v.currentTime = t; } catch { fin(); }
+    });
+  }
+  // Confirm the source actually seeks (some streams/codecs don't) before we commit
+  // to the seek-per-frame path.
+  async function probeSeekable(v, dur) {
+    try {
+      const target = Math.min((dur || 1) * 0.5, (dur || 1) - 0.05, 0.5);
+      if (!(target > 0)) return false;
+      await seekExact(v, target);
+      const ok = Math.abs(v.currentTime - target) < 0.6;
+      await seekExact(v, 0);
+      return ok;
+    } catch { return false; }
+  }
+  // Best-effort source frame-rate detection: play a brief muted slice and time
+  // successive PRESENTED frames via requestVideoFrameCallback (mediaTime deltas =
+  // 1/fps), snapping to common rates. Returns null when unavailable so callers
+  // fall back to a safe default. Lets the top tier PRESERVE the original fps
+  // instead of forcing 30 (a 60fps clip stays 60fps, not silently halved).
+  async function detectSourceFps(v) {
+    if (typeof v.requestVideoFrameCallback !== 'function') return null;
+    return await new Promise((resolve) => {
+      const times = []; let stopped = false; const prevMuted = v.muted; v.muted = true;
+      const finish = () => {
+        if (stopped) return; stopped = true;
+        try { v.pause(); } catch {}
+        v.muted = prevMuted;
+        if (times.length < 4) return resolve(null);
+        const d = []; for (let i = 1; i < times.length; i++) { const dt = times[i] - times[i - 1]; if (dt > 0) d.push(dt); }
+        if (!d.length) return resolve(null);
+        d.sort((a, b) => a - b);
+        const med = d[Math.floor(d.length / 2)];
+        if (!(med > 0)) return resolve(null);
+        const fps = 1 / med;
+        for (const r of [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60]) if (Math.abs(fps - r) < 1.4) return resolve(Math.round(r));
+        return resolve(Math.max(1, Math.min(120, Math.round(fps))));
+      };
+      const cb = (now, meta) => {
+        times.push(meta && meta.mediaTime != null ? meta.mediaTime : now / 1000);
+        if (times.length >= 10) return finish();
+        try { v.requestVideoFrameCallback(cb); } catch { finish(); }
+      };
+      try { v.currentTime = 0; } catch {}
+      v.play().then(() => { try { v.requestVideoFrameCallback(cb); } catch { resolve(null); } setTimeout(finish, 900); }).catch(() => resolve(null));
+    });
+  }
+  // Decode the file's FULL audio (all channels, native sample rate) for muxing.
+  async function decodeFullAudio(file) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC || !file) return null;
+    const ac = new AC();
+    try { const buf = await ac.decodeAudioData(await file.arrayBuffer()); return (buf && buf.length) ? buf : null; }
+    catch { return null; }
+    finally { try { ac.close(); } catch {} }
+  }
+  // Encode an AudioBuffer to AAC and feed it to the muxer (planar f32, 100ms blocks).
+  async function encodeAudioTrack(audioBuffer, muxer, onProg) {
+    if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') throw new Error('no AudioEncoder');
+    const sampleRate = audioBuffer.sampleRate;
+    const channels = Math.min(2, audioBuffer.numberOfChannels);
+    const cfg = { codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 };
+    try { const s = await AudioEncoder.isConfigSupported(cfg); if (!(s && s.supported)) throw 0; } catch { throw new Error('AAC unsupported'); }
+    let firstError = null;
+    const aenc = new AudioEncoder({
+      output: (chunk, meta) => { try { muxer.addAudioChunk(chunk, meta); } catch (e) { firstError = firstError || e; } },
+      error: (e) => { firstError = firstError || e; },
+    });
+    aenc.configure(cfg);
+    const chs = []; for (let c = 0; c < channels; c++) chs.push(audioBuffer.getChannelData(c));
+    const total = audioBuffer.length, BLOCK = Math.round(sampleRate * 0.1);
+    for (let off = 0; off < total; off += BLOCK) {
+      if (firstError) break;
+      const n = Math.min(BLOCK, total - off);
+      const planar = new Float32Array(n * channels);
+      for (let c = 0; c < channels; c++) planar.set(chs[c].subarray(off, off + n), c * n);
+      const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round((off / sampleRate) * 1e6), data: planar });
+      aenc.encode(ad); ad.close();
+      if (onProg) onProg(Math.min(1, off / total));
+      if (aenc.encodeQueueSize > 24) await new Promise((r) => setTimeout(r, 0));
+    }
+    await aenc.flush(); aenc.close();
+    if (firstError) throw firstError;
+  }
+  async function exportWebCodecs(job, o, diag) {
+    const { Muxer, ArrayBufferTarget } = await import('/studio/vendor/mp4-muxer.mjs');
+    const { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, file, codec } = o;
+
+    let audioBuffer = null;
+    try { audioBuffer = await decodeFullAudio(file); } catch {}
+    const hasAudio = !!audioBuffer;
+
+    const target = new ArrayBufferTarget();
+    const muxer = new Muxer(Object.assign(
+      { target, fastStart: 'in-memory', firstTimestampBehavior: 'offset', video: { codec: 'avc', width: W, height: H, frameRate: fps } },
+      hasAudio ? { audio: { codec: 'aac', numberOfChannels: Math.min(2, audioBuffer.numberOfChannels), sampleRate: audioBuffer.sampleRate } } : {},
+    ));
+
+    let encErr = null;
+    const venc = new VideoEncoder({
+      output: (chunk, meta) => { try { muxer.addVideoChunk(chunk, meta); } catch (e) { encErr = encErr || e; } },
+      error: (e) => { encErr = encErr || e; },
+    });
+    venc.configure({ codec, width: W, height: H, bitrate: settings.videoBitrate, framerate: fps, latencyMode: 'quality' });
+
+    const frameDurUs = Math.round(1e6 / fps);
+    const total = Math.max(1, Math.round(dur * fps));
+    const gop = Math.max(1, Math.round(fps * 2)); // keyframe every ~2s
+    for (let i = 0; i < total; i++) {
+      if (encErr) throw encErr;
+      const t = Math.min(i / fps, Math.max(0, dur - 1e-3));
+      await seekExact(v, t);
+      try {
+        ctx.drawImage(v, 0, 0, W, H);
+        drawCaptions(ctx, t, cues, drawStyle, W, H);
+        if (watermark) drawWatermark(ctx, W, H);
+      } catch {}
+      const frame = new VideoFrame(canvas, { timestamp: i * frameDurUs, duration: frameDurUs });
+      venc.encode(frame, { keyFrame: i % gop === 0 });
+      frame.close();
+      diag.framesEncoded = i + 1;
+      job.progress = (i / total) * (hasAudio ? 0.82 : 0.97);
+      // Bound the encode queue so memory stays flat on long clips.
+      if (venc.encodeQueueSize > 10) { while (venc.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 0)); }
+    }
+    await venc.flush(); venc.close();
+    if (encErr) throw encErr;
+
+    if (hasAudio) { job.progress = 0.84; await encodeAudioTrack(audioBuffer, muxer, (p) => { job.progress = 0.82 + p * 0.15; }); }
+    muxer.finalize();
+    diag.hasAudio = hasAudio;
+    job.progress = 0.99;
+    return new Blob([target.buffer], { type: 'video/mp4' });
+  }
+
+  // Legacy real-time capture — only reached when WebCodecs is unavailable (older
+  // Safari/Firefox) or fails. Best-effort; keep the tab focused for this path.
+  async function exportMediaRecorder(job, o, diag) {
+    const { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, quality } = o;
+    const cstream = canvas.captureStream(fps);
+    let audioTrack = null;
+    try {
+      const vstream = v.captureStream ? v.captureStream() : (v.mozCaptureStream ? v.mozCaptureStream() : null);
+      if (vstream) audioTrack = vstream.getAudioTracks()[0] || null;
+    } catch { /* no audio capture */ }
+    const tracks = cstream.getVideoTracks();
+    if (audioTrack) tracks.push(audioTrack);
+    const stream = new MediaStream(tracks);
+    const mime = resolveExportMime(quality);
+    diag.mime = mime;
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: settings.videoBitrate });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+
+    let raf = 0;
+    function frame() {
+      try {
+        ctx.drawImage(v, 0, 0, W, H);
+        drawCaptions(ctx, v.currentTime, cues, drawStyle, W, H);
+        if (watermark) drawWatermark(ctx, W, H);
+      } catch {}
+      job.progress = dur ? Math.min(0.999, v.currentTime / dur) : 0;
+      if (!v.paused && !v.ended) raf = requestAnimationFrame(frame);
+    }
+    const blob = await new Promise((resolve, reject) => {
+      let lastT = -1, stalled = 0;
+      const watch = setInterval(() => {
+        if (v.ended) return;
+        if (Math.abs(v.currentTime - lastT) < 0.02) { stalled++; if (stalled >= 12) { clearInterval(watch); try { rec.stop(); } catch {} } }
+        else { stalled = 0; lastT = v.currentTime; }
+      }, 500);
+      rec.onstop = () => { clearInterval(watch); cancelAnimationFrame(raf); resolve(new Blob(chunks, { type: mime })); };
+      rec.onerror = (e) => { clearInterval(watch); reject((e && e.error) || new Error('Recorder error.')); };
+      v.onended = () => { try { rec.stop(); } catch {} };
+      v.play().then(() => { rec.start(1000); frame(); }).catch(reject);
+    });
+    return { blob, mime };
+  }
+
   async function runExport(job, id, body) {
     const media = window.__captoMedia;
     if (!media || media.id !== id || !media.file) throw new Error('Video not available — re-open the clip.');
@@ -1245,8 +1456,6 @@
 
     const v = document.createElement('video');
     v.src = media.url; v.playsInline = true; v.preload = 'auto';
-    // Attach off-screen so the browser keeps it "foreground" — a detached or
-    // hidden <video> (especially audio-less clips) gets paused to save power.
     v.style.cssText = 'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
     document.body.appendChild(v);
     await new Promise((res, rej) => { v.onloadedmetadata = () => res(); v.onerror = () => rej(new Error('Could not load the video for export.')); });
@@ -1254,56 +1463,64 @@
 
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     const drawStyle = scaleStyle(style, k);
     const dur = meta.duration || v.duration || 0;
-
-    const fps = settings.fps;
-    const cstream = canvas.captureStream(fps);
-    let audioTrack = null;
-    try {
-      const vstream = v.captureStream ? v.captureStream() : (v.mozCaptureStream ? v.mozCaptureStream() : null);
-      if (vstream) audioTrack = vstream.getAudioTracks()[0] || null;
-    } catch { /* no audio capture */ }
-    const tracks = cstream.getVideoTracks();
-    if (audioTrack) tracks.push(audioTrack);
-    const stream = new MediaStream(tracks);
-    const mime = resolveExportMime(body.quality);
-    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: settings.videoBitrate });
-    const chunks = [];
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-
-    let raf = 0;
     const watermark = !!(window.__captoUser && window.__captoUser.watermark);
-    function frame() {
-      try {
-        ctx.drawImage(v, 0, 0, W, H);
-        drawCaptions(ctx, v.currentTime, cues, drawStyle, W, H);
-        if (watermark) drawWatermark(ctx, W, H);
-      } catch {}
-      job.progress = dur ? Math.min(0.999, v.currentTime / dur) : 0;
-      if (!v.paused && !v.ended) raf = requestAnimationFrame(frame);
+
+    // Detect the source frame rate so the top "lossless/auto" tier PRESERVES it
+    // (a 60fps clip exports at 60fps, not a silent 30). Only this tier pays the
+    // sub-second probe; the custom tier honours the user's explicit fps choice
+    // and friend stays at the size-tuned 30.
+    let sourceFps = null, fps = settings.fps;
+    if (body.quality === 'lossless') {
+      try { sourceFps = await detectSourceFps(v); } catch {}
+      try { v.pause(); v.currentTime = 0; } catch {}
+      if (sourceFps) fps = Math.max(24, Math.min(60, sourceFps));
     }
-    const blob = await new Promise((resolve, reject) => {
-      // Stall watchdog: if the playhead stops advancing (buffering, an audio-less
-      // clip the browser parks, a backgrounded tab) for too long, stop cleanly so
-      // an export can never hang forever. Uses an interval (less throttled than RAF).
-      let lastT = -1, stalled = 0;
-      const watch = setInterval(() => {
-        if (v.ended) return;
-        if (Math.abs(v.currentTime - lastT) < 0.02) {
-          stalled++;
-          if (stalled >= 12) { clearInterval(watch); try { rec.stop(); } catch {} } // ~6s of no progress
-        } else { stalled = 0; lastT = v.currentTime; }
-      }, 500);
-      rec.onstop = () => { clearInterval(watch); cancelAnimationFrame(raf); resolve(new Blob(chunks, { type: mime })); };
-      rec.onerror = (e) => { clearInterval(watch); reject((e && e.error) || new Error('Recorder error.')); };
-      v.onended = () => { try { rec.stop(); } catch {} };
-      // timeslice → MediaRecorder flushes a chunk every second instead of holding
-      // the whole recording in one buffer (memory-safe for long exports).
-      v.play().then(() => { rec.start(1000); frame(); }).catch(reject);
-    });
-    try { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } catch {}
+
+    const diag = {
+      sourceW: nW, sourceH: nH, sourceFps, sourceDurSec: +(dur || 0).toFixed(2),
+      outW: W, outH: H, fps, targetBitrateMbps: +(settings.videoBitrate / 1e6).toFixed(2),
+      quality: body.quality, container: getVal('capto-format', '') || 'auto',
+      encoder: null, mime: null, codec: null, framesEncoded: 0, hasAudio: null,
+      startedAt: Date.now(),
+    };
+
+    const o = { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, file: media.file, quality: body.quality };
+
+    // Prefer the frame-accurate WebCodecs MP4 path. Skip it only when the user
+    // explicitly asked for WebM, the duration is unknown, the source won't seek,
+    // or H.264 encoding isn't available — then fall back to real-time capture.
+    const wantWebm = body.quality !== 'friend' && getVal('capto-format', '') === 'webm';
+    const avc = wantWebm ? null : await pickAvcCodec(W, H);
+    let blob = null, mime = 'video/mp4';
+    try {
+      if (!avc || !(dur > 0)) throw new Error('webcodecs-skip');
+      if (!(await probeSeekable(v, dur))) throw new Error('webcodecs-skip');
+      o.codec = avc;
+      diag.encoder = 'webcodecs-mp4'; diag.mime = 'video/mp4'; diag.codec = avc;
+      blob = await exportWebCodecs(job, o, diag);
+      mime = 'video/mp4';
+    } catch (e) {
+      const msg = e && e.message;
+      if (msg && msg !== 'webcodecs-skip') { console.warn('[Capto export] WebCodecs path failed → MediaRecorder fallback:', e); diag.webCodecsError = msg; }
+      // Reset the element for a clean real-time pass.
+      try { v.pause(); v.currentTime = 0; } catch {}
+      diag.encoder = 'mediarecorder';
+      const r = await exportMediaRecorder(job, o, diag);
+      blob = r.blob; mime = r.mime;
+    } finally {
+      try { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } catch {}
+    }
+
+    diag.bytes = blob ? blob.size : 0;
+    diag.sizeMB = +((diag.bytes || 0) / 1048576).toFixed(2);
+    diag.elapsedMs = Date.now() - diag.startedAt;
+    diag.expectedMB = +(((settings.videoBitrate + (diag.hasAudio ? 160000 : 0)) * (dur || 0)) / 8 / 1048576).toFixed(2);
+    window.__captoLastExport = diag;
+    try { console.log('[Capto export]', JSON.stringify(diag)); } catch {}
+
     const base = (media.file.name || 'video').replace(/\.[^.]+$/, '');
     job.dest = await saveBlob(blob, `${base}-captioned.${extFor(mime)}`);
     return blob;
