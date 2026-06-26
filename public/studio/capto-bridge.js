@@ -1254,62 +1254,6 @@
     }
     return null;
   }
-  // Seek the element to an exact time and resolve once the frame is ready. Has a
-  // hard timeout so a non-seekable/odd source can never hang the export.
-  function seekExact(v, t) {
-    return new Promise((resolve) => {
-      if (Math.abs(v.currentTime - t) < 1e-3 && v.readyState >= 2) { resolve(); return; }
-      let done = false;
-      const fin = () => { if (done) return; done = true; clearTimeout(to); v.removeEventListener('seeked', fin); resolve(); };
-      const to = setTimeout(fin, 2500);
-      v.addEventListener('seeked', fin);
-      try { v.currentTime = t; } catch { fin(); }
-    });
-  }
-  // Confirm the source actually seeks (some streams/codecs don't) before we commit
-  // to the seek-per-frame path.
-  async function probeSeekable(v, dur) {
-    try {
-      const target = Math.min((dur || 1) * 0.5, (dur || 1) - 0.05, 0.5);
-      if (!(target > 0)) return false;
-      await seekExact(v, target);
-      const ok = Math.abs(v.currentTime - target) < 0.6;
-      await seekExact(v, 0);
-      return ok;
-    } catch { return false; }
-  }
-  // Best-effort source frame-rate detection: play a brief muted slice and time
-  // successive PRESENTED frames via requestVideoFrameCallback (mediaTime deltas =
-  // 1/fps), snapping to common rates. Returns null when unavailable so callers
-  // fall back to a safe default. Lets the top tier PRESERVE the original fps
-  // instead of forcing 30 (a 60fps clip stays 60fps, not silently halved).
-  async function detectSourceFps(v) {
-    if (typeof v.requestVideoFrameCallback !== 'function') return null;
-    return await new Promise((resolve) => {
-      const times = []; let stopped = false; const prevMuted = v.muted; v.muted = true;
-      const finish = () => {
-        if (stopped) return; stopped = true;
-        try { v.pause(); } catch {}
-        v.muted = prevMuted;
-        if (times.length < 4) return resolve(null);
-        const d = []; for (let i = 1; i < times.length; i++) { const dt = times[i] - times[i - 1]; if (dt > 0) d.push(dt); }
-        if (!d.length) return resolve(null);
-        d.sort((a, b) => a - b);
-        const med = d[Math.floor(d.length / 2)];
-        if (!(med > 0)) return resolve(null);
-        const fps = 1 / med;
-        for (const r of [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60]) if (Math.abs(fps - r) < 1.4) return resolve(Math.round(r));
-        return resolve(Math.max(1, Math.min(120, Math.round(fps))));
-      };
-      const cb = (now, meta) => {
-        times.push(meta && meta.mediaTime != null ? meta.mediaTime : now / 1000);
-        if (times.length >= 10) return finish();
-        try { v.requestVideoFrameCallback(cb); } catch { finish(); }
-      };
-      try { v.currentTime = 0; } catch {}
-      v.play().then(() => { try { v.requestVideoFrameCallback(cb); } catch { resolve(null); } setTimeout(finish, 900); }).catch(() => resolve(null));
-    });
-  }
   // Decode the file's FULL audio (all channels, native sample rate) for muxing.
   async function decodeFullAudio(file) {
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -1347,9 +1291,68 @@
     await aenc.flush(); aenc.close();
     if (firstError) throw firstError;
   }
+  // Lazily load the mp4box UMD demuxer (only when an MP4/MOV export runs).
+  let _mp4boxPromise = null;
+  function loadMp4Box() {
+    if (window.MP4Box) return Promise.resolve(window.MP4Box);
+    if (_mp4boxPromise) return _mp4boxPromise;
+    _mp4boxPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/studio/vendor/mp4box.js';
+      s.onload = () => (window.MP4Box ? resolve(window.MP4Box) : reject(new Error('mp4box global missing')));
+      s.onerror = () => reject(new Error('mp4box failed to load'));
+      document.head.appendChild(s);
+    });
+    return _mp4boxPromise;
+  }
+  // Demux an ISO-BMFF (MP4/MOV) file → { track, description, samples[] }. Rejects
+  // for non-MP4 / no-video-track so the caller can fall back to MediaRecorder.
+  async function demuxMp4(file) {
+    const MP4Box = await loadMp4Box();
+    const mp4 = MP4Box.createFile();
+    const DataStream = window.DataStream;
+    const descFor = (id) => {
+      const trak = mp4.getTrackById(id);
+      for (const e of (trak.mdia.minf.stbl.stsd.entries || [])) {
+        const box = e.avcC || e.hvcC || e.vpcC || e.av1C;
+        if (box) { const ds = new DataStream(undefined, 0, DataStream.BIG_ENDIAN); box.write(ds); return new Uint8Array(ds.buffer, 8); }
+      }
+      return null;
+    };
+    return await new Promise((resolve, reject) => {
+      const samples = []; let track = null, description = null, expected = Infinity;
+      const to = setTimeout(() => reject(new Error('demux timeout')), 30000);
+      mp4.onError = (e) => { clearTimeout(to); reject(new Error('demux: ' + e)); };
+      mp4.onReady = (info) => {
+        track = (info.videoTracks && info.videoTracks[0]) || null;
+        if (!track) { clearTimeout(to); reject(new Error('no video track')); return; }
+        expected = track.nb_samples;
+        try { description = descFor(track.id); } catch (e) { clearTimeout(to); reject(e); return; }
+        if (!description) { clearTimeout(to); reject(new Error('no codec description')); return; }
+        mp4.setExtractionOptions(track.id, null, { nbSamples: 1000000 });
+        mp4.start();
+      };
+      mp4.onSamples = (id, user, sm) => {
+        for (const s of sm) samples.push({ cts: s.cts, dts: s.dts, ts: s.timescale, key: s.is_sync, dur: s.duration, data: s.data });
+        if (samples.length >= expected) { clearTimeout(to); resolve({ track, description, samples }); }
+      };
+      file.arrayBuffer().then((ab) => { ab.fileStart = 0; mp4.appendBuffer(ab); mp4.flush(); }).catch((e) => { clearTimeout(to); reject(e); });
+    });
+  }
+  // PRIMARY export: demux the real encoded frames, decode them with VideoDecoder,
+  // re-draw each (with captions) onto the output canvas, and re-encode at the
+  // frame's TRUE timestamp. No <video>, no seeking, no requestVideoFrameCallback,
+  // no real-time playback — so it can't freeze, glitch, drift, or shorten, and it
+  // handles variable-frame-rate sources natively (every frame keeps its real PTS).
   async function exportWebCodecs(job, o, diag) {
     const { Muxer, ArrayBufferTarget } = await import('/studio/vendor/mp4-muxer.mjs');
-    const { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, file, codec } = o;
+    const { canvas, ctx, W, H, fps, cues, drawStyle, watermark, settings, file, codec } = o;
+    if (typeof VideoDecoder === 'undefined') throw new Error('no VideoDecoder');
+
+    const demux = await demuxMp4(file); // throws → MediaRecorder fallback (non-MP4 etc.)
+    const samples = demux.samples;
+    if (!samples.length) throw new Error('no video samples');
+    diag.sourceFrames = samples.length;
 
     let audioBuffer = null;
     try { audioBuffer = await decodeFullAudio(file); } catch {}
@@ -1368,28 +1371,42 @@
     });
     venc.configure({ codec, width: W, height: H, bitrate: settings.videoBitrate, framerate: fps, latencyMode: 'quality' });
 
-    const frameDurUs = Math.round(1e6 / fps);
-    const total = Math.max(1, Math.round(dur * fps));
-    const gop = Math.max(1, Math.round(fps * 2)); // keyframe every ~2s
-    for (let i = 0; i < total; i++) {
-      if (encErr) throw encErr;
-      const t = Math.min(i / fps, Math.max(0, dur - 1e-3));
-      await seekExact(v, t);
+    // Re-encode each decoded frame (drawn + captioned) at its real PTS, kept
+    // strictly increasing and normalised to start at 0 so it stays in A/V sync.
+    const GOP_US = 2000000;
+    let outBase = -1, lastOut = -1, lastKey = -GOP_US, frames = 0, decErr = null;
+    const total = samples.length;
+    const onDecoded = (frame) => {
+      if (encErr || decErr) { frame.close(); return; }
       try {
-        ctx.drawImage(v, 0, 0, W, H);
-        drawCaptions(ctx, t, cues, drawStyle, W, H);
+        const us = frame.timestamp;
+        if (outBase < 0) outBase = us;
+        let outTs = us - outBase; if (outTs <= lastOut) outTs = lastOut + 1; lastOut = outTs;
+        ctx.drawImage(frame, 0, 0, W, H);
+        drawCaptions(ctx, outTs / 1e6, cues, drawStyle, W, H);
         if (watermark) drawWatermark(ctx, W, H);
-      } catch {}
-      const frame = new VideoFrame(canvas, { timestamp: i * frameDurUs, duration: frameDurUs });
-      venc.encode(frame, { keyFrame: i % gop === 0 });
-      frame.close();
-      diag.framesEncoded = i + 1;
-      job.progress = (i / total) * (hasAudio ? 0.82 : 0.97);
-      // Bound the encode queue so memory stays flat on long clips.
-      if (venc.encodeQueueSize > 10) { while (venc.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 0)); }
+        const key = (outTs - lastKey) >= GOP_US; if (key) lastKey = outTs;
+        const out = new VideoFrame(canvas, { timestamp: outTs, duration: frame.duration || Math.round(1e6 / fps) });
+        venc.encode(out, { keyFrame: key }); out.close();
+        frames++; diag.framesEncoded = frames;
+        job.progress = Math.min(0.8, (frames / total) * 0.8);
+      } catch (e) { decErr = decErr || e; }
+      finally { frame.close(); }
+    };
+    const dec = new VideoDecoder({ output: onDecoded, error: (e) => { decErr = decErr || e; } });
+    dec.configure({ codec: demux.track.codec, description: demux.description, codedWidth: demux.track.video.width, codedHeight: demux.track.video.height });
+
+    for (const s of samples) {
+      if (encErr || decErr) break;
+      dec.decode(new EncodedVideoChunk({ type: s.key ? 'key' : 'delta', timestamp: Math.round((s.cts / s.ts) * 1e6), duration: Math.round((s.dur / s.ts) * 1e6), data: s.data }));
+      // Bound the decode + encode pipelines so memory stays flat on long clips.
+      while (dec.decodeQueueSize > 8 || venc.encodeQueueSize > 8) { if (encErr || decErr) break; await new Promise((r) => setTimeout(r, 0)); }
     }
+    await dec.flush(); dec.close();
+    if (decErr) throw decErr;
     await venc.flush(); venc.close();
     if (encErr) throw encErr;
+    if (!frames) throw new Error('no frames encoded');
 
     if (hasAudio) { job.progress = 0.84; await encodeAudioTrack(audioBuffer, muxer, (p) => { job.progress = 0.82 + p * 0.15; }); }
     muxer.finalize();
@@ -1468,19 +1485,13 @@
     const dur = meta.duration || v.duration || 0;
     const watermark = !!(window.__captoUser && window.__captoUser.watermark);
 
-    // Detect the source frame rate so the top "lossless/auto" tier PRESERVES it
-    // (a 60fps clip exports at 60fps, not a silent 30). Only this tier pays the
-    // sub-second probe; the custom tier honours the user's explicit fps choice
-    // and friend stays at the size-tuned 30.
-    let sourceFps = null, fps = settings.fps;
-    if (body.quality === 'lossless') {
-      try { sourceFps = await detectSourceFps(v); } catch {}
-      try { v.pause(); v.currentTime = 0; } catch {}
-      if (sourceFps) fps = Math.max(24, Math.min(60, sourceFps));
-    }
+    // The WebCodecs path captures real PRESENTED frames at their true timestamps,
+    // so the source frame rate is preserved automatically (a 60fps clip stays
+    // 60fps) — `fps` here is just the container hint + the fallback's capture rate.
+    const fps = settings.fps;
 
     const diag = {
-      sourceW: nW, sourceH: nH, sourceFps, sourceDurSec: +(dur || 0).toFixed(2),
+      sourceW: nW, sourceH: nH, sourceDurSec: +(dur || 0).toFixed(2),
       outW: W, outH: H, fps, targetBitrateMbps: +(settings.videoBitrate / 1e6).toFixed(2),
       quality: body.quality, container: getVal('capto-format', '') || 'auto',
       encoder: null, mime: null, codec: null, framesEncoded: 0, hasAudio: null,
@@ -1489,15 +1500,15 @@
 
     const o = { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, file: media.file, quality: body.quality };
 
-    // Prefer the frame-accurate WebCodecs MP4 path. Skip it only when the user
-    // explicitly asked for WebM, the duration is unknown, the source won't seek,
-    // or H.264 encoding isn't available — then fall back to real-time capture.
+    // Prefer the WebCodecs MP4 path (demux → decode → re-encode the real frames).
+    // Skip it only when the user explicitly asked for WebM, or H.264 encode/decode
+    // isn't available — then fall back to the legacy MediaRecorder capture. (A
+    // non-MP4/MOV source throws inside demux and also falls back.)
     const wantWebm = body.quality !== 'friend' && getVal('capto-format', '') === 'webm';
     const avc = wantWebm ? null : await pickAvcCodec(W, H);
     let blob = null, mime = 'video/mp4';
     try {
-      if (!avc || !(dur > 0)) throw new Error('webcodecs-skip');
-      if (!(await probeSeekable(v, dur))) throw new Error('webcodecs-skip');
+      if (!avc || typeof VideoDecoder === 'undefined') throw new Error('webcodecs-skip');
       o.codec = avc;
       diag.encoder = 'webcodecs-mp4'; diag.mime = 'video/mp4'; diag.codec = avc;
       blob = await exportWebCodecs(job, o, diag);
