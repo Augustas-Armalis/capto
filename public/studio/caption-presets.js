@@ -15,9 +15,15 @@
   //   font     → override the family (default Inter)
   //   scale    → how much the active word grows (100 = none)
   window.CAPTO_PRESETS = [
+    // THE DEFAULT for everyone: plain Inter, clean white text, NO per-word
+    // highlight — no word turning yellow, no colour change as it's spoken, just
+    // readable captions. `highlight:false` keeps the karaoke colouring OFF; the
+    // presets below opt back in. This is what a fresh transcription looks like
+    // (mirrors defaultStyle() in capto-bridge.js).
+    { id: 'inter', name: 'Inter', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlight: false, scale: 100, sizeRatio: 0.046, shadow: true, popular: true, sample: 'clean and simple' },
     // No on-word zoom on ANY preset (scale 100) — the highlight is colour/box/
     // glow only, never a size jump. Clean + readable like the original Subby.
-    { id: 'inter-bold', name: 'Inter Bold', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', scale: 100, sizeRatio: 0.046, shadow: true, popular: true, sample: 'keep it simple' },
+    { id: 'inter-bold', name: 'Inter Highlight', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', scale: 100, sizeRatio: 0.046, shadow: true, sample: 'keep it simple' },
     { id: 'hormozi', name: 'Hormozi', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, scale: 100, sizeRatio: 0.046, shadow: true, popular: true, sample: 'this changed everything' },
     { id: 'karaoke', name: 'Karaoke', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#7c5cff', scale: 100, sizeRatio: 0.042, shadow: true, popular: true, sample: 'follow every word' },
     { id: 'editorial', name: 'Editorial', fontWeight: 600, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: CYAN, highlightMode: 'color', scale: 100, sizeRatio: 0.04, shadow: true, sample: 'words that earn attention' },
@@ -60,12 +66,16 @@
       shadowOpacity: glow ? 90 : 60,
       shadowDistance: glow ? 0 : Math.max(2, Math.round(H * 0.0025)),
       shadowBlur: glow ? Math.round(H * 0.015) : Math.max(2, Math.round(H * 0.0035)),
-      highlightEnabled: true,
+      // highlight:false → plain captions, no karaoke colouring (the Inter default).
+      highlightEnabled: p.highlight !== false,
       highlightMode: mode,
       highlightColor: box ? (p.highlightFill || INK) : (p.highlightFill || p.accent || p.fill || WHITE),
       highlightBg: p.accent || YELLOW,
       highlightPill: !!p.pill,
       highlightScale: p.scale != null ? p.scale : (box ? 104 : (mode === 'color' ? 110 : 100)),
+      // Wide, easy-to-grab text box by default (matches defaultStyle) so captions
+      // are movable/resizable straight away, whichever preset you pick.
+      boxWidth: 0.82,
       posX: 0.5, posY: 0.78,
       entrance: 'none', exit: 'none', animMs: 180,
       _preset: p.id,

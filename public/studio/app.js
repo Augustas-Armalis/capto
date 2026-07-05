@@ -1031,7 +1031,16 @@ function afterStyle() {
 // to NEW projects. Per-project saves still override this for existing projects.
 const DEFAULT_KEY = 'subby-default-style';
 function persistDefaultStyle() { try { localStorage.setItem(DEFAULT_KEY, JSON.stringify(state.style)); } catch {} }
-function loadDefaultStyle() { try { return JSON.parse(localStorage.getItem(DEFAULT_KEY) || 'null'); } catch { return null; } }
+function loadDefaultStyle() {
+  try {
+    const s = JSON.parse(localStorage.getItem(DEFAULT_KEY) || 'null');
+    // Drop a saved default from before the plain-Inter reset (no _sv / older
+    // version) so everyone picks up the new clean default once. New choices the
+    // user makes after this still persist normally (they carry the current _sv).
+    if (s && (typeof s._sv !== 'number' || s._sv < 2)) return null;
+    return s;
+  } catch { return null; }
+}
 function clearDefaultStyle() { try { localStorage.removeItem(DEFAULT_KEY); } catch {} }
 
 /* ============================ tabs ============================ */

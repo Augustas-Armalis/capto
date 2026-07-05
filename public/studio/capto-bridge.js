@@ -359,20 +359,34 @@
   // The default look for freshly-generated captions: SMALLER text, WIDER lines
   // (the 4-word chunking does that), sitting a bit UP from the bottom — clean and
   // social, not a giant block jammed against the bottom edge.
+  // Bump when the default look changes in a way that should reset every user's
+  // saved "default style" once (loadDefaultStyle in app.js drops older versions).
+  const STYLE_VERSION = 2;
   function defaultStyle(meta) {
     const H = meta.height || 1920;
     const fontSize = Math.round(H * 0.046);
     return {
-      fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.12, caseMode: 'sentence',
+      fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.12,
+      // Keep Whisper's own (correct) capitalisation — don't force sentence-case,
+      // which wrongly capitalises the first word of every caption fragment.
+      caseMode: 'none',
       primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.04), wordSpacing: 0,
       outlineWidth: 0, outlineColor: '#000000',
       shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
       shadowDistance: Math.max(2, Math.round(H * 0.0025)), shadowBlur: Math.max(2, Math.round(H * 0.0035)),
-      // Plain Subby default: clean Inter, the spoken word just turns yellow as
-      // it's said — NO zoom, no size jump, no animation. Readable + premium.
-      highlightEnabled: true, highlightColor: '#FFD233', highlightScale: 100,
+      // THE default look: plain Inter, clean white text, NO per-word highlight —
+      // no word turning yellow, no colour change, no zoom. Just readable
+      // captions. The colour/box/glow "highlight" presets opt back in; here it's
+      // OFF for everyone. (Mirrors the 'inter' preset in caption-presets.js.)
+      highlightEnabled: false, highlightColor: '#FFD233', highlightScale: 100,
       highlightMode: 'color', highlightBg: '#FFD233', highlightPill: false,
+      // A WIDE text box by default (0.82 of the frame width): captions sit in a
+      // generous, easy-to-grab box so you can move it, resize from the corners,
+      // and widen/narrow from the side handles right away — no hunting for a tiny
+      // 1–2 word target. Text stays centred inside the box.
+      boxWidth: 0.82,
       posX: 0.5, posY: 0.78, entrance: 'none', exit: 'none', animMs: 180,
+      _sv: STYLE_VERSION,
     };
   }
 
@@ -405,19 +419,17 @@
     // never break awkwardly mid-flow. MAXGAP is aligned with the hide threshold
     // below, so any gap that ends a caption is also a gap where it disappears.
     // maxWordsOverride=1 → strict one-word-per-caption (the "One word" regen).
-    // MAXGAP is the pause that ENDS a caption: words spoken within 0.14s of each
-    // other group together (continuous flow); a longer gap splits them so the
-    // caption stops and the pause shows as empty space. Bigger pause → bigger gap.
-    const MAXW = maxWordsOverride || 2, MAXGAP = 0.14, MAXCHARS = 20;
-    // Timing: a caption tracks the VOICE. It ends right after its last word
-    // (+LEAD_OUT) and only bridges to the next caption when they're truly
-    // back-to-back (gap < BRIDGE). Any real pause → the caption hides, so the
-    // screen is empty during silence instead of a line hanging there.
+    // MAXGAP is the pause that starts a NEW caption line: words closer than this
+    // group onto the same line (continuous flow); a longer gap begins a fresh
+    // line. This only affects LINE GROUPING — a gap here does NOT blank the
+    // screen (that's HIDE_GAP below), so short gaps never cause a flicker.
+    const MAXW = maxWordsOverride || 3, MAXGAP = 0.5, MAXCHARS = 26;
     // A caption appears a hair BEFORE its first word (LEAD_IN) — Whisper marks
-    // word onsets a touch late, so this lands the caption right on the voice —
-    // lingers a beat after the last word (LEAD_OUT), and only bridges to the next
-    // caption across an imperceptible gap (< BRIDGE). Any real gap → it hides.
-    const LEAD_IN = 0.06, LEAD_OUT = 0.06;
+    // word onsets a touch late, so this lands the caption right on the voice.
+    // LEAD_OUT is only used when a REAL pause follows (see HIDE_GAP below): the
+    // caption lingers a beat past the last word, then the screen clears for the
+    // silence. Back-to-back captions instead hand off with no gap at all.
+    const LEAD_IN = 0.06, LEAD_OUT = 0.08;
     // ── sanitize raw word timings (KEEP the real starts — don't shift words) ──
     // Only drop empties/NaN and guarantee a minimum visible duration. We do NOT
     // push overlapping words forward (that drifted captions behind the audio);
@@ -469,16 +481,30 @@
         }
       }
     }
-    // 2) build cues, extending the end across small pauses but hiding on big ones
-    // Each caption is on screen for its OWN words' span: from (firstWord − lead-in)
-    // to (lastWord + lead-out). We clamp each start to the previous caption's end,
-    // so back-to-back speech runs continuously (no flicker) while a real pause
-    // leaves the screen empty — and a caption NEVER disappears mid-word.
+    // 2) build cues so captions track the voice MILLISECOND-TO-MILLISECOND with
+    // no dead air between them. Each caption starts a hair before its first word
+    // and — this is the key fix — stays on screen right up until the NEXT caption
+    // appears, so continuous speech is captioned continuously (no blank flicker
+    // between lines / words). The screen only goes empty for a REAL pause: when
+    // the silence before the next caption is longer than HIDE_GAP. This is what
+    // makes word-by-word feel perfect and kills the "stupid gaps".
+    const HIDE_GAP = 0.5; // silence longer than this (s) blanks the screen
     let prevEnd = 0;
-    return groups.map((ws) => {
+    return groups.map((ws, gi) => {
       const realStart = ws[0].start, realEnd = ws[ws.length - 1].end;
+      const next = groups[gi + 1];
+      const nextStart = next ? next[0].start : Infinity;
       const start = Math.max(prevEnd, realStart - LEAD_IN, 0);
-      const end = Math.max(realEnd + LEAD_OUT, start + 0.10);
+      let end;
+      if (isFinite(nextStart) && nextStart - realEnd <= HIDE_GAP) {
+        // Continuous speech (or only a brief gap) → hand straight off to the next
+        // caption with no empty frame in between.
+        end = Math.max(nextStart - LEAD_IN, realEnd, start + 0.10);
+      } else {
+        // Real pause (or the very last caption) → end just after the last word so
+        // the screen is empty during the silence.
+        end = Math.max(realEnd + LEAD_OUT, start + 0.10);
+      }
       prevEnd = end;
       return { start, end, text: ws.map((w) => w.word).join(' '), words: ws };
     });
@@ -600,11 +626,13 @@
     const fd = new FormData();
     fd.append('file', file, file.name || 'audio.wav');
     fd.append('language', body.language || 'auto');
-    // Forward the chosen engine/model so /api/transcribe can honour it (Auto =
-    // let the server pick). The server falls back to the house Groq model when
-    // the id is unknown or the user lacks the key, so this is always safe.
-    const eng = body.model || body.engine || '';
-    if (eng && eng !== 'auto') fd.append('model', eng);
+    // Default EVERYONE to the best Whisper model (Large v3) — that's Capto's one
+    // engine for all. Only an explicit, non-auto choice (the admin engine picker)
+    // overrides it. The server still falls back to the user's own-key Whisper if
+    // it can't run this exact id, so this is always safe.
+    let eng = body.model || body.engine || '';
+    if (!eng || eng === 'auto') eng = 'groq-whisper-large-v3';
+    fd.append('model', eng);
     if (durationSec) fd.append('durationSec', String(Math.round(durationSec)));
     let res;
     try { res = await realFetch('/api/transcribe', { method: 'POST', body: fd }); }
