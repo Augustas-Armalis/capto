@@ -16,6 +16,8 @@
 @font-face { font-family: 'Poppins'; src: url('/studio/fonts/Poppins-Regular.ttf'); font-weight: 400; }
 @font-face { font-family: 'Poppins'; src: url('/studio/fonts/Poppins-SemiBold.ttf'); font-weight: 600; }
 @font-face { font-family: 'Poppins'; src: url('/studio/fonts/Poppins-Bold.ttf'); font-weight: 700; }
+@font-face { font-family: 'Instrument Serif'; src: url('/studio/fonts/InstrumentSerif-Regular.woff2') format('woff2'); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Instrument Serif'; src: url('/studio/fonts/InstrumentSerif-Italic.woff2') format('woff2'); font-style: italic; font-weight: 400; font-display: swap; }
 
 :root {
   color-scheme: dark;
@@ -447,7 +449,7 @@ body.panel-collapsed .collapse-btn { left: 0; }
 /* ---- style presets: live-preview boxes + search + advanced collapse ---- */
 .preset-search { width: 100%; margin-bottom: 10px; }
 .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 300px; overflow-y: auto; padding: 2px; margin: 0 -2px; }
-.layout-controls { background: linear-gradient(180deg, rgba(130,165,255,.06), rgba(130,165,255,.018)); border: 1px solid rgba(130,165,255,.12); border-radius: 10px; margin: 10px; }
+.layout-controls { background: linear-gradient(180deg, rgba(130,165,255,.06), rgba(130,165,255,.018)); border: 1px solid rgba(130,165,255,.12); border-radius: 10px; margin: 14px 0 18px; padding: 14px; }
 .preset-box { display: flex; flex-direction: column; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0; overflow: hidden; cursor: pointer; transition: .14s var(--ease); font: inherit; }
 .preset-box:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 8px 20px -12px rgba(0,0,0,.7); }
 .pb-stage { display: flex; flex-wrap: wrap; gap: .3em .45em; align-items: center; justify-content: center; min-height: 58px; padding: 12px 10px; font-size: 15px; line-height: 1.3; color: #fff; background: radial-gradient(130% 100% at 50% 0%, #1c1c24, #0b0b0f); border-bottom: 1px solid var(--line); }
@@ -456,7 +458,14 @@ body.panel-collapsed .collapse-btn { left: 0; }
 .pb-pop { font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #0b0c14; background: linear-gradient(120deg,#a0c1ff,#8983ff); padding: 1px 6px; border-radius: 99px; }
 .pb-del { color: var(--faint); font-size: 12px; padding: 0 4px; border-radius: 5px; cursor: pointer; }
 .pb-del:hover { color: var(--danger); background: rgba(255,94,118,.12); }
-.adv-toggle { width: 100%; justify-content: center; margin: 6px 0 2px; }
+.adv-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 2px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); cursor: pointer; text-align: left; font: inherit; transition: border-color .14s var(--ease), background .14s var(--ease); }
+.adv-toggle:hover, .adv-toggle.on { border-color: rgba(130,165,255,.36); background: rgba(130,165,255,.06); }
+.adv-toggle:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.adv-toggle-copy { display: grid; gap: 2px; }
+.adv-toggle-copy strong { font-size: 12.5px; font-weight: 650; }
+.adv-toggle-copy small { color: var(--faint); font-size: 10.5px; font-weight: 500; }
+.adv-chevron { color: var(--muted); font-size: 18px; line-height: 1; transform: rotate(0deg); transition: transform .2s var(--ease); }
+.adv-toggle.on .adv-chevron { transform: rotate(180deg); }
 .adv-controls { transition: max-height .28s var(--ease); }
 
 /* Caption-on-canvas: make it discoverable that the caption is grabbable/editable.

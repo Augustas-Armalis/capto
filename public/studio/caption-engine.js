@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * Capto Caption Engine v3
+ * Capto Caption Engine v4
  *
  * Turns provider word timestamps into deterministic, non-overlapping caption
  * cues. The engine is intentionally dependency-free so the exact same code can
@@ -12,7 +12,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.CaptoCaptionEngine = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  const VERSION = 3;
+  const VERSION = 4;
   const MIN_WORD = 0.045;
   const EPS = 0.001;
 
@@ -131,17 +131,32 @@
     const leading = LEADING[lang];
 
     let cost = 0;
-    // Prefer 2–3 word cards. Single-word cards remain valid for punchy speech,
-    // terminal words, pauses, and genuinely long individual words.
-    if (count === 1) cost += 2.7;
-    else if (count === 2) cost += 0.35;
+    // One or two words is the product default. Three-word cards are deliberately
+    // exceptional: they are only allowed for a very short, quick phrase such as
+    // “I am in”. This keeps the normal rhythm punchy without chopping every
+    // leftover word into an orphan card.
+    if (count === 1) cost += 1.55;
+    else if (count === 2) cost += 0;
+    else if (count === 3) {
+      const lexicalWords = words.slice(from, to + 1).map((w) => lexical(w.word));
+      const shortTriple = opts.allowShortTriple
+        && lexicalWords.every((w) => w.length > 0 && w.length <= 3)
+        && lexicalWords.reduce((sum, w) => sum + w.length, 0) <= 8
+        && duration <= opts.tripleMaxDuration
+        && !terminal(words[from].word)
+        && !terminal(words[from + 1].word)
+        && !clause(words[from].word)
+        && !clause(words[from + 1].word);
+      if (!shortTriple) return 1e6;
+      cost += 1.25;
+    } else return 1e6;
     if (text.length > opts.maxChars) cost += 50 + (text.length - opts.maxChars) * 4;
     if (duration > opts.maxDuration) cost += 30 + (duration - opts.maxDuration) * 12;
 
     const lastLex = lexical(last.word);
     const firstLex = lexical(first.word);
-    if (dangling.has(lastLex) && to < words.length - 1) cost += 10;
-    if (leading.has(firstLex) && from > 0 && !terminal(words[from - 1].word)) cost += 1.4;
+    if (dangling.has(lastLex) && to < words.length - 1) cost += 14;
+    if (leading.has(firstLex) && from > 0 && !terminal(words[from - 1].word)) cost += 2.2;
 
     const next = words[to + 1];
     if (!next) cost -= 2;
@@ -151,13 +166,11 @@
       else if (clause(last.word)) cost -= 5;
       else if (gap >= opts.hardGap) cost -= 8;
       else if (gap >= opts.softGap) cost -= 3.5;
-      // A break after the first half of a quick 3-word phrase is usually worse
-      // than keeping the complete phrase on one card.
-      else if (count === 1) cost += 1.4;
+      else if (count === 1) cost += 0.65;
     }
 
     // Avoid a one-word orphan immediately after this card when both fit.
-    if (words.length - (to + 1) === 1 && count > 1 && !terminal(last.word)) cost += 3;
+    if (words.length - (to + 1) === 1 && count > 1 && !terminal(last.word)) cost += 2.2;
     return cost;
   }
 
@@ -201,8 +214,10 @@
       if (next) {
         const gap = Math.max(0, next.start - last.end);
         if (gap <= opts.hideGap) {
-          // Exact handoff eliminates flicker during continuous speech.
-          end = Math.max(last.end, next.start - Math.min(opts.leadIn, gap * 0.45));
+          // Continuous captions switch on the next provider word onset. Never
+          // anticipate the next card: word-by-word mode now changes on the exact
+          // same timestamps returned by the speech model.
+          end = Math.max(last.end, next.start);
         } else {
           end = last.end + Math.min(opts.leadOut, gap * 0.25);
         }
@@ -233,15 +248,17 @@
     const opts = {
       language: options.language || 'en',
       duration: Number.isFinite(options.duration) ? Math.max(0, options.duration) : Infinity,
-      maxWords: strictOneWord ? 1 : clamp(Math.round(finite(options.maxWords, 3)), 1, 5),
+      maxWords: strictOneWord ? 1 : clamp(Math.round(finite(options.maxWords, 3)), 1, 3),
       maxChars: clamp(Math.round(finite(options.maxChars, 28)), 10, 60),
       maxDuration: clamp(finite(options.maxDuration, 2.15), 0.5, 5),
       softGap: clamp(finite(options.softGap, 0.2), 0.08, 0.8),
       hardGap: clamp(finite(options.hardGap, 0.48), 0.2, 1.5),
-      hideGap: clamp(finite(options.hideGap, 0.42), 0.2, 1.5),
-      leadIn: clamp(finite(options.leadIn, 0.065), 0, 0.25),
-      leadOut: clamp(finite(options.leadOut, 0.09), 0, 0.4),
+      hideGap: clamp(finite(options.hideGap, 0.34), 0.16, 1.5),
+      leadIn: clamp(finite(options.leadIn, 0), 0, 0.25),
+      leadOut: clamp(finite(options.leadOut, 0.055), 0, 0.4),
       minCueDuration: clamp(finite(options.minCueDuration, strictOneWord ? 0.07 : 0.12), 0.04, 0.5),
+      allowShortTriple: options.allowShortTriple !== false,
+      tripleMaxDuration: clamp(finite(options.tripleMaxDuration, 0.82), 0.45, 1.2),
     };
     const words = snapWordsToSilence(
       normalizeWords(input, { duration: opts.duration }),

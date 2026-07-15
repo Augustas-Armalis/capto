@@ -357,24 +357,24 @@
     }
   }
 
-  // The default look for freshly-generated captions: SMALLER text, WIDER lines
-  // (the 4-word chunking does that), sitting a bit UP from the bottom — clean and
+  // The default look for freshly-generated captions: compact, bold text in a
+  // wide editable box, sitting a bit UP from the bottom — clean and
   // social, not a giant block jammed against the bottom edge.
   // Bump when the default look changes in a way that should reset every user's
   // saved "default style" once (loadDefaultStyle in app.js drops older versions).
-  const STYLE_VERSION = 3;
+  const STYLE_VERSION = 4;
   function defaultStyle(meta) {
     const H = meta.height || 1920;
     const fontSize = Math.round(H * 0.043);
     return {
-      fontFamily: 'Inter', fontSize, weight: 600, italic: false, lineHeight: 1.08,
+      fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.06,
       // Keep Whisper's own (correct) capitalisation — don't force sentence-case,
       // which wrongly capitalises the first word of every caption fragment.
       caseMode: 'none',
-      primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.032), wordSpacing: 0,
+      primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.045), wordSpacing: 0,
       outlineWidth: 0, outlineColor: '#000000',
-      shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
-      shadowDistance: Math.max(1, Math.round(H * 0.0018)), shadowBlur: Math.max(3, Math.round(H * 0.005)),
+      shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 52,
+      shadowDistance: Math.max(1, Math.round(H * 0.0016)), shadowBlur: Math.max(3, Math.round(H * 0.0042)),
       // THE default look: plain Inter, clean white text, NO per-word highlight —
       // no word turning yellow, no colour change, no zoom. Just readable
       // captions. The colour/box/glow "highlight" presets opt back in; here it's
@@ -414,7 +414,7 @@
   }
 
   function wordsToCues(words, maxWordsOverride, silences, language, duration) {
-    // Caption Engine v3 is the single production segmenter. Keep the older code
+    // Caption Engine v4 is the single production segmenter. Keep the older code
     // below as a last-resort fallback for a stale cached HTML page that failed to
     // load caption-engine.js; new and exported projects always take this path.
     if (window.CaptoCaptionEngine && typeof window.CaptoCaptionEngine.wordsToCues === 'function') {
@@ -436,7 +436,7 @@
     // group onto the same line (continuous flow); a longer gap begins a fresh
     // line. This only affects LINE GROUPING — a gap here does NOT blank the
     // screen (that's HIDE_GAP below), so short gaps never cause a flicker.
-    const MAXW = maxWordsOverride || 3, MAXGAP = 0.5, MAXCHARS = 26;
+    const MAXW = maxWordsOverride || 2, MAXGAP = 0.5, MAXCHARS = 26;
     // A caption appears a hair BEFORE its first word (LEAD_IN) — Whisper marks
     // word onsets a touch late, so this lands the caption right on the voice.
     // LEAD_OUT is only used when a REAL pause follows (see HIDE_GAP below): the
@@ -526,15 +526,15 @@
   // ───────────────── long-video handling: client-side audio extraction ─────
   // Whisper (Groq/OpenAI) rejects files over ~25MB and the worker times out at
   // 60s — so a raw 20-min+ video fails. We decode the audio in the browser,
-  // downmix to mono @16kHz, and split it into ≤10-min WAV chunks (16kHz mono WAV
-  // ≈ 32KB/s → 10min ≈ 19MB, comfortably under the limit). Each chunk is
+  // downmix to mono @16kHz, and split it into short WAV chunks. Each chunk is
   // transcribed and the word timings are stitched back with a time offset. If
   // extraction isn't possible (codec/oversized/no WebAudio), we fall back to a
   // single raw upload (the server routes large paid-tier files to Deepgram).
-  // ~3-min chunks: small enough that long videos show smooth live progress and
-  // captions fill into the timeline chunk-by-chunk, big enough to keep accuracy
-  // + stay well under the per-request limits.
-  const AUDIO_SR = 16000, CHUNK_SEC = 120, CHUNK_OVERLAP_SEC = 1.2;
+  // Whisper Large v3 is trained around short context windows. Thirty-second
+  // chunks keep alignment local and substantially reduce timestamp drift; a
+  // short overlap still protects words that straddle a boundary. Very long
+  // videos expand the window only enough to stay below the API's request limit.
+  const AUDIO_SR = 16000, MIN_CHUNK_SEC = 30, CHUNK_OVERLAP_SEC = 0.8, MAX_CHUNKS = 28;
 
   function encodeWav(samples, sampleRate) {
     const n = samples.length;
@@ -570,13 +570,15 @@
     return Float32Array.from(rendered.getChannelData(0));
   }
 
-  // Split already-decoded mono PCM into ≤CHUNK_SEC WAV chunks (we decode once and
-  // reuse the samples for BOTH chunking and silence detection).
+  // Split already-decoded mono PCM into locally-aligned WAV chunks (we decode
+  // once and reuse the samples for BOTH chunking and silence detection).
   function chunksFromMono(mono) {
     if (!mono || !mono.length) return null;
-    const chunkFrames = CHUNK_SEC * AUDIO_SR;
     const overlapFrames = Math.round(CHUNK_OVERLAP_SEC * AUDIO_SR);
-    const stepFrames = Math.max(1, chunkFrames - overlapFrames);
+    const idealStepFrames = Math.round((MIN_CHUNK_SEC - CHUNK_OVERLAP_SEC) * AUDIO_SR);
+    const boundedStepFrames = Math.ceil(Math.max(1, mono.length - overlapFrames) / MAX_CHUNKS);
+    const stepFrames = Math.max(1, idealStepFrames, boundedStepFrames);
+    const chunkFrames = stepFrames + overlapFrames;
     const chunks = [];
     for (let p = 0; p < mono.length; p += stepFrames) {
       const slice = mono.subarray(p, Math.min(mono.length, p + chunkFrames));
@@ -717,7 +719,7 @@
             if (shifted.end <= acceptAfter) continue;
             const recent = allWords.slice(-8).some((old) =>
               String(old.word || '').toLocaleLowerCase() === String(shifted.word || '').toLocaleLowerCase() &&
-              Math.abs(old.start - shifted.start) < 0.45
+              Math.abs(old.start - shifted.start) < 0.7
             );
             if (!recent) allWords.push(shifted);
           }
@@ -1559,7 +1561,10 @@
     v.style.cssText = 'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
     document.body.appendChild(v);
     await new Promise((res, rej) => { v.onloadedmetadata = () => res(); v.onerror = () => rej(new Error('Could not load the video for export.')); });
-    try { await document.fonts.load(`${style.weight || 700} 64px '${style.fontFamily}'`); await document.fonts.ready; } catch {}
+    try {
+      await document.fonts.load(`${style.italic ? 'italic ' : ''}${style.weight || 700} 64px '${style.fontFamily}'`);
+      await document.fonts.ready;
+    } catch {}
 
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;

@@ -5,7 +5,8 @@ const FONTS = [
   { family: 'Inter', label: 'Inter' }, { family: 'Anton', label: 'Anton' },
   { family: 'Archivo Black', label: 'Archivo Black' }, { family: 'Bebas Neue', label: 'Bebas Neue' },
   { family: 'Poppins', label: 'Poppins' }, { family: 'Lato', label: 'Lato' },
-  { family: 'Georgia', label: 'Georgia Serif' }, { family: 'Courier New', label: 'Courier Mono' },
+  { family: 'Instrument Serif', label: 'Instrument Serif' }, { family: 'Georgia', label: 'Georgia Serif' },
+  { family: 'Courier New', label: 'Courier Mono' },
   { family: 'Luckiest Guy', label: 'Luckiest Guy' }, { family: 'Pacifico', label: 'Pacifico' },
 ];
 const HAS_BOLD = new Set(['Inter', 'Poppins', 'Lato']);
@@ -749,19 +750,22 @@ function renderStylePanel() {
       </div>
       <p class="hint-line">Pick a style, then fine-tune under Advanced. Your current look is auto-saved as the default for new videos.</p>
     </div>
+    <button class="adv-toggle" id="advToggleTop" type="button" aria-expanded="false" aria-controls="advControls">
+      <span class="adv-toggle-copy"><strong>Advanced controls</strong><small>Size, position, type & effects</small></span>
+      <span class="adv-chevron" aria-hidden="true">⌄</span>
+    </button>
+    <div class="collapse adv-controls" id="advControls" style="max-height:0">
     <div class="section layout-controls">
       <p class="sec-title">Size & position</p>
       <div class="field"><label>Text size <span class="val" id="v-size"></span></label><input type="range" id="st-size" min="16" step="0.25" aria-label="Caption text size"></div>
       <div class="field"><label>Text box width <span class="val" id="v-boxw"></span></label><input type="range" id="st-boxw" min="20" max="94" step="1" aria-label="Caption text box width"></div>
-      <div class="chips"><div class="chip" data-y="0.16">Top safe</div><div class="chip" data-y="0.5">Middle</div><div class="chip" data-y="0.72">Bottom safe</div></div>
+      <div class="chips"><button class="chip" type="button" data-y="0.16">Top safe</button><button class="chip" type="button" data-y="0.5">Middle</button><button class="chip" type="button" data-y="0.72">Bottom safe</button></div>
       <div class="row2" style="margin-top:10px">
         <div class="field"><label>X <span class="val" id="v-px"></span></label><input type="range" id="st-px" min="0" max="100" step="1" aria-label="Caption horizontal position"></div>
         <div class="field"><label>Y <span class="val" id="v-py"></span></label><input type="range" id="st-py" min="8" max="92" step="1" aria-label="Caption vertical position"></div>
       </div>
       <p class="hint-line">Drag on the video to move. Side handles change width; corner handles change text size.</p>
     </div>
-    <button class="btn ghost sm adv-toggle" id="advToggleTop" aria-expanded="false">Advanced styling ▾</button>
-    <div class="collapse adv-controls" id="advControls" style="max-height:0">
     <div class="section" style="margin-top:14px">
       <p class="sec-title">Text</p>
       <div class="field"><label>Font</label><select id="st-font" aria-label="Caption font">${FONTS.map((f) => `<option value="${f.family}">${f.label}</option>`).join('')}</select></div>
@@ -838,7 +842,7 @@ function renderStylePanel() {
     // can expand without being clipped by this wrapper.
     advBox.style.maxHeight = open ? '0px' : '3000px';
     advBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
-    advBtn.textContent = open ? 'Advanced styling ▾' : 'Advanced styling ▴';
+    advBtn.classList.toggle('on', !open);
   };
 
   $('#st-font').value = s.fontFamily; $('#st-font').onchange = () => { s.fontFamily = $('#st-font').value; afterStyle(); };
@@ -1044,7 +1048,7 @@ function applyPresetStyle(item) {
   if (advOpen) {
     const a = $('#advControls'), b = $('#advToggleTop');
     if (a) a.style.maxHeight = '3000px';
-    if (b) { b.setAttribute('aria-expanded', 'true'); b.textContent = 'Advanced styling ▴'; }
+    if (b) { b.setAttribute('aria-expanded', 'true'); b.classList.add('on'); }
   }
   afterStyle();
   queueStyleFeedback(item.key);
@@ -1230,7 +1234,7 @@ function paintActiveWord(block, cue, t) {
   const s = state.style;
   const words = (cue.words && cue.words.length) ? cue.words : [{ word: cue.text, start: cue.start, end: cue.end }];
   // The active word is the last one that has STARTED by time t…
-  let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start - 0.015) aw = k;
+  let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
   const started = aw; // last word that has begun — used for the word-by-word reveal
   // …but don't let it linger far past when it was actually spoken. If we're in a
   // real silent gap before the next word (> ~0.12s past this word's end), light
@@ -1238,7 +1242,7 @@ function paintActiveWord(block, cue, t) {
   if (aw >= 0) {
     const w = words[aw];
     const nextStart = aw + 1 < words.length ? words[aw + 1].start : Infinity;
-    if (t > (w.end || w.start) + 0.12 && t < nextStart - 0.02) aw = -1;
+    if (t > (w.end || w.start) + 0.06 && t < nextStart - 0.02) aw = -1;
   }
   const mode = s.highlightMode || 'color';
   const bg = s.highlightBg || '#FFE36E';

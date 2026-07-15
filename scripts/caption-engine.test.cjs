@@ -18,29 +18,34 @@ function assertValid(cues) {
     assert.ok(cues[i].start >= 0);
     assert.ok(cues[i].end > cues[i].start);
     assert.equal(cues[i].text, cues[i].words.map((w) => w.word).join(' '));
+    assert.equal(cues[i]._engineVersion, 4);
     if (i) assert.ok(cues[i].start >= cues[i - 1].end - 1e-9, 'cues must not overlap');
   }
 }
 
-test('creates short natural English phrases without dangling connectors', () => {
+test('reports Caption Engine v4', () => {
+  assert.equal(engine.VERSION, 4);
+});
+
+test('defaults to one or two words and avoids dangling English connectors', () => {
   const cues = engine.wordsToCues(timed('This is how we build better captions for everyone.'), { language: 'en' });
-  assert.deepEqual(cues.map((c) => c.text), [
-    'This is how',
-    'we build better',
-    'captions for everyone.',
-  ]);
-  assert.ok(cues.every((c) => c.words.length <= 3));
+  assert.deepEqual(cues.map((c) => c.text), ['This is', 'how we', 'build better', 'captions', 'for everyone.']);
+  assert.ok(cues.every((c) => c.words.length <= 2));
   assertValid(cues);
 });
-test('uses Lithuanian-aware phrase boundaries', () => {
+test('uses Lithuanian-aware boundaries with one or two words by default', () => {
   const cues = engine.wordsToCues(timed('Tai yra būdas kaip mes kuriame geresnius subtitrus visiems.'), { language: 'lt' });
-  assert.deepEqual(cues.map((c) => c.text), [
-    'Tai yra būdas',
-    'kaip mes kuriame',
-    'geresnius subtitrus visiems.',
-  ]);
+  assert.ok(cues.every((c) => c.words.length <= 2));
   assert.ok(cues.every((c) => !/\b(ir|kad|su)$/iu.test(c.text)));
   assertValid(cues);
+});
+
+test('allows a three-word card only for an exceptionally short quick phrase', () => {
+  const short = engine.wordsToCues(timed('in and we'), { language: 'en' });
+  assert.equal(short.length, 1);
+  assert.equal(short[0].words.length, 3);
+  const normal = engine.wordsToCues(timed('captions look very professional today'), { language: 'en' });
+  assert.ok(normal.every((c) => c.words.length <= 2));
 });
 
 test('strict word-by-word mode changes on every real word onset', () => {
@@ -48,6 +53,9 @@ test('strict word-by-word mode changes on every real word onset', () => {
   const cues = engine.wordsToCues(words, { language: 'en', oneWord: true });
   assert.equal(cues.length, words.length);
   assert.ok(cues.every((c) => c.words.length === 1));
+  for (let i = 0; i < cues.length; i++) {
+    assert.ok(Math.abs(cues[i].start - words[i].start) < 1e-9);
+  }
   for (let i = 1; i < cues.length; i++) {
     assert.ok(Math.abs(cues[i - 1].end - cues[i].start) < 1e-9);
   }

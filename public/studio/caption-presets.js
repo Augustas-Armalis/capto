@@ -17,15 +17,15 @@
   window.CAPTO_PRESETS = [
     // A focused, production set: clear hierarchy, strong contrast, and distinct
     // use cases instead of many near-duplicates.
-    { id: 'inter', name: 'Capto Clean', fontWeight: 600, caseMode: 'none', tracking: -0.032, fill: WHITE, highlight: false, scale: 100, sizeRatio: 0.043, shadow: true, popular: true, sample: 'clear by default' },
-    { id: 'inter-focus', name: 'Focus Yellow', fontWeight: 700, caseMode: 'none', tracking: -0.03, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', scale: 100, sizeRatio: 0.044, shadow: true, popular: true, sample: 'make every word land' },
+    { id: 'inter', name: 'Capto Clean', fontWeight: 700, caseMode: 'none', tracking: -0.045, lineHeight: 1.06, fill: WHITE, highlight: false, scale: 100, sizeRatio: 0.043, shadow: true, shadowOpacity: 52, popular: true, sample: 'clear by default' },
+    { id: 'inter-focus', name: 'Focus Yellow', fontWeight: 700, caseMode: 'none', tracking: -0.042, lineHeight: 1.06, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', scale: 100, sizeRatio: 0.043, shadow: true, shadowOpacity: 52, popular: true, sample: 'make every word land' },
     { id: 'signal', name: 'Signal', fontWeight: 800, caseMode: 'upper', tracking: -0.025, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, scale: 100, sizeRatio: 0.047, shadow: true, popular: true, sample: 'this changes everything' },
     { id: 'violet-pill', name: 'Violet Pill', fontWeight: 700, caseMode: 'none', tracking: -0.025, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#7C5CFF', pill: true, scale: 100, sizeRatio: 0.043, shadow: true, sample: 'follow the thought' },
     { id: 'soft-glow', name: 'Soft Glow', fontWeight: 600, caseMode: 'none', tracking: -0.025, fill: WHITE, highlightFill: CYAN, highlightMode: 'glow', accent: CYAN, scale: 100, sizeRatio: 0.043, shadow: true, sample: 'light in motion' },
-    { id: 'editorial-serif', name: 'Editorial Serif', font: 'Georgia', italic: true, fontWeight: 600, caseMode: 'none', tracking: -0.025, fill: WHITE, highlightFill: '#FFE7A8', highlightMode: 'color', scale: 100, sizeRatio: 0.042, shadow: true, sample: 'a quieter kind of confidence' },
+    { id: 'editorial-serif', name: 'Instrument Serif', font: 'Instrument Serif', italic: true, fontWeight: 400, caseMode: 'none', tracking: -0.012, lineHeight: 1.02, fill: WHITE, highlightFill: '#FFE7A8', highlightMode: 'color', scale: 100, sizeRatio: 0.046, shadow: true, shadowOpacity: 48, sample: 'a quieter kind of confidence' },
     { id: 'word-by-word', name: 'One Word', fontWeight: 800, caseMode: 'upper', tracking: -0.025, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', singleWord: true, scale: 100, sizeRatio: 0.058, shadow: true, sample: 'every word matters' },
     { id: 'underline', name: 'Underline', fontWeight: 600, caseMode: 'none', tracking: -0.03, fill: '#F8F8FA', highlightFill: WHITE, highlightMode: 'underline', accent: CYAN, scale: 100, sizeRatio: 0.041, shadow: true, sample: 'simple stays readable' },
-    { id: 'impact', name: 'Impact', font: 'Anton', fontWeight: 700, caseMode: 'upper', tracking: -0.015, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: '#B9FF66', outline: 0.018, scale: 100, sizeRatio: 0.052, shadow: true, sample: 'stop the scroll' },
+    { id: 'impact', name: 'Impact', font: 'Anton', fontWeight: 400, caseMode: 'upper', tracking: -0.026, lineHeight: 1.02, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', outline: 0.007, scale: 100, sizeRatio: 0.046, shadow: true, shadowOpacity: 52, sample: 'stop the scroll' },
     { id: 'gradient', name: 'Aurora', fontWeight: 800, caseMode: 'upper', tracking: -0.025, fill: WHITE, highlightFill: WHITE, highlightMode: 'glow', accent: VIOLET, gradient: true, scale: 100, sizeRatio: 0.047, shadow: true, sample: 'colour with control' },
     { id: 'outline', name: 'Outline', fontWeight: 800, caseMode: 'upper', tracking: -0.02, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', hollow: true, scale: 100, sizeRatio: 0.049, shadow: false, sample: 'bold without the block' },
     { id: 'mono', name: 'Mono Note', font: 'Courier New', fontWeight: 700, caseMode: 'none', tracking: -0.01, fill: WHITE, highlightFill: '#B9FF66', highlightMode: 'color', scale: 100, sizeRatio: 0.039, shadow: true, sample: 'document the moment' },
@@ -44,7 +44,7 @@
       fontSize: fontSize,
       weight: p.fontWeight || 700,
       italic: !!p.italic,
-      lineHeight: 1.12,
+      lineHeight: p.lineHeight || 1.1,
       caseMode: p.caseMode || 'none',
       primaryColor: p.fill || WHITE,
       letterSpacing: ls,
@@ -55,7 +55,7 @@
       gradient: !!p.gradient,
       shadowEnabled: p.shadow !== false,
       shadowColor: glow ? (p.accent || CYAN) : '#000000',
-      shadowOpacity: glow ? 90 : 60,
+      shadowOpacity: glow ? 78 : (p.shadowOpacity || 54),
       shadowDistance: glow ? 0 : Math.max(2, Math.round(H * 0.0025)),
       shadowBlur: glow ? Math.round(H * 0.015) : Math.max(2, Math.round(H * 0.0035)),
       // highlight:false → plain captions, no karaoke colouring (the Inter default).
