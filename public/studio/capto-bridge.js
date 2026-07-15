@@ -2114,8 +2114,12 @@
     refresh();
   }
   function setupCustomDropdowns() {
-    ['homeLang', 'editLang', 'uploadLang', 'setLang', 'homeEngine', 'editEngine', 'uploadEngine', 'setEngine']
+    // Language is the only user-facing transcription choice. Keep engine
+    // selects as hidden implementation details so enhancing the native select
+    // can never accidentally surface a model picker.
+    ['homeLang', 'editLang', 'uploadLang', 'setLang']
       .forEach((id) => { try { enhanceSelect(document.getElementById(id)); } catch (e) { console.warn('[Capto] combo', id, e); } });
+    applyEngineVisibility();
   }
   // Re-run after the plan resolves (fetchMe → __captoRefreshEngines repopulates the
   // engine lists); enhanceSelect is idempotent, so this only catches any new nodes.

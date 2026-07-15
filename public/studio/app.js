@@ -184,8 +184,8 @@ function renderHome() {
         <span class="badge dur">${fmtDuration(p.duration)}</span>
         ${p.cueCount ? `<span class="badge">${p.cueCount} captions</span>` : ''}
         <div class="actions">
-          <button class="rn" title="Rename"><svg class="ic sm"><use href="#i-edit"/></svg></button>
-          <button class="del" title="Delete"><svg class="ic sm"><use href="#i-trash"/></svg></button>
+          <button class="rn" title="Rename" aria-label="Rename project"><svg class="ic sm" aria-hidden="true"><use href="#i-edit"/></svg></button>
+          <button class="del" title="Delete" aria-label="Delete project"><svg class="ic sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
         </div>
       </div>
       <div class="info">
@@ -283,7 +283,7 @@ el.fileInput.onchange = () => { if (el.fileInput.files[0]) uploadFile(el.fileInp
 ['dragleave', 'drop'].forEach((ev) => el.dropzone.addEventListener(ev, (e) => { e.preventDefault(); el.dropzone.classList.remove('drag'); }));
 el.dropzone.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('video')) uploadFile(f); else toast('Please drop a video file.', true); });
 async function uploadFile(file) {
-  $('.dz-inner', el.dropzone).innerHTML = `<img class="dz-logo" src="/studio/logo.svg"><h1>Uploading…</h1><p>${escapeHtml(file.name)}</p>`;
+  $('.dz-inner', el.dropzone).innerHTML = `<img class="dz-logo" src="/studio/logo.svg" alt=""><h1>Uploading…</h1><p>${escapeHtml(file.name)}</p>`;
   const form = new FormData(); form.append('video', file);
   try {
     const res = await fetch('/api/projects', { method: 'POST', body: form });
@@ -292,7 +292,7 @@ async function uploadFile(file) {
   } catch (err) { toast(err.message, true); resetUpload(); }
 }
 function resetUpload() {
-  $('.dz-inner', el.dropzone).innerHTML = `<img class="dz-logo" src="/studio/logo.svg"><h1>Caption your video</h1>
+  $('.dz-inner', el.dropzone).innerHTML = `<img class="dz-logo" src="/studio/logo.svg" alt=""><h1>Caption your video</h1>
     <p>Drop a clip or choose a file — Capto auto‑captions it with AI. Everything stays on your machine.</p>
     <button class="btn primary lg" id="pickBtn">Choose a video</button>`;
   $('#pickBtn').onclick = () => el.fileInput.click();
@@ -557,7 +557,7 @@ function renderCues() {
     div.innerHTML = `
       <div class="cue-head">
         <span class="cue-time" data-act="time">${fmtClock(c.start)} → ${fmtClock(c.end)}</span>
-        <button class="cue-del" data-act="del" title="Delete"><svg class="ic sm"><use href="#i-trash"/></svg></button>
+        <button class="cue-del" data-act="del" title="Delete" aria-label="Delete caption"><svg class="ic sm" aria-hidden="true"><use href="#i-trash"/></svg></button>
       </div>
       <textarea rows="1" data-k="text" aria-label="Caption text at ${fmtClock(c.start)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">${escapeHtml(c.text)}</textarea>`;
     el.cues.appendChild(div);
@@ -741,7 +741,7 @@ function renderStylePanel() {
   $('#tab-style').innerHTML = `
     <div class="section">
       <p class="sec-title">Styles</p>
-      <input type="text" class="search preset-search" id="preset-search" placeholder="Search styles…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <input type="text" class="search preset-search" id="preset-search" name="style-search" placeholder="Search styles…" aria-label="Search caption styles" autocomplete="off" autocapitalize="off" spellcheck="false">
       <div class="preset-grid" id="preset-grid"></div>
       <div style="display:flex; gap:6px; margin-top:10px">
         <button class="btn ghost sm" id="savePreset">＋ Save current as preset</button>
@@ -751,12 +751,12 @@ function renderStylePanel() {
     </div>
     <div class="section layout-controls">
       <p class="sec-title">Size & position</p>
-      <div class="field"><label>Text size <span class="val" id="v-size"></span></label><input type="range" id="st-size" min="16" step="0.25"></div>
-      <div class="field"><label>Text box width <span class="val" id="v-boxw"></span></label><input type="range" id="st-boxw" min="20" max="94" step="1"></div>
+      <div class="field"><label>Text size <span class="val" id="v-size"></span></label><input type="range" id="st-size" min="16" step="0.25" aria-label="Caption text size"></div>
+      <div class="field"><label>Text box width <span class="val" id="v-boxw"></span></label><input type="range" id="st-boxw" min="20" max="94" step="1" aria-label="Caption text box width"></div>
       <div class="chips"><div class="chip" data-y="0.16">Top safe</div><div class="chip" data-y="0.5">Middle</div><div class="chip" data-y="0.72">Bottom safe</div></div>
       <div class="row2" style="margin-top:10px">
-        <div class="field"><label>X <span class="val" id="v-px"></span></label><input type="range" id="st-px" min="0" max="100" step="1"></div>
-        <div class="field"><label>Y <span class="val" id="v-py"></span></label><input type="range" id="st-py" min="8" max="92" step="1"></div>
+        <div class="field"><label>X <span class="val" id="v-px"></span></label><input type="range" id="st-px" min="0" max="100" step="1" aria-label="Caption horizontal position"></div>
+        <div class="field"><label>Y <span class="val" id="v-py"></span></label><input type="range" id="st-py" min="8" max="92" step="1" aria-label="Caption vertical position"></div>
       </div>
       <p class="hint-line">Drag on the video to move. Side handles change width; corner handles change text size.</p>
     </div>
@@ -764,18 +764,18 @@ function renderStylePanel() {
     <div class="collapse adv-controls" id="advControls" style="max-height:0">
     <div class="section" style="margin-top:14px">
       <p class="sec-title">Text</p>
-      <div class="field"><label>Font</label><select id="st-font">${FONTS.map((f) => `<option value="${f.family}">${f.label}</option>`).join('')}</select></div>
+      <div class="field"><label>Font</label><select id="st-font" aria-label="Caption font">${FONTS.map((f) => `<option value="${f.family}">${f.label}</option>`).join('')}</select></div>
       <div class="row2">
         <div class="field"><label>Case</label><div class="seg icons" id="st-case">${CASES.map((c) => `<button data-v="${c.code}">${c.label}</button>`).join('')}</div></div>
         <div class="field"><label>Italic</label><div class="seg icons" id="st-weight"><button data-w="i" style="font-style:italic;font-weight:600">I</button></div></div>
       </div>
-      <div class="field"><label>Weight <span class="val" id="v-weight"></span></label><input type="range" id="st-weight-r" min="300" max="900" step="100"></div>
+      <div class="field"><label>Weight <span class="val" id="v-weight"></span></label><input type="range" id="st-weight-r" min="300" max="900" step="100" aria-label="Caption font weight"></div>
       <div class="row2">
-        <div class="field"><label>Letter spacing <span class="val" id="v-ls"></span></label><input type="range" id="st-ls" min="-15" max="20" step="0.5"></div>
-        <div class="field"><label>Line height <span class="val" id="v-lh"></span></label><input type="range" id="st-lh" min="0.8" max="2" step="0.05"></div>
+        <div class="field"><label>Letter spacing <span class="val" id="v-ls"></span></label><input type="range" id="st-ls" min="-15" max="20" step="0.5" aria-label="Caption letter spacing"></div>
+        <div class="field"><label>Line height <span class="val" id="v-lh"></span></label><input type="range" id="st-lh" min="0.8" max="2" step="0.05" aria-label="Caption line height"></div>
       </div>
-      <div class="field"><label>Word gap <span class="val" id="v-ws"></span></label><input type="range" id="st-ws" min="-12" max="60" step="1"></div>
-      <div class="field"><label>Color</label><div class="swatches" id="sw-color">${SWATCHES.map((c) => `<div class="swatch" data-c="${c}" style="background:${c}"></div>`).join('')}<input type="color" id="st-color" style="width:24px;height:24px;padding:2px;border-radius:6px"></div></div>
+      <div class="field"><label>Word gap <span class="val" id="v-ws"></span></label><input type="range" id="st-ws" min="-12" max="60" step="1" aria-label="Caption word spacing"></div>
+      <div class="field"><label>Color</label><div class="swatches" id="sw-color">${SWATCHES.map((c) => `<button class="swatch" type="button" data-c="${c}" style="background:${c}" aria-label="Use ${c}"></button>`).join('')}<input type="color" id="st-color" aria-label="Caption text color" style="width:24px;height:24px;padding:2px;border-radius:6px"></div></div>
     </div>
     <div class="section">
       <p class="sec-title">Shadow</p>
@@ -785,16 +785,16 @@ function renderStylePanel() {
       <button class="btn ghost sm" id="advToggle">Fine‑tune ▾</button>
       <div class="collapse" id="advShadow" style="max-height:0">
         <div class="row2" style="margin-top:10px">
-          <div class="field"><label>Shadow color</label><input type="color" id="st-shcolor"></div>
-          <div class="field"><label>Opacity <span class="val" id="v-shop"></span></label><input type="range" id="st-shop" min="0" max="100"></div>
+          <div class="field"><label>Shadow color</label><input type="color" id="st-shcolor" aria-label="Caption shadow color"></div>
+          <div class="field"><label>Opacity <span class="val" id="v-shop"></span></label><input type="range" id="st-shop" min="0" max="100" aria-label="Caption shadow opacity"></div>
         </div>
         <div class="row2">
-          <div class="field"><label>Distance <span class="val" id="v-shd"></span></label><input type="range" id="st-shd" min="0" max="40" step="0.5"></div>
-          <div class="field"><label>Blur <span class="val" id="v-shb"></span></label><input type="range" id="st-shb" min="0" max="40" step="0.5"></div>
+          <div class="field"><label>Distance <span class="val" id="v-shd"></span></label><input type="range" id="st-shd" min="0" max="40" step="0.5" aria-label="Caption shadow distance"></div>
+          <div class="field"><label>Blur <span class="val" id="v-shb"></span></label><input type="range" id="st-shb" min="0" max="40" step="0.5" aria-label="Caption shadow blur"></div>
         </div>
         <div class="row2">
-          <div class="field"><label>Outline <span class="val" id="v-ow"></span></label><input type="range" id="st-ow" min="0" max="20" step="0.5"></div>
-          <div class="field"><label>Outline color</label><input type="color" id="st-ocolor"></div>
+          <div class="field"><label>Outline <span class="val" id="v-ow"></span></label><input type="range" id="st-ow" min="0" max="20" step="0.5" aria-label="Caption outline width"></div>
+          <div class="field"><label>Outline color</label><input type="color" id="st-ocolor" aria-label="Caption outline color"></div>
         </div>
       </div>
     </div>
@@ -804,11 +804,11 @@ function renderStylePanel() {
       <div class="collapse" id="hlAdv">
         <div class="field" style="margin-top:10px"><label>Style</label><div class="seg" id="st-hlmode"><button data-m="color">Color</button><button data-m="box">Box</button><button data-m="glow">Glow</button><button data-m="underline">Line</button></div></div>
         <div class="row2">
-          <div class="field"><label>Active text</label><input type="color" id="st-hlcolor"></div>
-          <div class="field"><label>Box / accent</label><input type="color" id="st-hlbg"></div>
+          <div class="field"><label>Active text</label><input type="color" id="st-hlcolor" aria-label="Active word text color"></div>
+          <div class="field"><label>Box / accent</label><input type="color" id="st-hlbg" aria-label="Active word accent color"></div>
         </div>
         <div class="row2">
-          <div class="field"><label>Pop <span class="val" id="v-hls"></span></label><input type="range" id="st-hls" min="100" max="150"></div>
+          <div class="field"><label>Pop <span class="val" id="v-hls"></span></label><input type="range" id="st-hls" min="100" max="150" aria-label="Active word scale"></div>
           <div class="field"><label>Rounded</label><div class="seg icons" id="st-hlpill"><button data-p="pill">●</button></div></div>
         </div>
       </div>
@@ -821,7 +821,7 @@ function renderStylePanel() {
       <div class="field"><label>Exit</label><div class="seg" id="st-exit">
         <button data-v="none">None</button><button data-v="fade">Fade</button>
       </div></div>
-      <div class="field"><label>Speed <span class="val" id="v-animms"></span></label><input type="range" id="st-animms" min="60" max="600" step="20"></div>
+      <div class="field"><label>Speed <span class="val" id="v-animms"></span></label><input type="range" id="st-animms" min="60" max="600" step="20" aria-label="Caption animation speed"></div>
       <label class="check" style="margin-top:10px"><input type="checkbox" id="st-wordreveal"><span>Reveal words one by one (build the line as it's spoken)</span></label>
     </div>
     </div>`;
@@ -1553,7 +1553,7 @@ function renderTimeline() {
   const linked = el.linkChk && el.linkChk.checked;
   for (let r = 0; r < state.rows; r++) {
     const customH = (state.rowHeights && state.rowHeights[r]) || '';
-    html += `<div class="tl-row" data-row="${r}" style="${customH ? `height:${customH}px` : ''}"><button class="tl-row-del" data-rowdel="${r}" title="Delete this caption row"><svg class="ic sm"><use href="#i-trash"/></svg></button><div class="tl-row-resize" data-rowresize="${r}" title="Drag to resize this row"></div>`;
+    html += `<div class="tl-row" data-row="${r}" style="${customH ? `height:${customH}px` : ''}"><button class="tl-row-del" data-rowdel="${r}" title="Delete this caption row" aria-label="Delete caption row ${r + 1}"><svg class="ic sm" aria-hidden="true"><use href="#i-trash"/></svg></button><div class="tl-row-resize" data-rowresize="${r}" title="Drag to resize this row"></div>`;
     const row = cuesInRow(r);
     row.forEach(({ c, i }) => { const left = x(c.start), w = Math.max(16, x(c.end) - x(c.start)); html += `<div class="tl-block${i === state.activeCue ? ' active' : ''}${i === state.selCue ? ' sel' : ''}" data-i="${i}" style="left:${left}px;width:${w}px"><div class="tl-handle l"></div><div class="txt">${escapeHtml(c.text)}</div><div class="tl-handle r"></div></div>`; });
     // Linked-edit handles: when ON, draw a draggable pill between adjacent

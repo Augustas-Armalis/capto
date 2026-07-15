@@ -34,22 +34,22 @@
            the dropzone. The big upload card — drop a file or click to pick. The
            engine + language live inside it, centered. -->
       <div class="home-dropzone" id="homeDropzone" tabindex="0">
-        <input type="file" id="homeFileInput" accept="video/*" hidden />
+        <input type="file" id="homeFileInput" name="video" accept="video/*" aria-label="Choose a video" hidden />
         <div class="hd-inner">
           <div class="hd-icon"><svg class="ic"><use href="#i-upload"/></svg></div>
           <h2>Drop a video or <span class="link">click to upload</span></h2>
           <p>MP4 · MOV · WebM · MKV — files stay on your machine.</p>
         </div>
         <div class="home-tx-row" id="homeTxRow">
-          <label hidden><span>Engine</span><select id="homeEngine"></select></label>
-          <label><span>Spoken language</span><select id="homeLang"></select></label>
-          <label id="homeModelField"><span>Local model</span><select id="homeModel"></select></label>
+          <label hidden><span>Engine</span><select id="homeEngine" aria-label="Caption engine"></select></label>
+          <label><span>Spoken language</span><select id="homeLang" aria-label="Spoken language"></select></label>
+          <label id="homeModelField"><span>Local model</span><select id="homeModel" aria-label="Local model"></select></label>
         </div>
       </div>
 
       <div class="home-row">
         <h2>Your projects <span class="muted" id="homeCount"></span></h2>
-        <input type="text" id="homeFilter" placeholder="Search…" class="search" />
+        <input type="text" id="homeFilter" name="project-search" placeholder="Search…" aria-label="Search projects" autocomplete="off" class="search" />
       </div>
       <div class="home-grid" id="homeGrid"></div>
       <p class="home-empty" id="homeEmpty" hidden>No saved projects yet. Drop a video to get started.</p>
@@ -78,7 +78,7 @@
           <button id="zIn" title="Zoom in" aria-label="Zoom in">＋</button>
           <button id="zFit" title="Fit" aria-label="Fit video to canvas">⤢</button>
           <span class="ct-sep"></span>
-          <select id="previewQ" title="Playback quality (lower = smoother on big videos)">
+          <select id="previewQ" title="Playback quality (lower = smoother on big videos)" aria-label="Playback quality">
             <option value="auto">Auto</option>
             <option value="orig">Original</option>
             <option value="720">720p</option>
@@ -95,7 +95,7 @@
           <button class="btn ghost sm" id="tlAddCueBtn" title="Add caption at playhead (N)"><svg class="ic sm"><use href="#i-plus"/></svg>Add caption</button>
           <label class="toggle-mini"><input type="checkbox" id="linkChk" title="Linked editing — drag the shared edge of touching captions to retime both at once"> <span>Link adjacent</span></label>
           <label class="toggle-mini"><input type="checkbox" id="loopChk"> <span>Loop caption</span></label>
-          <div class="zoom"><span style="font-size:11px;color:var(--faint)">Zoom</span><input type="range" id="tlZoom" min="1" max="10" step="0.1" value="1"></div>
+          <div class="zoom"><span style="font-size:11px;color:var(--faint)">Zoom</span><input type="range" id="tlZoom" min="1" max="10" step="0.1" value="1" aria-label="Timeline zoom"></div>
         </div>
       </div>
       <div class="timeline-wrap">
@@ -106,7 +106,7 @@
       <div class="status" id="status"></div>
     </section>
 
-    <div class="resizer" id="resizer"><button class="collapse-btn" id="collapseBtn" title="Collapse sidebar">›</button></div>
+    <div class="resizer" id="resizer"><button class="collapse-btn" id="collapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar">›</button></div>
 
     <aside class="panel" id="panel">
       <div class="tabs">
@@ -118,13 +118,13 @@
       <div class="tabpane" id="tab-captions">
         <div class="retranscribe">
           <div class="rt-controls">
-            <select id="editEngine" title="Caption engine" hidden></select>
-            <select id="editLang" title="Spoken language"></select>
-            <select id="editModel" title="Local model" hidden></select>
+            <select id="editEngine" title="Caption engine" aria-label="Caption engine" hidden></select>
+            <select id="editLang" title="Spoken language" aria-label="Spoken language"></select>
+            <select id="editModel" title="Local model" aria-label="Local model" hidden></select>
           </div>
           <button class="btn ghost sm" id="retranscribeBtn" title="Regenerate captions from the audio with the chosen engine + language">↻ Regenerate</button>
         </div>
-        <div class="rowsel" id="capRowSel" hidden><label>Row</label><select id="capRow"></select></div>
+        <div class="rowsel" id="capRowSel" hidden><label>Row</label><select id="capRow" aria-label="Caption row"></select></div>
         <div class="cue-toolbar">
           <button class="btn ghost sm" id="selectAllBtn" title="Select all (⌘A)">Select all</button>
           <button class="btn primary sm" id="addCueBtn" title="Add caption at playhead (N)"><svg class="ic sm"><use href="#i-plus"/></svg>Add caption</button>
@@ -138,11 +138,11 @@
 
       <div class="tabpane" id="tab-script" hidden>
         <p class="script-help">Select words below (click a word, or click‑drag across several). Each selection becomes an editable line. Edit the text, then <b>Rewrite</b> to rebuild the captions at the original timing.</p>
-        <div class="rowsel" id="scriptRowSel" hidden><label>Row</label><select id="scriptRow"></select></div>
+        <div class="rowsel" id="scriptRowSel" hidden><label>Row</label><select id="scriptRow" aria-label="Script row"></select></div>
         <div class="script-para" id="scriptPara"></div>
         <div class="script-segs" id="scriptSegs"></div>
         <div class="script-actions">
-          <button class="btn ghost sm icon" id="scriptCopy" title="Copy full transcript"><svg class="ic sm"><use href="#i-copy"/></svg></button>
+          <button class="btn ghost sm icon" id="scriptCopy" title="Copy full transcript" aria-label="Copy full transcript"><svg class="ic sm" aria-hidden="true"><use href="#i-copy"/></svg></button>
           <button class="btn ghost" id="scriptOneWord" title="Create one caption per word">One word per word</button>
           <button class="btn ghost" id="scriptClear">Clear</button>
           <button class="btn primary" id="scriptRewrite">Rewrite captions</button>
@@ -162,12 +162,12 @@
           <h1>Caption your video</h1>
           <p>Drop a clip or choose a file — Capto auto‑captions it with AI. Everything stays on your machine.</p>
           <button class="btn primary lg" id="pickBtn">Choose a video</button>
-          <input type="file" id="fileInput" accept="video/*" hidden />
+          <input type="file" id="fileInput" name="video" accept="video/*" aria-label="Choose a video" hidden />
         </div>
         <div class="upload-settings">
-          <div class="field" hidden><label>Engine</label><select id="uploadEngine"></select></div>
-          <div class="field"><label>Spoken language</label><select id="uploadLang"></select></div>
-          <div class="field" id="uploadModelField"><label>Local model</label><select id="uploadModel"></select></div>
+          <div class="field" hidden><label>Engine</label><select id="uploadEngine" aria-label="Caption engine"></select></div>
+          <div class="field"><label>Spoken language</label><select id="uploadLang" aria-label="Spoken language"></select></div>
+          <div class="field" id="uploadModelField"><label>Local model</label><select id="uploadModel" aria-label="Local model"></select></div>
           <p class="us-hint" id="uploadHint"></p>
         </div>
       </div>
