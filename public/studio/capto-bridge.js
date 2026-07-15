@@ -37,10 +37,12 @@
   // Lithuanian) are pinned to the TOP; the rest follow alphabetically.
   window.__captoLangs = [
     ['auto', 'Auto-detect'],
-    // ── pinned: most popular first ──
-    ['en', 'English'], ['es', 'Spanish'], ['pt', 'Portuguese'], ['fr', 'French'],
+    // ── Capto focus languages, always pinned first ──
+    ['lt', 'Lithuanian'], ['en', 'English'],
+    // ── other popular languages ──
+    ['es', 'Spanish'], ['pt', 'Portuguese'], ['fr', 'French'],
     ['de', 'German'], ['it', 'Italian'], ['nl', 'Dutch'], ['ru', 'Russian'],
-    ['pl', 'Polish'], ['uk', 'Ukrainian'], ['lt', 'Lithuanian'], ['tr', 'Turkish'],
+    ['pl', 'Polish'], ['uk', 'Ukrainian'], ['tr', 'Turkish'],
     ['ar', 'Arabic'], ['hi', 'Hindi'], ['ja', 'Japanese'], ['ko', 'Korean'],
     ['zh', 'Chinese'],
     // ── the rest, alphabetical ──
@@ -94,21 +96,20 @@
       }
     } catch { /* keep defaults */ }
   }
-  // Regular users don't pick a transcription engine — they just get Whisper.
-  // The engine selectors only show for admins; everyone else sees language only.
+  // There is one production caption engine: Whisper Large v3. Model selection is
+  // an implementation detail, never a user decision (including admin accounts).
   function applyEngineVisibility() {
-    const admin = !!(window.__captoUser && window.__captoUser.admin);
     ['homeEngine', 'editEngine', 'uploadEngine', 'setEngine'].forEach((id) => {
       const sel = document.getElementById(id);
       if (!sel) return;
       const box = sel.closest('label') || sel.closest('.capto-combo') || sel;
-      box.style.display = admin ? '' : 'none';
+      box.style.display = 'none';
     });
   }
   window.__captoApplyEngineVisibility = applyEngineVisibility;
   window.__captoRenderQuotaUI = function () { try { renderQuotaUI(); } catch {} };
   // Exposed for debugging/verification of the caption engine.
-  window.__captoWordsToCues = function (w, mw, sil) { return wordsToCues(w, mw, sil); };
+  window.__captoWordsToCues = function (w, mw, sil, lang, duration) { return wordsToCues(w, mw, sil, lang, duration); };
   window.__captoDetectSilences = function (s, sr) { return detectSilences(s, sr || 16000); };
 
   const LS_KEY = 'capto-studio-projects';
@@ -361,19 +362,19 @@
   // social, not a giant block jammed against the bottom edge.
   // Bump when the default look changes in a way that should reset every user's
   // saved "default style" once (loadDefaultStyle in app.js drops older versions).
-  const STYLE_VERSION = 2;
+  const STYLE_VERSION = 3;
   function defaultStyle(meta) {
     const H = meta.height || 1920;
-    const fontSize = Math.round(H * 0.046);
+    const fontSize = Math.round(H * 0.043);
     return {
-      fontFamily: 'Inter', fontSize, weight: 700, italic: false, lineHeight: 1.12,
+      fontFamily: 'Inter', fontSize, weight: 600, italic: false, lineHeight: 1.08,
       // Keep Whisper's own (correct) capitalisation — don't force sentence-case,
       // which wrongly capitalises the first word of every caption fragment.
       caseMode: 'none',
-      primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.04), wordSpacing: 0,
+      primaryColor: '#FFFFFF', letterSpacing: -Math.round(fontSize * 0.032), wordSpacing: 0,
       outlineWidth: 0, outlineColor: '#000000',
       shadowEnabled: true, shadowColor: '#000000', shadowOpacity: 60,
-      shadowDistance: Math.max(2, Math.round(H * 0.0025)), shadowBlur: Math.max(2, Math.round(H * 0.0035)),
+      shadowDistance: Math.max(1, Math.round(H * 0.0018)), shadowBlur: Math.max(3, Math.round(H * 0.005)),
       // THE default look: plain Inter, clean white text, NO per-word highlight —
       // no word turning yellow, no colour change, no zoom. Just readable
       // captions. The colour/box/glow "highlight" presets opt back in; here it's
@@ -384,8 +385,8 @@
       // generous, easy-to-grab box so you can move it, resize from the corners,
       // and widen/narrow from the side handles right away — no hunting for a tiny
       // 1–2 word target. Text stays centred inside the box.
-      boxWidth: 0.82,
-      posX: 0.5, posY: 0.78, entrance: 'none', exit: 'none', animMs: 180,
+      boxWidth: 0.84, singleWord: false,
+      posX: 0.5, posY: 0.72, entrance: 'none', exit: 'none', animMs: 180,
       _sv: STYLE_VERSION,
     };
   }
@@ -412,7 +413,19 @@
     }
   }
 
-  function wordsToCues(words, maxWordsOverride, silences) {
+  function wordsToCues(words, maxWordsOverride, silences, language, duration) {
+    // Caption Engine v3 is the single production segmenter. Keep the older code
+    // below as a last-resort fallback for a stale cached HTML page that failed to
+    // load caption-engine.js; new and exported projects always take this path.
+    if (window.CaptoCaptionEngine && typeof window.CaptoCaptionEngine.wordsToCues === 'function') {
+      return window.CaptoCaptionEngine.wordsToCues(words, {
+        language: language || 'en',
+        duration: Number.isFinite(duration) ? duration : Infinity,
+        maxWords: maxWordsOverride === 1 ? 1 : 3,
+        oneWord: maxWordsOverride === 1,
+        silences: silences || [],
+      });
+    }
     // Built from real per-word timing, then grouped into short 1–2 word displays
     // — but ONLY across words spoken back-to-back. A natural pause (> MAXGAP)
     // always ends the caption, so we never stretch a phrase through silence and
@@ -521,7 +534,7 @@
   // ~3-min chunks: small enough that long videos show smooth live progress and
   // captions fill into the timeline chunk-by-chunk, big enough to keep accuracy
   // + stay well under the per-request limits.
-  const AUDIO_SR = 16000, CHUNK_SEC = 180;
+  const AUDIO_SR = 16000, CHUNK_SEC = 120, CHUNK_OVERLAP_SEC = 1.2;
 
   function encodeWav(samples, sampleRate) {
     const n = samples.length;
@@ -562,8 +575,10 @@
   function chunksFromMono(mono) {
     if (!mono || !mono.length) return null;
     const chunkFrames = CHUNK_SEC * AUDIO_SR;
+    const overlapFrames = Math.round(CHUNK_OVERLAP_SEC * AUDIO_SR);
+    const stepFrames = Math.max(1, chunkFrames - overlapFrames);
     const chunks = [];
-    for (let p = 0; p < mono.length; p += chunkFrames) {
+    for (let p = 0; p < mono.length; p += stepFrames) {
       const slice = mono.subarray(p, Math.min(mono.length, p + chunkFrames));
       const wav = encodeWav(slice, AUDIO_SR);
       chunks.push({
@@ -571,6 +586,7 @@
         startSec: p / AUDIO_SR,
         durationSec: Math.max(1, Math.round(slice.length / AUDIO_SR)),
       });
+      if (p + chunkFrames >= mono.length) break;
     }
     return chunks.length ? chunks : null;
   }
@@ -634,15 +650,39 @@
     if (!eng || eng === 'auto') eng = 'groq-whisper-large-v3';
     fd.append('model', eng);
     if (durationSec) fd.append('durationSec', String(Math.round(durationSec)));
-    let res;
-    try { res = await realFetch('/api/transcribe', { method: 'POST', body: fd }); }
-    catch { return { __error: true, error: 'Network error reaching the caption engine.', status: 502 }; }
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { __error: true, error: data.error || 'Transcription failed.', status: res.status };
-    return data;
+    let last = null;
+    // Transient worker/network failures should not throw away a 20-minute job.
+    // Retry the same idempotent audio chunk twice; never retry auth, quota, bad
+    // media, or no-speech responses because those need user action.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let res;
+      try { res = await realFetch('/api/transcribe', { method: 'POST', body: fd }); }
+      catch {
+        last = { __error: true, error: 'Network error reaching the caption engine.', code: 'network', status: 502 };
+        if (attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1))); continue; }
+        return last;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return data;
+      last = { __error: true, error: data.error || 'Transcription failed.', detail: data.detail, code: data.code, status: res.status };
+      const transient = res.status === 408 || res.status === 429 || res.status >= 500;
+      if (!transient || attempt === 2) return last;
+      await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1)));
+    }
+    return last || { __error: true, error: 'Transcription failed.', status: 502 };
   }
 
   function setTranscribeStatus(txt) { const st = document.getElementById('status'); if (st) st.textContent = txt; }
+
+  function combineQuality(samples) {
+    const keys = ['avgLogprob', 'noSpeechProbability', 'compressionRatio', 'avgConfidence'];
+    const out = {};
+    for (const key of keys) {
+      const values = samples.map((s) => s && s[key]).filter(Number.isFinite);
+      if (values.length) out[key] = values.reduce((sum, v) => sum + v, 0) / values.length;
+    }
+    return Object.keys(out).length ? out : null;
+  }
 
   async function transcribe(file, body) {
     const oneW = body.oneWord ? 1 : 0;
@@ -657,21 +697,35 @@
       try {
         const allWords = [];
         let language = body.language, engine = null;
-        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, oneW, silences) : [], language, engine }); } catch {} };
+        const qualitySamples = [];
+        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, oneW, silences, language, mono.length / AUDIO_SR) : [], language, engine }); } catch {} };
         report(0);
         for (let i = 0; i < chunks.length; i++) {
           if (chunks.length > 1) setTranscribeStatus(`Transcribing… part ${i + 1} of ${chunks.length}`);
           const data = await postOneChunk(chunks[i].file, body, chunks[i].durationSec);
-          if (data.__error) return json({ error: data.error }, data.status || 502);
+          if (data.__error) return json({ error: data.error, code: data.code, detail: data.detail }, data.status || 502);
           language = data.language || language;
           if (!engine) engine = data.engine || null;
+          if (data.quality) qualitySamples.push(data.quality);
           const off = chunks[i].startSec;
-          for (const w of (data.words || [])) allWords.push({ word: w.word, start: (w.start || 0) + off, end: (w.end || 0) + off });
+          const acceptAfter = i === 0 ? -Infinity : off + CHUNK_OVERLAP_SEC * 0.55;
+          for (const w of (data.words || [])) {
+            const shifted = { word: w.word, start: (w.start || 0) + off, end: (w.end || 0) + off };
+            // Overlapping audio prevents words from being cut at chunk edges.
+            // Keep the prior chunk's copy in the overlap and only admit the new
+            // chunk once it has crossed the stable midpoint.
+            if (shifted.end <= acceptAfter) continue;
+            const recent = allWords.slice(-8).some((old) =>
+              String(old.word || '').toLocaleLowerCase() === String(shifted.word || '').toLocaleLowerCase() &&
+              Math.abs(old.start - shifted.start) < 0.45
+            );
+            if (!recent) allWords.push(shifted);
+          }
           // Stream progress + the captions-so-far to the editor → live timeline fill.
           report(i + 1);
         }
         if (!allWords.length) return json({ error: 'No speech detected in this clip.' }, 422);
-        return json({ cues: wordsToCues(allWords, oneW, silences), language, engine });
+        return json({ cues: wordsToCues(allWords, oneW, silences, language, mono.length / AUDIO_SR), language, engine, quality: combineQuality(qualitySamples), captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
       } catch {
         /* extraction worked but transcription threw — fall through to raw upload */
       }
@@ -682,10 +736,10 @@
     // captions fall back to Whisper's own gap timing (still hides on big pauses).
     const dur = window.__captoMedia && window.__captoMedia.meta && window.__captoMedia.meta.duration;
     const data = await postOneChunk(file, body, dur || 0);
-    if (data.__error) return json({ error: data.error }, data.status || 502);
+    if (data.__error) return json({ error: data.error, code: data.code, detail: data.detail }, data.status || 502);
     // Pass back the engine that ACTUALLY ran so the editor can attribute later
     // edits to the right model for the learning loop.
-    return json({ cues: wordsToCues(data.words, oneW, silences), language: data.language || body.language, engine: data.engine || null });
+    return json({ cues: wordsToCues(data.words, oneW, silences, data.language || body.language, dur || Infinity), language: data.language || body.language, engine: data.engine || null, quality: data.quality || null, captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
   }
 
   // ───────────────── project persistence (Capto DB, per-account) ─────────────────
@@ -992,7 +1046,8 @@
     setFont(fontPx);
     const words = (cue.words && cue.words.length) ? cue.words : [{ word: cue.text, start: cue.start, end: cue.end }];
     let aw = -1; for (let k = 0; k < words.length; k++) if (t >= words[k].start) aw = k;
-    const toks = words.map((w, i) => ({ text: applyCaseLocal(w.word, s.caseMode), idx: i }));
+    let toks = words.map((w, i) => ({ text: applyCaseLocal(w.word, s.caseMode), idx: i }));
+    if (s.singleWord) toks = aw >= 0 && toks[aw] ? [toks[aw]] : [];
     const measure = () => { for (const tk of toks) tk.w = ctx.measureText(tk.text).width; return (ctx.measureText(' ').width || fontPx * 0.3) + (s.wordSpacing || 0); };
     const spaceW = measure();
     const hasBox = (typeof s.boxWidth === 'number' && s.boxWidth > 0);
@@ -1599,7 +1654,7 @@
         if (!(file instanceof File)) return json({ error: 'No video provided.' }, 400);
         const { url, meta } = await readVideoMeta(file);
         const style = defaultStyle(meta);
-        const state = { meta, style, originalName: file.name, language: 'en', cues: [] };
+        const state = { meta, style, originalName: file.name, language: /^lt\b/i.test(navigator.language || '') ? 'lt' : 'en', cues: [] };
         let id;
         try { id = await captoApi.create(file.name, meta.duration, state); }
         catch { id = genId(); } // offline / signed-out fallback (won't sync)
@@ -1611,7 +1666,7 @@
         captoProject = state;
         pendingRelinkId = null;
         clearRelink();
-        return json({ id, meta, originalName: file.name, style });
+        return json({ id, meta, originalName: file.name, style, language: state.language });
       })();
     }
 

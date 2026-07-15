@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Capto — caption your videos</title>
   <link rel="icon" href="/studio/logo.svg" />
   <link rel="stylesheet" href="/studio/styles.css" />
@@ -16,13 +16,13 @@
 
   <header class="topbar">
     <div class="topbar-left">
-      <button class="topbar-back btn ghost icon" id="backHome" title="Back to home" hidden><svg class="ic"><use href="#i-chevron-left"/></svg></button>
+      <button class="topbar-back btn ghost icon" id="backHome" title="Back to home" aria-label="Back to home" hidden><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
       <button class="brand" id="brandHome" title="Home"><img class="brand-wm" src="/studio/wordmark.png" alt="Capto" /></button>
       <button class="project-name" id="projectName" title="Click to rename" hidden></button>
     </div>
     <div class="topbar-actions" id="topActions" hidden>
-      <button class="btn ghost icon" id="undoBtn" title="Undo (⌘Z)"><svg class="ic"><use href="#i-undo"/></svg></button>
-      <button class="btn ghost icon" id="redoBtn" title="Redo (⌘⇧Z)"><svg class="ic"><use href="#i-redo"/></svg></button>
+      <button class="btn ghost icon" id="undoBtn" title="Undo (⌘Z)" aria-label="Undo"><svg class="ic" aria-hidden="true"><use href="#i-undo"/></svg></button>
+      <button class="btn ghost icon" id="redoBtn" title="Redo (⌘⇧Z)" aria-label="Redo"><svg class="ic" aria-hidden="true"><use href="#i-redo"/></svg></button>
       <button class="btn primary" id="exportBtn"><svg class="ic"><use href="#i-download"/></svg>Export</button>
     </div>
   </header>
@@ -41,7 +41,7 @@
           <p>MP4 · MOV · WebM · MKV — files stay on your machine.</p>
         </div>
         <div class="home-tx-row" id="homeTxRow">
-          <label><span>Engine</span><select id="homeEngine"></select></label>
+          <label hidden><span>Engine</span><select id="homeEngine"></select></label>
           <label><span>Spoken language</span><select id="homeLang"></select></label>
           <label id="homeModelField"><span>Local model</span><select id="homeModel"></select></label>
         </div>
@@ -65,18 +65,18 @@
             <div class="cap-ghost" id="capGhost"></div>
             <div class="cap-layer" id="capLayer"></div>
             <div class="cap-sel-box" id="capSel">
-              <div class="cap-handle tl" data-h="tl"></div><div class="cap-handle tr" data-h="tr"></div>
-              <div class="cap-handle bl" data-h="bl"></div><div class="cap-handle br" data-h="br"></div>
-              <div class="cap-handle ml" data-h="ml" title="Drag to set text box width"></div>
-              <div class="cap-handle mr" data-h="mr" title="Drag to set text box width"></div>
+              <div class="cap-handle tl" data-h="tl" role="slider" tabindex="0" aria-label="Resize caption text"></div><div class="cap-handle tr" data-h="tr" role="slider" tabindex="0" aria-label="Resize caption text"></div>
+              <div class="cap-handle bl" data-h="bl" role="slider" tabindex="0" aria-label="Resize caption text"></div><div class="cap-handle br" data-h="br" role="slider" tabindex="0" aria-label="Resize caption text"></div>
+              <div class="cap-handle ml" data-h="ml" role="slider" tabindex="0" aria-label="Resize caption box width" title="Drag to set text box width"></div>
+              <div class="cap-handle mr" data-h="mr" role="slider" tabindex="0" aria-label="Resize caption box width" title="Drag to set text box width"></div>
             </div>
           </div>
         </div>
         <div class="canvas-tools">
-          <button id="zOut" title="Zoom out">－</button>
+          <button id="zOut" title="Zoom out" aria-label="Zoom out">－</button>
           <span class="zlabel" id="zLabel">100%</span>
-          <button id="zIn" title="Zoom in">＋</button>
-          <button id="zFit" title="Fit">⤢</button>
+          <button id="zIn" title="Zoom in" aria-label="Zoom in">＋</button>
+          <button id="zFit" title="Fit" aria-label="Fit video to canvas">⤢</button>
           <span class="ct-sep"></span>
           <select id="previewQ" title="Playback quality (lower = smoother on big videos)">
             <option value="auto">Auto</option>
@@ -89,7 +89,7 @@
       </div>
 
       <div class="transport">
-        <button class="btn icon round" id="playBtn" title="Play / pause (Space)">▶</button>
+        <button class="btn icon round" id="playBtn" title="Play / pause (Space)" aria-label="Play or pause">▶</button>
         <span class="time" id="timeLabel">0:00 / 0:00</span>
         <div class="tl-tools">
           <button class="btn ghost sm" id="tlAddCueBtn" title="Add caption at playhead (N)"><svg class="ic sm"><use href="#i-plus"/></svg>Add caption</button>
@@ -118,7 +118,7 @@
       <div class="tabpane" id="tab-captions">
         <div class="retranscribe">
           <div class="rt-controls">
-            <select id="editEngine" title="Caption engine"></select>
+            <select id="editEngine" title="Caption engine" hidden></select>
             <select id="editLang" title="Spoken language"></select>
             <select id="editModel" title="Local model" hidden></select>
           </div>
@@ -165,7 +165,7 @@
           <input type="file" id="fileInput" accept="video/*" hidden />
         </div>
         <div class="upload-settings">
-          <div class="field"><label>Engine</label><select id="uploadEngine"></select></div>
+          <div class="field" hidden><label>Engine</label><select id="uploadEngine"></select></div>
           <div class="field"><label>Spoken language</label><select id="uploadLang"></select></div>
           <div class="field" id="uploadModelField"><label>Local model</label><select id="uploadModel"></select></div>
           <p class="us-hint" id="uploadHint"></p>
@@ -204,7 +204,7 @@
     </div>
   </div>
 
-  <div class="toast" id="toast" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <!-- Reusable in-app dialog: replaces browser confirm()/prompt(). -->
   <div class="dlg-backdrop" id="dlg" hidden>
@@ -222,6 +222,7 @@
   <!-- Capto web bridge: reroutes Capto's /api/* data layer to Capto's
        client-side model (local video, Groq transcription, browser export).
        MUST load before app.js so the fetch override is in place at init(). -->
+  <script src="/studio/caption-engine.js"></script>
   <script src="/studio/capto-bridge.js"></script>
   <script src="/studio/caption-presets.js"></script>
   <script src="/studio/app.js"></script>

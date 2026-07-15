@@ -21,6 +21,9 @@ export default async function LearningPage() {
   let vocab: { term: string; weight: number }[] = [];
   let corrections = 0;
   let correctionsTable = true;
+  let eventKinds: { kind: string; count: number }[] = [];
+  let languages: { language: string; count: number }[] = [];
+  let styles: { source: string; count: number }[] = [];
 
   if (isConfigured.db()) {
     const db = getDb();
@@ -49,6 +52,30 @@ export default async function LearningPage() {
     try {
       const [c] = await db.select({ n: sql<number>`count(*)` }).from(captionCorrection);
       corrections = Number(c?.n ?? 0);
+      const kinds = await db
+        .select({ kind: captionCorrection.kind, n: sql<number>`count(*)` })
+        .from(captionCorrection)
+        .groupBy(captionCorrection.kind)
+        .orderBy(desc(sql`count(*)`));
+      eventKinds = kinds.map((r) => ({ kind: r.kind, count: Number(r.n) }));
+
+      const langs = await db
+        .select({ language: captionCorrection.language, n: sql<number>`count(*)` })
+        .from(captionCorrection)
+        .where(sql`${captionCorrection.kind} = 'regenerate' and ${captionCorrection.language} is not null`)
+        .groupBy(captionCorrection.language)
+        .orderBy(desc(sql`count(*)`));
+      languages = langs.map((r) => ({ language: r.language || "unknown", count: Number(r.n) }));
+
+      const sourceExpr = sql<string>`coalesce(${captionCorrection.payload}->>'source', 'custom')`;
+      const styleRows = await db
+        .select({ source: sourceExpr, n: sql<number>`count(*)` })
+        .from(captionCorrection)
+        .where(sql`${captionCorrection.kind} = 'style'`)
+        .groupBy(sourceExpr)
+        .orderBy(desc(sql`count(*)`))
+        .limit(12);
+      styles = styleRows.map((r) => ({ source: r.source, count: Number(r.n) }));
     } catch {
       correctionsTable = false; // migration 0005 not applied yet
     }
@@ -82,7 +109,7 @@ export default async function LearningPage() {
       </div>
 
       {/* engine leaderboard */}
-      <h2 className="heading mt-10 mb-3 text-lg">Engine accuracy (what &ldquo;Auto&rdquo; ranks on)</h2>
+      <h2 className="heading mt-10 mb-3 text-lg">Production engine quality</h2>
       <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)]">
         <table className="w-full text-sm">
           <thead className="bg-[var(--color-bg-elev)] text-left text-[var(--color-fg-muted)]">
@@ -90,7 +117,7 @@ export default async function LearningPage() {
               <th className="px-4 py-2.5 font-medium">Engine</th>
               <th className="px-4 py-2.5 font-medium tnum">Runs</th>
               <th className="px-4 py-2.5 font-medium tnum">Words</th>
-              <th className="px-4 py-2.5 font-medium tnum">Edited</th>
+              <th className="px-4 py-2.5 font-medium tnum">Correction signals</th>
               <th className="px-4 py-2.5 font-medium tnum">Accuracy</th>
             </tr>
           </thead>
@@ -110,8 +137,38 @@ export default async function LearningPage() {
         </table>
       </div>
       <p className="mt-2 text-xs text-[var(--color-fg-subtle)]">
-        Accuracy = 1 − edited&nbsp;words / words. Higher means people corrected that engine less, so Auto prefers it.
+        Quality = 1 − correction signals / words. Signals include text, timing, deletion, split, and merge corrections.
       </p>
+
+      <h2 className="heading mt-10 mb-3 text-lg">Caption Engine v3 signals</h2>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-5">
+          <div className="text-xs uppercase tracking-wide text-[var(--color-fg-subtle)]">Edits captured</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {eventKinds.length ? eventKinds.map((item) => (
+              <span key={item.kind} className="rounded-[var(--radius-pill)] border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-fg-muted)]">
+                {item.kind} <b className="tnum text-white">{item.count.toLocaleString()}</b>
+              </span>
+            )) : <span className="text-sm text-[var(--color-fg-subtle)]">No signals yet.</span>}
+          </div>
+        </div>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-5">
+          <div className="text-xs uppercase tracking-wide text-[var(--color-fg-subtle)]">Runs by language</div>
+          <div className="mt-3 space-y-2 text-sm">
+            {languages.length ? languages.slice(0, 8).map((item) => (
+              <div key={item.language} className="flex justify-between gap-4"><span className="text-[var(--color-fg-muted)]">{item.language}</span><b className="tnum text-white">{item.count.toLocaleString()}</b></div>
+            )) : <span className="text-[var(--color-fg-subtle)]">No language data yet.</span>}
+          </div>
+        </div>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-5">
+          <div className="text-xs uppercase tracking-wide text-[var(--color-fg-subtle)]">Style choices</div>
+          <div className="mt-3 space-y-2 text-sm">
+            {styles.length ? styles.slice(0, 8).map((item) => (
+              <div key={item.source} className="flex justify-between gap-4"><span className="truncate text-[var(--color-fg-muted)]">{item.source}</span><b className="tnum text-white">{item.count.toLocaleString()}</b></div>
+            )) : <span className="text-[var(--color-fg-subtle)]">No style data yet.</span>}
+          </div>
+        </div>
+      </div>
 
       {/* learned vocabulary */}
       <h2 className="heading mt-10 mb-3 text-lg">Learned vocabulary</h2>

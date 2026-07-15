@@ -18,6 +18,7 @@
 @font-face { font-family: 'Poppins'; src: url('/studio/fonts/Poppins-Bold.ttf'); font-weight: 700; }
 
 :root {
+  color-scheme: dark;
   /* Graphite, not blue. Canvas darkest → surfaces gradually lighter for depth. */
   --bg: #050506;
   --bg-2: #0a0a0c;
@@ -44,6 +45,7 @@
   --ease: cubic-bezier(.4,0,.2,1);
 }
 * { box-sizing: border-box; }
+button, [role="button"], [role="slider"], input, select, textarea { touch-action: manipulation; -webkit-tap-highlight-color: rgba(130,165,255,.18); }
 [hidden] { display: none !important; }
 /* Every interactive control gets the right cursor, even raw <button>s. */
 button:not(:disabled), [role="button"], label, summary, a { cursor: pointer; }
@@ -220,6 +222,16 @@ body.theme-light .topbar { background: rgba(255,255,255,.7); }
 .canvas-content { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transform-origin: center; will-change: transform; }
 .frame { position: relative; line-height: 0; box-shadow: 0 20px 70px -25px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.05), 0 0 60px -20px rgba(130,165,255,.12); border-radius: 4px; }
 .frame video { display: block; width: 100%; height: 100%; border-radius: 4px; }
+.frame.caption-dragging::after {
+  content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  border: 1px dashed rgba(255,255,255,.32); border-width: 1px 0;
+  background:
+    linear-gradient(90deg, transparent calc(50% - .5px), rgba(130,165,255,.72) 50%, transparent calc(50% + .5px)),
+    linear-gradient(180deg, transparent calc(16% - .5px), rgba(130,165,255,.45) 16%, transparent calc(16% + .5px)),
+    linear-gradient(180deg, transparent calc(50% - .5px), rgba(130,165,255,.45) 50%, transparent calc(50% + .5px)),
+    linear-gradient(180deg, transparent calc(72% - .5px), rgba(130,165,255,.62) 72%, transparent calc(72% + .5px));
+  box-shadow: inset 0 0 0 1px rgba(130,165,255,.16);
+}
 
 /* caption layer & ghost — two stacked layers:
    - .cap-layer:    overflow:hidden, full opacity → only the portion inside the frame
@@ -268,6 +280,7 @@ body.theme-light .topbar { background: rgba(255,255,255,.7); }
    resize the font; the side handles (◀ ▶) set the text-box width. */
 .cap-handle { position: absolute; width: 15px; height: 15px; background: #fff; border: 2px solid var(--accent); border-radius: 3px; pointer-events: auto; box-shadow: 0 1px 4px rgba(0,0,0,.5); transition: transform .1s; }
 .cap-handle:hover { transform: scale(1.25); }
+.cap-handle:focus-visible { outline: 2px solid #fff; outline-offset: 3px; box-shadow: 0 0 0 5px rgba(130,165,255,.42); }
 .cap-handle.tl { top: -8px; left: -8px; cursor: nwse-resize; }
 .cap-handle.tr { top: -8px; right: -8px; cursor: nesw-resize; }
 .cap-handle.bl { bottom: -8px; left: -8px; cursor: nesw-resize; }
@@ -432,6 +445,7 @@ body.panel-collapsed .collapse-btn { left: 0; }
 /* ---- style presets: live-preview boxes + search + advanced collapse ---- */
 .preset-search { width: 100%; margin-bottom: 10px; }
 .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 300px; overflow-y: auto; padding: 2px; margin: 0 -2px; }
+.layout-controls { background: linear-gradient(180deg, rgba(130,165,255,.06), rgba(130,165,255,.018)); border: 1px solid rgba(130,165,255,.12); border-radius: 10px; margin: 10px; }
 .preset-box { display: flex; flex-direction: column; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0; overflow: hidden; cursor: pointer; transition: .14s var(--ease); font: inherit; }
 .preset-box:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 8px 20px -12px rgba(0,0,0,.7); }
 .pb-stage { display: flex; flex-wrap: wrap; gap: .3em .45em; align-items: center; justify-content: center; min-height: 58px; padding: 12px 10px; font-size: 15px; line-height: 1.3; color: #fff; background: radial-gradient(130% 100% at 50% 0%, #1c1c24, #0b0b0f); border-bottom: 1px solid var(--line); }
@@ -553,6 +567,10 @@ body.theme-light .toast { background: #fff; }
 .status { font-size: 12px; color: var(--muted); min-height: 15px; padding: 0 16px 6px; }
 .status.err { color: #ff9aa9; }
 .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.1); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
 
 /* mobile */
 @media (max-width: 860px) {

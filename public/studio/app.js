@@ -5,6 +5,7 @@ const FONTS = [
   { family: 'Inter', label: 'Inter' }, { family: 'Anton', label: 'Anton' },
   { family: 'Archivo Black', label: 'Archivo Black' }, { family: 'Bebas Neue', label: 'Bebas Neue' },
   { family: 'Poppins', label: 'Poppins' }, { family: 'Lato', label: 'Lato' },
+  { family: 'Georgia', label: 'Georgia Serif' }, { family: 'Courier New', label: 'Courier Mono' },
   { family: 'Luckiest Guy', label: 'Luckiest Guy' }, { family: 'Pacifico', label: 'Pacifico' },
 ];
 const HAS_BOLD = new Set(['Inter', 'Poppins', 'Lato']);
@@ -55,6 +56,8 @@ function normalizeStyle(s) {
   if (typeof s.hollow !== 'boolean') s.hollow = false;
   if (typeof s.gradient !== 'boolean') s.gradient = false;
   if (typeof s.wordReveal !== 'boolean') s.wordReveal = false;
+  if (typeof s.singleWord !== 'boolean') s.singleWord = false;
+  if (typeof s.boxWidth !== 'number') s.boxWidth = 0.84;
   return s;
 }
 const optList = (items, sel) => items.map((i) => i.code === '__sep' ? `<option disabled>${i.label}</option>` : `<option value="${i.code}"${i.code === sel ? ' selected' : ''}>${i.label}</option>`).join('');
@@ -62,7 +65,7 @@ const optList = (items, sel) => items.map((i) => i.code === '__sep' ? `<option d
 /* ============================ state ============================ */
 const state = {
   id: null, meta: null, originalName: '', cues: [], style: null,
-  language: 'en', engine: 'auto', model: 'auto',
+  language: /^lt\b/i.test(navigator.language || '') ? 'lt' : 'en', engine: 'auto', model: 'auto',
   rows: 1, capRow: 0, scriptRow: 0,
   activeCue: -1, selCue: -1, pinnedCueId: null, duration: 0, zoom: 1,
   view: { zoom: 1, panX: 0, panY: 0 },
@@ -90,7 +93,6 @@ const el = {};
 // TypeError that halts the whole script and silently kills every handler below it.
 for (const k of Object.keys(el)) {
   if (!el[k]) {
-    console.warn('[Capto] missing element #' + k + ' — using a safe stub');
     el[k] = document.createElement('div');
   }
 }
@@ -133,7 +135,7 @@ function populateSelectors() {
   const langHtml = getLanguages().map((l) => `<option value="${l.code}"${l.code === state.language ? ' selected' : ''}>${l.label}</option>`).join('');
   [el.uploadLang, el.setLang, el.editLang, el.homeLang].forEach((s) => s.innerHTML = langHtml);
   syncSelectors();
-  el.uploadHint.textContent = 'Auto picks the best engine for your clip. Add your own keys in Settings to unlock more.';
+  el.uploadHint.textContent = 'Capto automatically uses its highest-accuracy caption engine.';
 }
 // Expose so the bridge can refresh the engine list once the signed-in plan loads
 // (fetchMe resolves after init), keeping Pro/Ultra models enabled when applicable.
@@ -145,7 +147,7 @@ function syncSelectors() {
   el.uploadModelField.hidden = true; el.setModelField.hidden = true; el.editModel.hidden = true;
   if (el.homeModelField) el.homeModelField.hidden = true;
 }
-function bindSel(elem, key) { elem.addEventListener('change', () => { state[key] = elem.value; syncSelectors(); if (key === 'engine') populateSelectors(); }); }
+function bindSel(elem, key) { elem.addEventListener('change', () => { const previous = state[key]; state[key] = elem.value; syncSelectors(); if (key === 'engine') populateSelectors(); if (key === 'language' && previous !== state[key] && state.id) sendFeedback({ kind: 'language', payload: { previous, next: state[key] } }); }); }
 [['uploadEngine','engine'],['setEngine','engine'],['editEngine','engine'],['homeEngine','engine'],
  ['uploadLang','language'],['setLang','language'],['editLang','language'],['homeLang','language']].forEach(([id, k]) => bindSel(el[id], k));
 
@@ -248,7 +250,7 @@ async function openExistingProject(id) {
   try {
     const p = await (await fetch('/api/projects/' + id)).json();
     if (p.error) throw new Error(p.error);
-    openProject({ id, meta: p.meta, originalName: p.originalName, style: p.style, cues: p.cues });
+    openProject({ id, meta: p.meta, originalName: p.originalName, style: p.style, cues: p.cues, language: p.language });
     hideHome();
   } catch (err) { toast(err.message || 'Could not open project', true); }
 }
@@ -299,6 +301,7 @@ function resetUpload() {
 /* ============================ project ============================ */
 function openProject(data) {
   state.id = data.id; state.meta = data.meta;
+  state.language = data.language || state.language;
   // Brand-new project (just uploaded, no cues yet) → overlay the user's saved
   // default style on top of the server's defaults. Existing project → use what's saved.
   const stored = loadDefaultStyle();
@@ -312,6 +315,7 @@ function openProject(data) {
     state.rows = Math.max(state.rows || 1, distributeRows(state.cues));
   }
   state.duration = data.meta.duration; state.selCue = -1; state.view = { zoom: 1, panX: 0, panY: 0 };
+  syncSelectors();
   ensureRows();
   // Sequentialise any residual same-row micro-overlaps now that duration + rows
   // are known (the loosened row-spill tolerance can leave a small overlap that
@@ -376,13 +380,16 @@ async function transcribeProject(opts) {
   };
   try {
     const res = await fetch(`/api/projects/${state.id}/transcribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: state.language, engine: state.engine, model: state.engine, oneWord }) });
-    const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Transcription failed');
+    const data = await res.json();
+    if (!res.ok) { const failure = new Error(data.error || 'Transcription failed'); failure.code = data.code || `http_${res.status}`; failure.status = res.status; throw failure; }
     // Tag each cue with the AI's ORIGINAL text + timing so later user edits can be
     // diffed against it for the learning telemetry (see sendFeedback).
     state.cues = data.cues.map((c) => ({ row: 0, ...c, _ai: c.text, _aiStart: c.start, _aiEnd: c.end }));
     state.engineUsed = data.engine || null;   // the model that actually ran (for accuracy attribution)
+    state.transcriptionQuality = data.quality || null;
+    state.captionEngineVersion = data.captionEngineVersion || 2;
     for (const k of Object.keys(fbSent)) delete fbSent[k];           // fresh baseline
-    sendFeedback({ kind: 'regenerate', payload: { count: data.cues.length, language: data.language || state.language } });
+    sendFeedback({ kind: 'regenerate', payload: { count: data.cues.length, language: data.language || state.language, captionEngineVersion: state.captionEngineVersion, quality: state.transcriptionQuality } });
     // Keep first-generation captions on a SINGLE row — the chunker produces
     // non-overlapping cues and the user explicitly wants the Subby-style
     // single-line look. If micro-overlaps from raw STT timings slip through,
@@ -394,7 +401,12 @@ async function transcribeProject(opts) {
     setStatus(`Done — ${data.cues.length} captions${data.language ? ` (${data.language})` : ''}.`);
     renderAll(); renderScript();
     saveSoon();   // PERSIST freshly-generated captions immediately (don't wait for an edit)
-  } catch (err) { setStatus(err.message, true); el.cues.innerHTML = `<div class="cue-empty">⚠️ ${escapeHtml(err.message)}</div>`; }
+  } catch (err) {
+    setStatus(err.message, true);
+    el.cues.innerHTML = `<div class="cue-empty">⚠️ ${escapeHtml(err.message)}<br><button class="btn ghost sm" id="retryTranscription" style="margin-top:10px">Try again</button></div>`;
+    const retry = $('#retryTranscription'); if (retry) retry.onclick = () => transcribeProject(opts);
+    sendFeedback({ kind: 'error', payload: { stage: 'transcription', code: err.code || 'unknown', status: err.status || null, message: String(err.message || '').slice(0, 240), oneWord } });
+  }
   finally { el.retranscribeBtn.disabled = false; window.__captoOnTranscribeProgress = null; hideTranscribeProgress(); }
 }
 // ── live transcription progress bar (fills as captions are generated) ──
@@ -547,7 +559,7 @@ function renderCues() {
         <span class="cue-time" data-act="time">${fmtClock(c.start)} → ${fmtClock(c.end)}</span>
         <button class="cue-del" data-act="del" title="Delete"><svg class="ic sm"><use href="#i-trash"/></svg></button>
       </div>
-      <textarea rows="1" data-k="text" autocapitalize="off" autocorrect="off" spellcheck="false">${escapeHtml(c.text)}</textarea>`;
+      <textarea rows="1" data-k="text" aria-label="Caption text at ${fmtClock(c.start)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">${escapeHtml(c.text)}</textarea>`;
     el.cues.appendChild(div);
   });
   $$('.cue textarea', el.cues).forEach((t) => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; });
@@ -667,6 +679,7 @@ el.addCueBtn.onclick = () => {
   redistributeWords(cue);
   const b = neighborBoundsFor(cue); cue.end = Math.min(cue.end, b.hi);
   state.cues.push(cue);
+  sendFeedback({ kind: 'add', cueId: String(cue.id), finalText: cue.text, payload: { start: cue.start, end: cue.end, row } });
   ensureRows(); fixOverlaps();
   const newIdx = state.cues.length - 1;
   state.capRow = row; state.selCue = newIdx; state.selectedSet.clear(); state.selectedSet.add(newIdx);
@@ -736,6 +749,17 @@ function renderStylePanel() {
       </div>
       <p class="hint-line">Pick a style, then fine-tune under Advanced. Your current look is auto-saved as the default for new videos.</p>
     </div>
+    <div class="section layout-controls">
+      <p class="sec-title">Size & position</p>
+      <div class="field"><label>Text size <span class="val" id="v-size"></span></label><input type="range" id="st-size" min="16" step="0.25"></div>
+      <div class="field"><label>Text box width <span class="val" id="v-boxw"></span></label><input type="range" id="st-boxw" min="20" max="94" step="1"></div>
+      <div class="chips"><div class="chip" data-y="0.16">Top safe</div><div class="chip" data-y="0.5">Middle</div><div class="chip" data-y="0.72">Bottom safe</div></div>
+      <div class="row2" style="margin-top:10px">
+        <div class="field"><label>X <span class="val" id="v-px"></span></label><input type="range" id="st-px" min="0" max="100" step="1"></div>
+        <div class="field"><label>Y <span class="val" id="v-py"></span></label><input type="range" id="st-py" min="8" max="92" step="1"></div>
+      </div>
+      <p class="hint-line">Drag on the video to move. Side handles change width; corner handles change text size.</p>
+    </div>
     <button class="btn ghost sm adv-toggle" id="advToggleTop" aria-expanded="false">Advanced styling ▾</button>
     <div class="collapse adv-controls" id="advControls" style="max-height:0">
     <div class="section" style="margin-top:14px">
@@ -746,7 +770,6 @@ function renderStylePanel() {
         <div class="field"><label>Italic</label><div class="seg icons" id="st-weight"><button data-w="i" style="font-style:italic;font-weight:600">I</button></div></div>
       </div>
       <div class="field"><label>Weight <span class="val" id="v-weight"></span></label><input type="range" id="st-weight-r" min="300" max="900" step="100"></div>
-      <div class="field"><label>Size <span class="val" id="v-size"></span></label><input type="range" id="st-size" min="16" step="0.25"></div>
       <div class="row2">
         <div class="field"><label>Letter spacing <span class="val" id="v-ls"></span></label><input type="range" id="st-ls" min="-15" max="20" step="0.5"></div>
         <div class="field"><label>Line height <span class="val" id="v-lh"></span></label><input type="range" id="st-lh" min="0.8" max="2" step="0.05"></div>
@@ -801,15 +824,6 @@ function renderStylePanel() {
       <div class="field"><label>Speed <span class="val" id="v-animms"></span></label><input type="range" id="st-animms" min="60" max="600" step="20"></div>
       <label class="check" style="margin-top:10px"><input type="checkbox" id="st-wordreveal"><span>Reveal words one by one (build the line as it's spoken)</span></label>
     </div>
-    <div class="section">
-      <p class="sec-title">Position</p>
-      <div class="chips"><div class="chip" data-y="0.12">Top</div><div class="chip" data-y="0.5">Middle</div><div class="chip" data-y="0.78">Bottom</div></div>
-      <div class="row2" style="margin-top:10px">
-        <div class="field"><label>X (left ↔ right) <span class="val" id="v-px"></span></label><input type="range" id="st-px" min="0" max="100" step="1"></div>
-        <div class="field"><label>Y (top ↕ bottom) <span class="val" id="v-py"></span></label><input type="range" id="st-py" min="0" max="100" step="1"></div>
-      </div>
-      <p class="hint-line">Drag the caption on the video to place it freely. Drag its corners to resize. Double‑click to edit text.</p>
-    </div>
     </div>`;
 
   // Preset grid + search
@@ -830,6 +844,19 @@ function renderStylePanel() {
   $('#st-font').value = s.fontFamily; $('#st-font').onchange = () => { s.fontFamily = $('#st-font').value; afterStyle(); };
   $('#st-size').max = Math.round((state.meta.height || 1920) * 0.18);
   rng('#st-size', 'fontSize', '#v-size', (v) => `${(Math.round(v * 100) / 100)}px`);
+  const bw = $('#st-boxw'), vbw = $('#v-boxw');
+  if (bw) {
+    bw.value = Math.round((s.boxWidth || 0.84) * 100);
+    if (vbw) vbw.textContent = Math.round((s.boxWidth || 0.84) * 100) + '%';
+    bw.oninput = () => {
+      s.boxWidth = clamp(parseFloat(bw.value) / 100, 0.2, 0.94);
+      // Keep the whole caption box on canvas as it widens.
+      const half = s.boxWidth / 2;
+      s.posX = clamp(s.posX, half, 1 - half);
+      if (vbw) vbw.textContent = Math.round(s.boxWidth * 100) + '%';
+      refreshPosInputs(); afterStyle();
+    };
+  }
   rng('#st-ls', 'letterSpacing', '#v-ls', (v) => `${v}px`);
   rng('#st-lh', 'lineHeight', '#v-lh', (v) => `${(Math.round(v * 100) / 100)}`);
   rng('#st-ws', 'wordSpacing', '#v-ws', (v) => `${Math.round(v)}px`);
@@ -987,7 +1014,7 @@ function presetBoxHTML(item) {
     : (item.popular ? `<span class="pb-pop">Popular</span>` : '');
   const textShadow = st.shadowEnabled !== false && mode !== 'glow' ? 'text-shadow:0 2px 6px rgba(0,0,0,.7)' : '';
   return `<button class="preset-box" data-key="${escapeAttr(item.key)}" title="${escapeAttr(item.name)}">
-    <span class="pb-stage" style="font-weight:${st.weight || 700};${textShadow}">${spans}</span>
+    <span class="pb-stage" style="font-family:'${escapeAttr(st.fontFamily || 'Inter')}';font-style:${st.italic ? 'italic' : 'normal'};font-weight:${st.weight || 700};letter-spacing:${st.letterSpacing || 0}px;${textShadow}">${spans}</span>
     <span class="pb-name">${escapeHtml(item.name)} ${badge}</span>
   </button>`;
 }
@@ -1020,10 +1047,36 @@ function applyPresetStyle(item) {
     if (b) { b.setAttribute('aria-expanded', 'true'); b.textContent = 'Advanced styling ▴'; }
   }
   afterStyle();
+  queueStyleFeedback(item.key);
   if (item.name) toast(`Applied “${item.name}”`);
 }
 function afterStyle() {
   renderOverlay(); saveSoon(); persistDefaultStyle();
+  queueStyleFeedback(state.style && state.style._preset);
+}
+
+var styleFeedbackTimer = null;
+var lastStyleFeedback = '';
+function queueStyleFeedback(source) {
+  if (!state.id || !state.style) return;
+  clearTimeout(styleFeedbackTimer);
+  styleFeedbackTimer = setTimeout(() => {
+    const s = state.style;
+    const payload = {
+      source: source || s._preset || 'custom',
+      fontFamily: s.fontFamily, weight: styleWeight(s), italic: !!s.italic,
+      fontSizeRatio: state.meta && state.meta.height ? s.fontSize / state.meta.height : null,
+      boxWidth: s.boxWidth, posX: s.posX, posY: s.posY,
+      primaryColor: s.primaryColor, highlightEnabled: !!s.highlightEnabled,
+      highlightMode: s.highlightMode, singleWord: !!s.singleWord,
+      shadowEnabled: !!s.shadowEnabled, entrance: s.entrance,
+      aspectRatio: state.meta && state.meta.height ? state.meta.width / state.meta.height : null,
+    };
+    const sig = JSON.stringify(payload);
+    if (sig === lastStyleFeedback) return;
+    lastStyleFeedback = sig;
+    sendFeedback({ kind: 'style', payload });
+  }, 1200);
 }
 
 // ---- local style persistence ----
@@ -1037,7 +1090,7 @@ function loadDefaultStyle() {
     // Drop a saved default from before the plain-Inter reset (no _sv / older
     // version) so everyone picks up the new clean default once. New choices the
     // user makes after this still persist normally (they carry the current _sv).
-    if (s && (typeof s._sv !== 'number' || s._sv < 2)) return null;
+    if (s && (typeof s._sv !== 'number' || s._sv < 3)) return null;
     return s;
   } catch { return null; }
 }
@@ -1190,20 +1243,24 @@ function paintActiveWord(block, cue, t) {
   const mode = s.highlightMode || 'color';
   const bg = s.highlightBg || '#FFE36E';
   const reveal = !!s.wordReveal;
-  const sig = `${aw}|${reveal ? started : 'x'}|${s.highlightEnabled}|${mode}|${s.highlightColor}|${bg}|${s.highlightPill}|${s.highlightScale}|${s.hollow?1:0}|${s.gradient?1:0}`;
+  const single = !!s.singleWord;
+  const sig = `${aw}|${reveal ? started : 'x'}|${single?1:0}|${s.highlightEnabled}|${mode}|${s.highlightColor}|${bg}|${s.highlightPill}|${s.highlightScale}|${s.hollow?1:0}|${s.gradient?1:0}`;
   if (block.dataset.awsig === sig) return; // no change — no DOM mutation
   block.dataset.awsig = sig;
   const spans = block.children;
   for (let k = 0; k < spans.length; k++) {
     const sp = spans[k];
-    const on = s.highlightEnabled && k === aw;
+    if (!sp.classList || !sp.classList.contains('cap-word')) continue;
+    const wordIndex = Number(sp.dataset.w);
+    const on = s.highlightEnabled && wordIndex === aw;
     // reset everything we might set (textShadow falls back to the block's)
     sp.style.color = ''; sp.style.background = ''; sp.style.boxShadow = '';
     sp.style.borderRadius = ''; sp.style.transform = ''; sp.style.textShadow = ''; sp.style.webkitTextStroke = '';
+    sp.style.display = single && wordIndex !== aw ? 'none' : 'inline-block';
     // Word-by-word reveal: words appear (fade + tiny rise) only once they've been
     // spoken; the sentence builds up smoothly. CSS transitions make it glide.
     if (reveal) {
-      if (k <= started) { sp.style.opacity = '1'; }
+      if (wordIndex <= started) { sp.style.opacity = '1'; }
       else { sp.style.opacity = '0'; sp.style.transform = 'translateY(0.18em)'; }
     } else if (sp.style.opacity) { sp.style.opacity = ''; }
     if (!on) continue;
@@ -1347,6 +1404,7 @@ function positionSelBox() {
   el.capSel.style.width = block.offsetWidth + 'px';
   el.capSel.style.height = block.offsetHeight + 'px';
   el.capSel.classList.add('on');
+  refreshSizeInput(); refreshBoxWidthInput();
 }
 
 /* caption drag / select / resize / inline-edit (delegated on frame) */
@@ -1361,7 +1419,7 @@ el.frame.addEventListener('pointerdown', (e) => {
   // another row's caption is also on screen (otherwise the auto-pick snaps the
   // selection back to the lowest row and you can never grab the upper ones).
   state.selCue = i; state.pinnedCueId = state.cues[i].id; state.capRow = state.cues[i].row || 0;
-  state.draggingCaption = true; positionSelBox();
+  state.draggingCaption = true; el.frame.classList.add('caption-dragging'); positionSelBox();
   const fr = el.frame.getBoundingClientRect();
   const sx = e.clientX, sy = e.clientY;
   let moved = false;
@@ -1377,13 +1435,14 @@ el.frame.addEventListener('pointerdown', (e) => {
     if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 4) moved = true;
     let x = (ev.clientX - fr.left) / fr.width - grabDX;
     let y = (ev.clientY - fr.top) / fr.height - grabDY + rowOff;  // map cursor → this caption's row
-    x = clamp(x, -0.4, 1.4);
-    y = clamp(y, -0.3 + rowOff, 1.3 + rowOff);
+    const half = Math.min(0.47, (state.style.boxWidth || 0.84) / 2);
+    x = clamp(x, half, 1 - half);
+    y = clamp(y, 0.08 + rowOff, 0.92 + rowOff);
     if (Math.abs(x - 0.5) < 0.02) x = 0.5;
-    for (const sy2 of [0.12, 0.5, 0.82]) if (Math.abs((y - rowOff) - sy2) < 0.025) y = sy2 + rowOff;
+    for (const sy2 of [0.16, 0.5, 0.72]) if (Math.abs((y - rowOff) - sy2) < 0.025) y = sy2 + rowOff;
     state.style.posX = x; state.style.posY = y; renderOverlay();
   };
-  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; if (moved) { afterStyle(); refreshPosInputs(); } else { highlightActive(); positionSelBox(); } };
+  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; el.frame.classList.remove('caption-dragging'); if (moved) { afterStyle(); refreshPosInputs(); } else { highlightActive(); positionSelBox(); } };
   document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
 });
 // Resize handles. Corners (tl/tr/bl/br) scale FONT size. Side handles (ml/mr)
@@ -1394,7 +1453,7 @@ $$('.cap-handle', el.capSel).forEach((h) => h.addEventListener('pointerdown', (e
   const cueId = state.cues[i].id;
   const block = el.capLayer.querySelector(`.cap-block[data-cue="${cueId}"]`);
   if (!block) return;
-  state.draggingCaption = true;
+  state.draggingCaption = true; el.frame.classList.add('caption-dragging');
   const which = h.dataset.h;
   const fr = el.frame.getBoundingClientRect();
   const br = block.getBoundingClientRect();
@@ -1404,10 +1463,11 @@ $$('.cap-handle', el.capSel).forEach((h) => h.addEventListener('pointerdown', (e
     // Box-width drag: width = 2 × distance from caption centre to the pointer.
     const mv = (ev) => {
       const half = Math.abs(ev.clientX - cx);
-      state.style.boxWidth = clamp((half * 2) / fr.width, 0.18, 1.5);
+      const maxWidth = Math.max(0.2, Math.min(0.94, 2 * Math.min(state.style.posX, 1 - state.style.posX)));
+      state.style.boxWidth = clamp((half * 2) / fr.width, 0.2, maxWidth);
       doRenderOverlay();
     };
-    const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; afterStyle(); };
+    const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; el.frame.classList.remove('caption-dragging'); refreshBoxWidthInput(); afterStyle(); };
     document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
     return;
   }
@@ -1422,10 +1482,36 @@ $$('.cap-handle', el.capSel).forEach((h) => h.addEventListener('pointerdown', (e
     state.style.letterSpacing = state.style.fontSize * lsRatio;
     doRenderOverlay();
   };
-  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; refreshSizeInput(); afterStyle(); };
+  const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); state.draggingCaption = false; el.frame.classList.remove('caption-dragging'); refreshSizeInput(); afterStyle(); };
   document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
 }));
-function refreshSizeInput() { const i = $('#st-size'); if (i) { i.value = state.style.fontSize; const v = $('#v-size'); if (v) v.textContent = (Math.round(state.style.fontSize * 100) / 100) + 'px'; } }
+$$('.cap-handle', el.capSel).forEach((h) => h.addEventListener('keydown', (e) => {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) || state.selCue < 0) return;
+  e.preventDefault(); e.stopPropagation();
+  const direction = (e.key === 'ArrowRight' || e.key === 'ArrowUp') ? 1 : -1;
+  if (h.dataset.h === 'ml' || h.dataset.h === 'mr') {
+    const maxWidth = Math.max(0.2, Math.min(0.94, 2 * Math.min(state.style.posX, 1 - state.style.posX)));
+    state.style.boxWidth = clamp((state.style.boxWidth || 0.84) + direction * 0.02, 0.2, maxWidth);
+    refreshBoxWidthInput();
+  } else {
+    const before = state.style.fontSize || 16;
+    const ratio = (state.style.letterSpacing || 0) / before;
+    state.style.fontSize = clamp(before * (1 + direction * 0.04), 12, state.meta.height * 0.28);
+    state.style.letterSpacing = state.style.fontSize * ratio;
+    refreshSizeInput();
+  }
+  doRenderOverlay(); positionSelBox(); afterStyle();
+}));
+function refreshSizeInput() {
+  const i = $('#st-size');
+  if (i) { i.value = state.style.fontSize; const v = $('#v-size'); if (v) v.textContent = (Math.round(state.style.fontSize * 100) / 100) + 'px'; }
+  $$('.cap-handle:not(.ml):not(.mr)', el.capSel).forEach((h) => h.setAttribute('aria-valuenow', String(Math.round(state.style.fontSize || 0))));
+}
+function refreshBoxWidthInput() {
+  const pct = Math.round((state.style.boxWidth || 0.84) * 100);
+  const i = $('#st-boxw'); if (i) { i.value = pct; const v = $('#v-boxw'); if (v) v.textContent = pct + '%'; }
+  $$('.cap-handle.ml,.cap-handle.mr', el.capSel).forEach((h) => h.setAttribute('aria-valuenow', String(pct)));
+}
 function refreshPosInputs() {
   const s = state.style;
   const px = $('#st-px'), vx = $('#v-px'); if (px) { px.value = Math.round((s.posX != null ? s.posX : 0.5) * 100); if (vx) vx.textContent = Math.round((s.posX != null ? s.posX : 0.5) * 100) + '%'; }
@@ -1504,6 +1590,7 @@ el.tlInner.addEventListener('click', async (e) => {
     const ok = await confirmDialog(`Delete row ${r + 1}? This removes ${inRow.length} caption${inRow.length === 1 ? '' : 's'}.`, { okLabel: 'Delete row', danger: true });
     if (!ok) return;
   }
+  for (const c of inRow) if (c._ai) sendFeedback({ kind: 'delete', cueId: String(c.id), aiText: c._ai, finalText: '', payload: { via: 'row', row: r } });
   // Drop cues on this row; shift higher rows down by one.
   state.cues = state.cues.filter((c) => (c.row || 0) !== r).map((c) => {
     if ((c.row || 0) > r) c.row = (c.row || 0) - 1;
@@ -1783,7 +1870,7 @@ function addScriptSeg(from, to) {
   renderScriptSegs();
 }
 function renderScriptSegs() {
-  el.scriptSegs.innerHTML = scriptSegs.map((s, k) => `<div class="seg-box" data-k="${k}"><span class="num">${k + 1}</span><div style="flex:1"><textarea rows="1">${escapeHtml(s.text)}</textarea><div class="seg-time">${fmtClock(scriptWords[s.from].start)} → ${fmtClock(scriptWords[s.to].end)}</div></div><button class="del" data-del="${k}" title="Remove"><svg class="ic sm"><use href="#i-trash"/></svg></button></div>`).join('');
+  el.scriptSegs.innerHTML = scriptSegs.map((s, k) => `<div class="seg-box" data-k="${k}"><span class="num">${k + 1}</span><div style="flex:1"><textarea rows="1" aria-label="Rewrite caption segment ${k + 1}" autocomplete="off">${escapeHtml(s.text)}</textarea><div class="seg-time">${fmtClock(scriptWords[s.from].start)} → ${fmtClock(scriptWords[s.to].end)}</div></div><button class="del" data-del="${k}" title="Remove" aria-label="Remove segment ${k + 1}"><svg class="ic sm" aria-hidden="true"><use href="#i-trash"/></svg></button></div>`).join('');
   $$('.seg-box textarea', el.scriptSegs).forEach((t, k) => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; t.oninput = () => { scriptSegs[k].text = t.value; autoSizeOne(t); }; });
   $$('[data-del]', el.scriptSegs).forEach((b) => b.onclick = () => { scriptSegs.splice(+b.dataset.del, 1); renderScriptSegs(); highlightScript(); });
 }
@@ -1802,6 +1889,7 @@ if (scriptOneWordBtn) scriptOneWordBtn.onclick = async () => {
 el.scriptRewrite.onclick = () => {
   if (!scriptSegs.length) return toast('Select some words first.', true);
   const r = state.scriptRow;
+  const previousCues = cuesInRow(r).map(({ c }) => ({ id: c.id, start: c.start, end: c.end, text: c.text }));
   const stamp = Date.now();
   const newCues = scriptSegs.map((s, k) => {
     const origWords = scriptWords.slice(s.from, s.to + 1);
@@ -1822,6 +1910,17 @@ el.scriptRewrite.onclick = () => {
       redistributeWords(cue);
     }
     return cue;
+  });
+  const segmentKind = newCues.length > previousCues.length ? 'split' : (newCues.length < previousCues.length ? 'merge' : 'split');
+  sendFeedback({
+    kind: segmentKind,
+    payload: {
+      row: r,
+      beforeCount: previousCues.length,
+      afterCount: newCues.length,
+      before: previousCues,
+      after: newCues.map((c) => ({ start: c.start, end: c.end, text: c.text })),
+    },
   });
   // Replace just this row's cues, then sort the whole list by (row, start) so
   // activeCueInRow/highlight/timeline all stay in lockstep.
@@ -1934,7 +2033,11 @@ window.addEventListener('keydown', (e) => {
   if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && state.selectedSet.size) {
     e.preventDefault();
     const sorted = [...state.selectedSet].sort((a, b) => b - a);
-    sorted.forEach((i) => state.cues.splice(i, 1));
+    sorted.forEach((i) => {
+      const c = state.cues[i];
+      if (c && c._ai) sendFeedback({ kind: 'delete', cueId: String(c.id), aiText: c._ai, finalText: '', payload: { via: 'keyboard' } });
+      state.cues.splice(i, 1);
+    });
     clearCueSel(); ensureRows(); renderAll(); renderScript(); saveSoon();
     toast(`Deleted ${sorted.length} captions`);
     return;
@@ -2005,7 +2108,7 @@ var saveTimer = null, savePending = false;
 function doSave() {
   savePending = false;
   if (!state.id) return;
-  fetch(`/api/projects/${state.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues: state.cues, style: state.style }) }).catch(() => {});
+  fetch(`/api/projects/${state.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues: state.cues, style: state.style, language: state.language }) }).catch(() => {});
   sendFeedback();
 }
 function saveSoon() {
@@ -2037,13 +2140,15 @@ function collectFeedbackEvents() {
     const sig = `${c.text}|${(c.start || 0).toFixed(2)}|${(c.end || 0).toFixed(2)}`;
     if (fbSent[c.id] === sig) continue;         // unchanged since last send
     fbSent[c.id] = sig;
-    events.push({
-      kind: textChanged ? 'text' : 'timing',
-      cueId: String(c.id),
-      aiText: c._ai,
-      finalText: c.text,
-      payload: { aiStart: c._aiStart, aiEnd: c._aiEnd, finalStart: c.start, finalEnd: c.end },
-    });
+    const payload = {
+      aiStart: c._aiStart, aiEnd: c._aiEnd, finalStart: c.start, finalEnd: c.end,
+      deltaStart: (c.start || 0) - (c._aiStart || 0),
+      deltaEnd: (c.end || 0) - (c._aiEnd || 0),
+      wordCount: (c.words || []).length,
+      captionEngineVersion: state.captionEngineVersion || 2,
+    };
+    if (textChanged) events.push({ kind: 'text', cueId: String(c.id), aiText: c._ai, finalText: c.text, payload });
+    if (timingChanged) events.push({ kind: 'timing', cueId: String(c.id), aiText: c._ai, finalText: c.text, payload });
   }
   return events;
 }

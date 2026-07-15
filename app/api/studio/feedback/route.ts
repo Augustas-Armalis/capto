@@ -59,6 +59,8 @@ const KINDS = [
   "add",
   "style",
   "regenerate",
+  "error",
+  "language",
 ] as const;
 
 const EventSchema = z.object({
@@ -114,6 +116,13 @@ export async function POST(req: Request) {
         for (const t of learnedTerms(e.aiText, e.finalText)) terms.add(t);
       } else if (e.kind === "delete" && e.aiText) {
         edited += toWords(e.aiText).length; // a deleted AI line is fully "edited"
+      } else if (e.kind === "timing") {
+        // Timing corrections are a core engine-quality signal too. Count one
+        // word-equivalent per corrected cue so poor timestamps can influence the
+        // learned score without overwhelming actual transcription corrections.
+        edited += 1;
+      } else if (e.kind === "split" || e.kind === "merge") {
+        edited += 1;
       }
     }
     if (edited > 0 && engineProvider && engineModel) await recordEdits(engineProvider, engineModel, edited);

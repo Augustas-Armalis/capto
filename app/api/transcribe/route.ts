@@ -7,7 +7,7 @@ import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
 import { resolveEngine, resolveByokEngine, type ResolvedEngine } from "@/lib/ai/select";
 import { runTranscription, TranscribeError } from "@/lib/ai/transcribe";
 import { consumeTranscribeSeconds, recordRun, topVocabulary, globalVocabulary } from "@/lib/usage";
-import { STT_MODELS, getModel } from "@/lib/ai/models";
+import { STT_MODELS } from "@/lib/ai/models";
 import type { PlanId } from "@/lib/pricing";
 
 export const runtime = "nodejs";
@@ -37,7 +37,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No audio file provided." }, { status: 400 });
   }
   const language = (inForm?.get("language") as string) || "auto";
-  const requestedModel = (inForm?.get("model") as string) || "";
   const durationSec = Math.max(1, Math.round(Number(inForm?.get("durationSec")) || 60));
 
   // ── resolve the signed-in user (guarded) ───────────────────────────────
@@ -58,7 +57,10 @@ export async function POST(req: Request) {
         if (u) {
           plan = u.plan;
           prefs = {
-            aiProvider: requestedModel && getModel(requestedModel) ? requestedModel : u.aiProvider,
+            // One product engine, no user-facing model roulette. Prefer the
+            // highest-accuracy Whisper and let resolveEngine fall back only when
+            // that provider/key is unavailable.
+            aiProvider: "groq-whisper-large-v3",
             aiUseOwnKey: u.aiUseOwnKey,
           };
         }
@@ -170,7 +172,12 @@ async function transcribeAndRespond(
   vocab: string[],
   plan: PlanId,
 ) {
-  const base = "Transcribe accurately with correct spelling, punctuation, and capitalization.";
+  const languagePrompt = language === "lt"
+    ? "The audio is Lithuanian. Preserve Lithuanian letters (ą č ę ė į š ų ū ž), natural Lithuanian punctuation, names, and inflections. Never translate."
+    : language === "en"
+      ? "The audio is English. Preserve natural punctuation, names, numbers, and contractions. Never translate."
+      : "The audio may be Lithuanian or English. Detect the spoken language, preserve its native spelling, and never translate.";
+  const base = `Transcribe accurately. ${languagePrompt}`;
   const prompt = vocab.length ? `${base} Proper nouns: ${vocab.join(", ")}.` : base;
 
   try {
@@ -191,6 +198,7 @@ async function transcribeAndRespond(
       language: result.language || language,
       text: result.text,
       words: result.words,
+      quality: result.quality,
       engine: {
         id: engine.model.id,
         provider: engine.model.provider,

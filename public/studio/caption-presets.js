@@ -15,28 +15,20 @@
   //   font     → override the family (default Inter)
   //   scale    → how much the active word grows (100 = none)
   window.CAPTO_PRESETS = [
-    // THE DEFAULT for everyone: plain Inter, clean white text, NO per-word
-    // highlight — no word turning yellow, no colour change as it's spoken, just
-    // readable captions. `highlight:false` keeps the karaoke colouring OFF; the
-    // presets below opt back in. This is what a fresh transcription looks like
-    // (mirrors defaultStyle() in capto-bridge.js).
-    { id: 'inter', name: 'Inter', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlight: false, scale: 100, sizeRatio: 0.046, shadow: true, popular: true, sample: 'clean and simple' },
-    // No on-word zoom on ANY preset (scale 100) — the highlight is colour/box/
-    // glow only, never a size jump. Clean + readable like the original Subby.
-    { id: 'inter-bold', name: 'Inter Highlight', fontWeight: 700, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', scale: 100, sizeRatio: 0.046, shadow: true, sample: 'keep it simple' },
-    { id: 'hormozi', name: 'Hormozi', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, scale: 100, sizeRatio: 0.046, shadow: true, popular: true, sample: 'this changed everything' },
-    { id: 'karaoke', name: 'Karaoke', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#7c5cff', scale: 100, sizeRatio: 0.042, shadow: true, popular: true, sample: 'follow every word' },
-    { id: 'editorial', name: 'Editorial', fontWeight: 600, caseMode: 'none', tracking: -0.02, fill: WHITE, highlightFill: CYAN, highlightMode: 'color', scale: 100, sizeRatio: 0.04, shadow: true, sample: 'words that earn attention' },
-    { id: 'clean-sans', name: 'Clean Sans', fontWeight: 500, caseMode: 'lower', tracking: -0.01, fill: '#f2f3f7', highlightFill: '#f2f3f7', highlightMode: 'underline', accent: CYAN, scale: 100, sizeRatio: 0.038, shadow: true, sample: 'simple is stronger' },
-    { id: 'word-by-word', name: 'Word by Word', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', scale: 100, sizeRatio: 0.058, shadow: true, sample: 'every word hits' },
-    { id: 'beasty', name: 'Beasty', fontWeight: 900, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, outline: 0.02, scale: 100, sizeRatio: 0.052, shadow: true, sample: 'you wont believe this' },
-    { id: 'neon', name: 'Neon', fontWeight: 700, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: CYAN, highlightMode: 'glow', accent: CYAN, scale: 100, sizeRatio: 0.043, shadow: true, sample: 'turn it up loud' },
-    { id: 'pop', name: 'Pop', fontWeight: 700, caseMode: 'none', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: FUCHSIA, pill: true, scale: 100, sizeRatio: 0.042, shadow: true, sample: 'made this for you' },
-    { id: 'outline', name: 'Outline', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', hollow: true, scale: 100, sizeRatio: 0.048, shadow: false, sample: 'big bold outline' },
-    { id: 'gradient', name: 'Gradient', fontWeight: 800, caseMode: 'upper', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'glow', accent: VIOLET, gradient: true, scale: 100, sizeRatio: 0.048, shadow: true, sample: 'make it pop' },
-    { id: 'highlighter', name: 'Highlighter', fontWeight: 700, caseMode: 'none', tracking: -0.01, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#8b6cffcc', scale: 100, sizeRatio: 0.042, shadow: true, sample: 'read this part' },
-    { id: 'bubble', name: 'Bubble', fontWeight: 700, caseMode: 'none', tracking: 0, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: WHITE, pill: true, scale: 100, sizeRatio: 0.042, shadow: true, sample: 'so clean right' },
-    { id: 'typewriter', name: 'Typewriter', font: 'Courier New', fontWeight: 500, caseMode: 'none', tracking: 0, fill: WHITE, highlightFill: CYAN, highlightMode: 'color', scale: 100, sizeRatio: 0.04, shadow: true, sample: 'type every word' },
+    // A focused, production set: clear hierarchy, strong contrast, and distinct
+    // use cases instead of many near-duplicates.
+    { id: 'inter', name: 'Capto Clean', fontWeight: 600, caseMode: 'none', tracking: -0.032, fill: WHITE, highlight: false, scale: 100, sizeRatio: 0.043, shadow: true, popular: true, sample: 'clear by default' },
+    { id: 'inter-focus', name: 'Focus Yellow', fontWeight: 700, caseMode: 'none', tracking: -0.03, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', scale: 100, sizeRatio: 0.044, shadow: true, popular: true, sample: 'make every word land' },
+    { id: 'signal', name: 'Signal', fontWeight: 800, caseMode: 'upper', tracking: -0.025, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: YELLOW, scale: 100, sizeRatio: 0.047, shadow: true, popular: true, sample: 'this changes everything' },
+    { id: 'violet-pill', name: 'Violet Pill', fontWeight: 700, caseMode: 'none', tracking: -0.025, fill: WHITE, highlightFill: WHITE, highlightMode: 'box', accent: '#7C5CFF', pill: true, scale: 100, sizeRatio: 0.043, shadow: true, sample: 'follow the thought' },
+    { id: 'soft-glow', name: 'Soft Glow', fontWeight: 600, caseMode: 'none', tracking: -0.025, fill: WHITE, highlightFill: CYAN, highlightMode: 'glow', accent: CYAN, scale: 100, sizeRatio: 0.043, shadow: true, sample: 'light in motion' },
+    { id: 'editorial-serif', name: 'Editorial Serif', font: 'Georgia', italic: true, fontWeight: 600, caseMode: 'none', tracking: -0.025, fill: WHITE, highlightFill: '#FFE7A8', highlightMode: 'color', scale: 100, sizeRatio: 0.042, shadow: true, sample: 'a quieter kind of confidence' },
+    { id: 'word-by-word', name: 'One Word', fontWeight: 800, caseMode: 'upper', tracking: -0.025, fill: WHITE, highlightFill: YELLOW, highlightMode: 'color', singleWord: true, scale: 100, sizeRatio: 0.058, shadow: true, sample: 'every word matters' },
+    { id: 'underline', name: 'Underline', fontWeight: 600, caseMode: 'none', tracking: -0.03, fill: '#F8F8FA', highlightFill: WHITE, highlightMode: 'underline', accent: CYAN, scale: 100, sizeRatio: 0.041, shadow: true, sample: 'simple stays readable' },
+    { id: 'impact', name: 'Impact', font: 'Anton', fontWeight: 700, caseMode: 'upper', tracking: -0.015, fill: WHITE, highlightFill: INK, highlightMode: 'box', accent: '#B9FF66', outline: 0.018, scale: 100, sizeRatio: 0.052, shadow: true, sample: 'stop the scroll' },
+    { id: 'gradient', name: 'Aurora', fontWeight: 800, caseMode: 'upper', tracking: -0.025, fill: WHITE, highlightFill: WHITE, highlightMode: 'glow', accent: VIOLET, gradient: true, scale: 100, sizeRatio: 0.047, shadow: true, sample: 'colour with control' },
+    { id: 'outline', name: 'Outline', fontWeight: 800, caseMode: 'upper', tracking: -0.02, fill: WHITE, highlightFill: WHITE, highlightMode: 'color', hollow: true, scale: 100, sizeRatio: 0.049, shadow: false, sample: 'bold without the block' },
+    { id: 'mono', name: 'Mono Note', font: 'Courier New', fontWeight: 700, caseMode: 'none', tracking: -0.01, fill: WHITE, highlightFill: '#B9FF66', highlightMode: 'color', scale: 100, sizeRatio: 0.039, shadow: true, sample: 'document the moment' },
   ];
 
   // Map a preset → the studio's flat style object (defaultStyle shape).
@@ -51,7 +43,7 @@
       fontFamily: p.font || 'Inter',
       fontSize: fontSize,
       weight: p.fontWeight || 700,
-      italic: false,
+      italic: !!p.italic,
       lineHeight: 1.12,
       caseMode: p.caseMode || 'none',
       primaryColor: p.fill || WHITE,
@@ -73,10 +65,11 @@
       highlightBg: p.accent || YELLOW,
       highlightPill: !!p.pill,
       highlightScale: p.scale != null ? p.scale : (box ? 104 : (mode === 'color' ? 110 : 100)),
+      singleWord: !!p.singleWord,
       // Wide, easy-to-grab text box by default (matches defaultStyle) so captions
       // are movable/resizable straight away, whichever preset you pick.
-      boxWidth: 0.82,
-      posX: 0.5, posY: 0.78,
+      boxWidth: 0.84,
+      posX: 0.5, posY: 0.72,
       entrance: 'none', exit: 'none', animMs: 180,
       _preset: p.id,
     };

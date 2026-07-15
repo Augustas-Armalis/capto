@@ -10,6 +10,12 @@ export type TranscriptResult = {
   words: Word[];
   text: string;
   language: string;
+  quality?: {
+    avgLogprob?: number;
+    noSpeechProbability?: number;
+    compressionRatio?: number;
+    avgConfidence?: number;
+  };
 };
 
 export type TranscribeInput = {
@@ -42,6 +48,7 @@ async function whisperCompatible(
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
+    signal: AbortSignal.timeout(55_000),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -51,11 +58,22 @@ async function whisperCompatible(
     language?: string;
     text?: string;
     words?: { word: string; start: number; end: number }[];
+    segments?: { avg_logprob?: number; no_speech_prob?: number; compression_ratio?: number }[];
+  };
+  const segments = j.segments || [];
+  const mean = (values: (number | undefined)[]) => {
+    const good = values.filter((v): v is number => Number.isFinite(v));
+    return good.length ? good.reduce((sum, v) => sum + v, 0) / good.length : undefined;
   };
   return {
     language: j.language || language,
     text: j.text || "",
     words: (j.words || []).map((w) => ({ word: w.word, start: w.start, end: w.end })),
+    quality: {
+      avgLogprob: mean(segments.map((s) => s.avg_logprob)),
+      noSpeechProbability: mean(segments.map((s) => s.no_speech_prob)),
+      compressionRatio: mean(segments.map((s) => s.compression_ratio)),
+    },
   };
 }
 
@@ -92,7 +110,7 @@ async function deepgram(input: TranscribeInput): Promise<TranscriptResult> {
       channels?: {
         alternatives?: {
           transcript?: string;
-          words?: { word: string; start: number; end: number; punctuated_word?: string }[];
+          words?: { word: string; start: number; end: number; punctuated_word?: string; confidence?: number }[];
         }[];
         detected_language?: string;
       }[];
@@ -100,14 +118,20 @@ async function deepgram(input: TranscribeInput): Promise<TranscriptResult> {
   };
   const alt = j.results?.channels?.[0]?.alternatives?.[0];
   const detected = j.results?.channels?.[0]?.detected_language;
+  const dgWords = alt?.words || [];
   return {
     language: detected || language,
     text: alt?.transcript || "",
-    words: (alt?.words || []).map((w) => ({
+    words: dgWords.map((w) => ({
       word: w.punctuated_word || w.word,
       start: w.start,
       end: w.end,
     })),
+    quality: {
+      avgConfidence: dgWords.length
+        ? dgWords.reduce((sum, w) => sum + (Number.isFinite(w.confidence) ? w.confidence! : 0), 0) / dgWords.length
+        : undefined,
+    },
   };
 }
 
