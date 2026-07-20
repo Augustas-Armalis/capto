@@ -197,7 +197,8 @@
         <button class="btn primary" id="exStart">Export</button>
       </div>
       <div class="modal-actions" id="exDoneActions" hidden>
-        <button class="btn primary" id="exDownload" hidden><svg class="ic"><use href="#i-download"/></svg> Download video</button>
+        <a class="btn primary" id="exDownload" href="" download role="button" hidden><svg class="ic"><use href="#i-download"/></svg> Download video</a>
+        <a class="btn ghost" id="exOpenVideo" href="" target="_blank" rel="noopener" role="button" hidden>Open exported video</a>
         <button class="btn primary" id="exOpenFolder"><svg class="ic"><use href="#i-home"/></svg> Open folder</button>
         <button class="btn ghost" id="exClose">Done</button>
       </div>

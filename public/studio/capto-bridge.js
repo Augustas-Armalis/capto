@@ -911,13 +911,16 @@
     return pickExportMime();
   }
   function extFor(mime) { return mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm'; }
-  function downloadBlob(blob, name) {
+  function queueBrowserDownload(blob, name) {
+    if (window.__captoPendingDownload && window.__captoPendingDownload.url) {
+      try { URL.revokeObjectURL(window.__captoPendingDownload.url); } catch {}
+    }
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-    // Large exports may take a while for the browser to consume from the Blob.
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    window.__captoPendingDownload = { blob, name, url };
+    const download = document.getElementById('exDownload');
+    if (download) { download.href = url; download.download = name; }
+    const open = document.getElementById('exOpenVideo');
+    if (open) open.href = url;
   }
   // The editor is mounted in a same-origin iframe on /editor. Prefer the local
   // picker, but use the top-level window when the embedded context does not
@@ -945,7 +948,7 @@
         window.__captoSaveHandle = null;
         // Do not discard a completed encode if the selected file becomes
         // unwritable. Offer the same explicit-download recovery path instead.
-        window.__captoPendingDownload = { blob, name };
+        queueBrowserDownload(blob, name);
         job.downloadReady = true;
         job.downloadName = name;
         return null;
@@ -954,7 +957,7 @@
     // Downloads triggered after a long async encode can be blocked by the
     // browser. Keep the finished Blob and require one explicit user click,
     // which makes the download reliable in Safari, Firefox and embedded views.
-    window.__captoPendingDownload = { blob, name };
+    queueBrowserDownload(blob, name);
     job.downloadReady = true;
     job.downloadName = name;
     return null;
@@ -2358,12 +2361,14 @@
     const downloadBtn = document.getElementById('exDownload');
     if (downloadBtn) downloadBtn.onclick = () => {
       const pending = window.__captoPendingDownload;
-      if (!pending || !pending.blob) return;
-      downloadBlob(pending.blob, pending.name || 'capto-export.mp4');
-      window.__captoPendingDownload = null;
-      downloadBtn.hidden = true;
-      const title = document.getElementById('exTitle'); if (title) title.textContent = 'Download started ✓';
-      const sub = document.getElementById('exSub'); if (sub) sub.textContent = `Your browser is saving ${pending.name || 'the exported video'}.`;
+      if (!pending || !pending.url) return false;
+      // This is a real <a download> navigation—not a synthetic hidden click.
+      // Keep it available so the user can retry if the browser suppressed it.
+      setTimeout(() => {
+        downloadBtn.innerHTML = `<svg class="ic"><use href="#i-download"/></svg> Download again`;
+        const title = document.getElementById('exTitle'); if (title) title.textContent = 'Download requested';
+        const sub = document.getElementById('exSub'); if (sub) sub.textContent = `If no save dialog appeared, click Download again or Open exported video.`;
+      }, 0);
     };
     // When a reopened project's video can't load (no local file), offer relink.
     const vid = document.getElementById('video');
