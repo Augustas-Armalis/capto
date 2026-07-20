@@ -916,14 +916,23 @@
     const a = document.createElement('a');
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
-    return `your Downloads folder (${name})`;
+    // Large exports may take a while for the browser to consume from the Blob.
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
-  const supportsSavePicker = typeof window.showSaveFilePicker === 'function';
+  // The editor is mounted in a same-origin iframe on /editor. Prefer the local
+  // picker, but use the top-level window when the embedded context does not
+  // expose it even though the browser supports File System Access.
+  let showExportSavePicker = null;
+  try {
+    if (typeof window.showSaveFilePicker === 'function') showExportSavePicker = window.showSaveFilePicker.bind(window);
+    else if (window.top && typeof window.top.showSaveFilePicker === 'function') showExportSavePicker = window.top.showSaveFilePicker.bind(window.top);
+  } catch {}
+  const supportsSavePicker = !!showExportSavePicker;
   // Desktop: the user picks the save location up front (File System Access);
-  // we write the finished export straight there. Mobile / unsupported: a normal
-  // download (lands in the gallery / Downloads).
-  async function saveBlob(blob, name) {
+  // we write the finished export straight there. Mobile / unsupported browsers
+  // get an explicit download button after encoding so pop-up blocking cannot
+  // swallow the result.
+  async function saveBlob(blob, name, job) {
     const h = window.__captoSaveHandle;
     if (h) {
       try {
@@ -932,25 +941,42 @@
         await w.close();
         window.__captoSaveHandle = null;
         return h.name || name;            // saved exactly where the user chose
-      } catch { window.__captoSaveHandle = null; /* user revoked / error → fall back to download */ }
+      } catch {
+        window.__captoSaveHandle = null;
+        // Do not discard a completed encode if the selected file becomes
+        // unwritable. Offer the same explicit-download recovery path instead.
+        window.__captoPendingDownload = { blob, name };
+        job.downloadReady = true;
+        job.downloadName = name;
+        return null;
+      }
     }
-    return downloadBlob(blob, name);      // → "your Downloads folder (name)"
+    // Downloads triggered after a long async encode can be blocked by the
+    // browser. Keep the finished Blob and require one explicit user click,
+    // which makes the download reliable in Safari, Firefox and embedded views.
+    window.__captoPendingDownload = { blob, name };
+    job.downloadReady = true;
+    job.downloadName = name;
+    return null;
   }
   async function chooseSaveLocation() {
-    if (!supportsSavePicker) return;
+    if (!supportsSavePicker) return false;
     const base = ((window.__captoMedia && window.__captoMedia.file && window.__captoMedia.file.name) || 'video').replace(/\.[^.]+$/, '');
     // Match the suggested extension to the format the user picked, so the saved
     // file's name and its actual bytes agree.
     const ext = extFor(resolveExportMime(currentTier()));
     try {
-      const handle = await window.showSaveFilePicker({
+      const handle = await showExportSavePicker({
+        id: 'capto-export',
+        startIn: 'downloads',
         suggestedName: `${base}-captioned.${ext}`,
         types: [{ description: 'Video', accept: { 'video/mp4': ['.mp4'], 'video/webm': ['.webm'] } }],
       });
       window.__captoSaveHandle = handle;
       const p = document.getElementById('exPath');
       if (p) { p.textContent = handle.name; p.title = handle.name; }
-    } catch { /* cancelled */ }
+      return true;
+    } catch { return false; }
   }
   function applyCaseLocal(t, mode) {
     if (mode === 'lower') return String(t).toLocaleLowerCase();
@@ -1155,7 +1181,7 @@
       // stale — drop it so the suggested name matches the newly chosen format.
       if (window.__captoSaveHandle) {
         window.__captoSaveHandle = null;
-        const p = document.getElementById('exPath'); if (p && supportsSavePicker) { p.textContent = 'Ask on export'; p.title = ''; }
+        const p = document.getElementById('exPath'); if (p && supportsSavePicker) { p.textContent = 'Choose a file'; p.title = ''; }
       }
     };
   }
@@ -1290,11 +1316,17 @@
       // Drop any save-location handle from a previous export session so a new
       // export never silently writes into the wrong (old) file.
       window.__captoSaveHandle = null;
-      const p = document.getElementById('exPath'); if (p && supportsSavePicker) { p.textContent = 'Ask on export'; p.title = ''; }
+      const p = document.getElementById('exPath'); if (p && supportsSavePicker) { p.textContent = 'Choose a file'; p.title = ''; }
       exStart.textContent = 'Export'; toggle(['tiers', 'capto-export-opts'], true); if (supportsSavePicker) toggle(['exDest'], true);
     };
-    exStart.onclick = (e) => {
+    exStart.onclick = async (e) => {
       if (step === 0) {
+        // Ask for the destination from this direct click before any encoding.
+        // File pickers lose permission if opened after asynchronous work.
+        if (supportsSavePicker && !window.__captoSaveHandle) {
+          const selected = await chooseSaveLocation();
+          if (!selected) return;
+        }
         toggle(['tiers', 'capto-export-opts', 'exDest'], false);
         panel.style.display = 'block';
         initThumbPreview();
@@ -1784,7 +1816,7 @@
     try { console.log('[Capto export]', JSON.stringify(diag)); } catch {}
 
     const base = (media.file.name || 'video').replace(/\.[^.]+$/, '');
-    job.dest = await saveBlob(blob, `${base}-captioned.${extFor(mime)}`);
+    job.dest = await saveBlob(blob, `${base}-captioned.${extFor(mime)}`, job);
     return blob;
   }
   function startExportJob(id, body) {
@@ -1912,12 +1944,13 @@
       }
     }
 
-    // export job polling — the browser export auto-downloads on completion.
+    // Export job polling. The result is either written to the file handle the
+    // user chose up front, or exposed behind an explicit Download button.
     const jm = path.match(/^\/api\/jobs\/([^/]+)$/);
     if (jm) {
       const job = jobs[jm[1]];
       if (!job) return Promise.resolve(json({ status: 'error', error: 'Job expired.' }));
-      return Promise.resolve(json({ status: job.status, progress: job.progress, error: job.error, savedPath: job.dest || null }));
+      return Promise.resolve(json({ status: job.status, progress: job.progress, error: job.error, savedPath: job.dest || null, downloadReady: !!job.downloadReady, downloadName: job.downloadName || null }));
     }
 
     // desktop-only endpoints (download/folder pickers) — not on web.
@@ -2305,21 +2338,33 @@
     // "Open folder" (post-export reveal) is desktop-app only — never on web.
     const openFolder = document.getElementById('exOpenFolder');
     if (openFolder) openFolder.style.display = 'none';
-    // Save-location row: on desktop (File System Access) let the user choose
-    // where to save BEFORE exporting; on mobile / unsupported, hide it (the file
-    // just downloads to the gallery / Downloads).
+    // Save-location row: supported desktop browsers choose the file before
+    // encoding. Other browsers keep this row visible and offer a reliable,
+    // explicit download click once the export is ready.
     const dest = document.getElementById('exDest');
     const chooseBtn = document.getElementById('exChooseDir');
     const pathEl = document.getElementById('exPath');
     if (dest) {
       if (supportsSavePicker) {
         dest.style.display = '';
-        if (pathEl) { pathEl.textContent = 'Ask on export'; pathEl.title = ''; }
-        if (chooseBtn) { chooseBtn.textContent = 'Choose location…'; chooseBtn.onclick = chooseSaveLocation; }
+        if (pathEl) { pathEl.textContent = 'Choose a file'; pathEl.title = ''; }
+        if (chooseBtn) { chooseBtn.textContent = 'Choose file…'; chooseBtn.onclick = chooseSaveLocation; }
       } else {
-        dest.style.display = 'none';
+        dest.style.display = '';
+        if (pathEl) { pathEl.textContent = 'Choose after export'; pathEl.title = 'Your browser will ask where to save when the video is ready.'; }
+        if (chooseBtn) { chooseBtn.textContent = 'Browser download'; chooseBtn.disabled = true; }
       }
     }
+    const downloadBtn = document.getElementById('exDownload');
+    if (downloadBtn) downloadBtn.onclick = () => {
+      const pending = window.__captoPendingDownload;
+      if (!pending || !pending.blob) return;
+      downloadBlob(pending.blob, pending.name || 'capto-export.mp4');
+      window.__captoPendingDownload = null;
+      downloadBtn.hidden = true;
+      const title = document.getElementById('exTitle'); if (title) title.textContent = 'Download started ✓';
+      const sub = document.getElementById('exSub'); if (sub) sub.textContent = `Your browser is saving ${pending.name || 'the exported video'}.`;
+    };
     // When a reopened project's video can't load (no local file), offer relink.
     const vid = document.getElementById('video');
     if (vid) vid.addEventListener('error', () => {
