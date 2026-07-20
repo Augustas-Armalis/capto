@@ -1500,47 +1500,209 @@
     return new Blob([target.buffer], { type: 'video/mp4' });
   }
 
-  // Legacy real-time capture — only reached when WebCodecs is unavailable (older
-  // Safari/Firefox) or fails. Best-effort; keep the tab focused for this path.
-  async function exportMediaRecorder(job, o, diag) {
-    const { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, quality } = o;
-    const cstream = canvas.captureStream(fps);
-    let audioTrack = null;
+  async function supportsAac(audioBuffer) {
+    if (!audioBuffer || typeof AudioEncoder === 'undefined' || typeof AudioEncoder.isConfigSupported !== 'function') return false;
     try {
-      const vstream = v.captureStream ? v.captureStream() : (v.mozCaptureStream ? v.mozCaptureStream() : null);
-      if (vstream) audioTrack = vstream.getAudioTracks()[0] || null;
-    } catch { /* no audio capture */ }
+      const cfg = { codec: 'mp4a.40.2', sampleRate: audioBuffer.sampleRate, numberOfChannels: Math.min(2, audioBuffer.numberOfChannels), bitrate: 160000 };
+      const result = await AudioEncoder.isConfigSupported(cfg);
+      return !!(result && result.supported);
+    } catch { return false; }
+  }
+
+  // MediaRecorder on Chromium may claim MP4/AAC support yet pass an incoming
+  // WebM Opus track straight into the MP4. Rebuild that recording as a proper
+  // H.264 + AAC fast-start MP4: copy its encoded H.264 samples losslessly and
+  // encode the original audio buffer to AAC with WebCodecs.
+  async function remuxRecordedVideoWithAac(videoBlob, audioBuffer, W, H, fps, diag) {
+    const { Muxer, ArrayBufferTarget } = await import('/studio/vendor/mp4-muxer.mjs');
+    const demux = await demuxMp4(videoBlob);
+    if (!demux.samples.length) throw new Error('Recorded MP4 has no video samples.');
+    const target = new ArrayBufferTarget();
+    const muxer = new Muxer({
+      target, fastStart: 'in-memory', firstTimestampBehavior: 'offset',
+      video: { codec: 'avc', width: W, height: H, frameRate: fps },
+      audio: { codec: 'aac', numberOfChannels: Math.min(2, audioBuffer.numberOfChannels), sampleRate: audioBuffer.sampleRate },
+    });
+    const firstCts = demux.samples[0].cts / demux.samples[0].ts;
+    for (let i = 0; i < demux.samples.length; i++) {
+      const s = demux.samples[i];
+      const chunk = new EncodedVideoChunk({
+        type: s.key ? 'key' : 'delta',
+        timestamp: Math.max(0, Math.round(((s.cts / s.ts) - firstCts) * 1e6)),
+        duration: Math.max(1, Math.round((s.dur / s.ts) * 1e6)),
+        data: s.data,
+      });
+      const meta = i === 0 ? { decoderConfig: { codec: demux.track.codec, codedWidth: W, codedHeight: H, description: demux.description } } : undefined;
+      muxer.addVideoChunk(chunk, meta);
+    }
+    await encodeAudioTrack(audioBuffer, muxer);
+    muxer.finalize();
+    diag.audioRemux = 'aac';
+    return new Blob([target.buffer], { type: 'video/mp4' });
+  }
+
+  // Real-time fallback for sources WebCodecs cannot demux (for example WebM), or
+  // browsers without H.264/AAC WebCodecs support. A MediaStreamTrackProcessor
+  // consumes the source video frames directly when available, so rendering is
+  // independent of requestAnimationFrame and keeps working in a background tab.
+  // Older browsers use requestVideoFrameCallback with a timer safety net.
+  async function exportMediaRecorder(job, o, diag) {
+    const { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, quality, file } = o;
+    let sourceStream = null, sourceAudioTrack = null, audioTrack = null, sourceVideoTrack = null, audioContext = null;
+    try {
+      sourceStream = v.captureStream ? v.captureStream() : (v.mozCaptureStream ? v.mozCaptureStream() : null);
+      if (sourceStream) {
+        sourceAudioTrack = sourceStream.getAudioTracks()[0] || null;
+        sourceVideoTrack = sourceStream.getVideoTracks()[0] || null;
+      }
+    } catch { /* no source stream */ }
+    let mime = resolveExportMime(quality);
+    let aacAudioBuffer = null, remuxAac = false;
+    if (sourceAudioTrack && mime.indexOf('mp4') >= 0) {
+      try { aacAudioBuffer = await decodeFullAudio(file); } catch {}
+      remuxAac = await supportsAac(aacAudioBuffer);
+      if (remuxAac) {
+        // The recording below is video-only; proper AAC is added losslessly in
+        // remuxRecordedVideoWithAac after MediaRecorder stops.
+        v.muted = true;
+        diag.audioCapture = 'aac-remux';
+      } else {
+        // Never put Opus in an .mp4. If this browser cannot encode AAC, emit an
+        // honest WebM/Opus file instead of a deceptively named broken MP4.
+        const webmMime = mimeForFormat('webm');
+        if (webmMime) { mime = webmMime; diag.containerFallback = 'webm-no-aac'; }
+      }
+    }
+    // Route audio through Web Audio instead of attaching the source's encoded
+    // track directly. Direct WebM/Opus tracks were being pass-through muxed into
+    // an .mp4, which looks valid but glitches or plays silently in QuickTime and
+    // social apps. A PCM MediaStreamDestination makes MediaRecorder encode AAC
+    // for MP4 (or Opus for WebM) as requested by the selected container.
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC && sourceAudioTrack && !remuxAac) {
+        audioContext = new AC();
+        const sourceNode = audioContext.createMediaElementSource(v);
+        const audioDest = audioContext.createMediaStreamDestination();
+        sourceNode.connect(audioDest);
+        audioTrack = audioDest.stream.getAudioTracks()[0] || null;
+        diag.audioCapture = audioTrack ? 'web-audio' : 'none';
+      }
+    } catch { audioContext = null; }
+    if (!audioTrack && sourceAudioTrack && !remuxAac) {
+      audioTrack = sourceAudioTrack;
+      if (audioTrack) diag.audioCapture = 'source-track';
+    }
+    let cstream = canvas.captureStream(0);
+    let canvasTrack = cstream.getVideoTracks()[0] || null;
+    const processorMode = !!(
+      sourceVideoTrack && canvasTrack && typeof canvasTrack.requestFrame === 'function' &&
+      typeof MediaStreamTrackProcessor !== 'undefined'
+    );
+    if (!processorMode) {
+      try { if (canvasTrack) canvasTrack.stop(); } catch {}
+      cstream = canvas.captureStream(fps);
+      canvasTrack = cstream.getVideoTracks()[0] || null;
+    }
     const tracks = cstream.getVideoTracks();
     if (audioTrack) tracks.push(audioTrack);
     const stream = new MediaStream(tracks);
-    const mime = resolveExportMime(quality);
     diag.mime = mime;
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: settings.videoBitrate });
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
 
-    let raf = 0;
-    function frame() {
+    let vfcb = 0, fallbackTimer = 0, watchdog = 0, reader = null;
+    let painted = 0, lastPaintAt = Date.now(), lastPaintTime = -1, failure = null;
+    function paint(t) {
       try {
         ctx.drawImage(v, 0, 0, W, H);
-        drawCaptions(ctx, v.currentTime, cues, drawStyle, W, H);
+        drawCaptions(ctx, t, cues, drawStyle, W, H);
         if (watermark) drawWatermark(ctx, W, H);
       } catch {}
-      job.progress = dur ? Math.min(0.999, v.currentTime / dur) : 0;
-      if (!v.paused && !v.ended) raf = requestAnimationFrame(frame);
+      painted++;
+      diag.framesEncoded = painted;
+      lastPaintAt = Date.now(); lastPaintTime = t;
+      job.progress = dur ? Math.min(0.999, t / dur) : 0;
     }
-    const blob = await new Promise((resolve, reject) => {
-      let lastT = -1, stalled = 0;
-      const watch = setInterval(() => {
-        if (v.ended) return;
-        if (Math.abs(v.currentTime - lastT) < 0.02) { stalled++; if (stalled >= 12) { clearInterval(watch); try { rec.stop(); } catch {} } }
-        else { stalled = 0; lastT = v.currentTime; }
-      }, 500);
-      rec.onstop = () => { clearInterval(watch); cancelAnimationFrame(raf); resolve(new Blob(chunks, { type: mime })); };
-      rec.onerror = (e) => { clearInterval(watch); reject((e && e.error) || new Error('Recorder error.')); };
-      v.onended = () => { try { rec.stop(); } catch {} };
-      v.play().then(() => { rec.start(1000); frame(); }).catch(reject);
+    function clearCapture() {
+      if (vfcb && typeof v.cancelVideoFrameCallback === 'function') { try { v.cancelVideoFrameCallback(vfcb); } catch {} }
+      if (fallbackTimer) clearInterval(fallbackTimer);
+      if (watchdog) clearInterval(watchdog);
+      if (reader) { try { reader.cancel(); } catch {} reader = null; }
+      try { cstream.getTracks().forEach((t) => t.stop()); } catch {}
+      try { if (sourceVideoTrack) sourceVideoTrack.stop(); } catch {}
+      if (audioContext) { try { audioContext.close(); } catch {} audioContext = null; }
+    }
+    function startFramePump(fail) {
+      if (processorMode) {
+        diag.captureMode = 'track-processor';
+        const processor = new MediaStreamTrackProcessor({ track: sourceVideoTrack });
+        reader = processor.readable.getReader();
+        (async () => {
+          try {
+            while (!failure && !v.ended) {
+              const part = await reader.read();
+              if (part.done) break;
+              const frame = part.value;
+              try { paint(v.currentTime); canvasTrack.requestFrame(); }
+              finally { frame.close(); }
+            }
+          } catch (e) { if (!v.ended && !failure) fail(e); }
+        })();
+        return;
+      }
+      diag.captureMode = typeof v.requestVideoFrameCallback === 'function' ? 'video-frame-callback' : 'timer';
+      if (typeof v.requestVideoFrameCallback === 'function') {
+        const onVideoFrame = (now, meta) => {
+          if (failure || v.ended) return;
+          paint(meta && Number.isFinite(meta.mediaTime) ? meta.mediaTime : v.currentTime);
+          vfcb = v.requestVideoFrameCallback(onVideoFrame);
+        };
+        vfcb = v.requestVideoFrameCallback(onVideoFrame);
+      }
+      // Safety net for browsers where video-frame callbacks stall in a hidden
+      // tab. It only paints when playback has moved beyond the last drawn frame.
+      fallbackTimer = setInterval(() => {
+        if (!failure && !v.ended && v.currentTime > lastPaintTime + Math.max(0.02, 0.5 / fps)) paint(v.currentTime);
+      }, Math.max(50, Math.round(1000 / fps)));
+    }
+    let blob = await new Promise((resolve, reject) => {
+      const fail = (e) => {
+        if (failure) return;
+        failure = e instanceof Error ? e : new Error('Export playback stalled.');
+        try { v.pause(); } catch {}
+        try { if (rec.state !== 'inactive') rec.stop(); else reject(failure); } catch { reject(failure); }
+      };
+      rec.onstop = () => {
+        clearCapture();
+        if (failure) { reject(failure); return; }
+        const out = new Blob(chunks, { type: mime });
+        if (!painted || !out.size) { reject(new Error('Export produced no video frames.')); return; }
+        resolve(out);
+      };
+      rec.onerror = (e) => fail((e && e.error) || new Error('Recorder error.'));
+      v.onended = () => {
+        paint(Math.min(dur || v.currentTime, v.currentTime));
+        try { if (canvasTrack && typeof canvasTrack.requestFrame === 'function') canvasTrack.requestFrame(); } catch {}
+        setTimeout(() => { try { if (rec.state !== 'inactive') rec.stop(); } catch {} }, 80);
+      };
+      watchdog = setInterval(() => {
+        if (!v.ended && !failure && Date.now() - lastPaintAt > 8000) fail(new Error('Export playback stalled. Keep Capto open and try again.'));
+      }, 1000);
+      // Seed a frame before recording, start the recorder BEFORE playback, then
+      // attach the frame pump. The old order lost the beginning of every clip.
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); paint(0);
+      try { if (canvasTrack && typeof canvasTrack.requestFrame === 'function') canvasTrack.requestFrame(); } catch {}
+      try { rec.start(500); } catch (e) { fail(e); return; }
+      startFramePump(fail);
+      (async () => {
+        if (audioContext && audioContext.state === 'suspended') await audioContext.resume();
+        await v.play();
+      })().catch(fail);
     });
+    if (remuxAac) blob = await remuxRecordedVideoWithAac(blob, aacAudioBuffer, W, H, fps, diag);
+    diag.hasAudio = !!(audioTrack || remuxAac);
     return { blob, mime };
   }
 
@@ -1593,10 +1755,11 @@
     // isn't available — then fall back to the legacy MediaRecorder capture. (A
     // non-MP4/MOV source throws inside demux and also falls back.)
     const wantWebm = body.quality !== 'friend' && getVal('capto-format', '') === 'webm';
-    const avc = wantWebm ? null : await pickAvcCodec(W, H);
+    const isoSource = /^(video\/mp4|video\/quicktime|video\/x-m4v)$/i.test(media.file.type || '') || /\.(mp4|mov|m4v)$/i.test(media.file.name || '');
+    const avc = (wantWebm || !isoSource) ? null : await pickAvcCodec(W, H);
     let blob = null, mime = 'video/mp4';
     try {
-      if (!avc || typeof VideoDecoder === 'undefined') throw new Error('webcodecs-skip');
+      if (!avc || !isoSource || typeof VideoDecoder === 'undefined') throw new Error('webcodecs-skip');
       o.codec = avc;
       diag.encoder = 'webcodecs-mp4'; diag.mime = 'video/mp4'; diag.codec = avc;
       blob = await exportWebCodecs(job, o, diag);
