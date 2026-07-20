@@ -911,16 +911,71 @@
     return pickExportMime();
   }
   function extFor(mime) { return mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm'; }
-  function queueBrowserDownload(blob, name) {
+  const EXPORT_DOWNLOAD_CACHE = 'capto-export-download-v1';
+  let exportDownloadWorkerReady = null;
+  function ensureExportDownloadWorker() {
+    if (exportDownloadWorkerReady) return exportDownloadWorkerReady;
+    exportDownloadWorkerReady = (async () => {
+      if (!('serviceWorker' in navigator) || !('caches' in window) || !window.isSecureContext) return false;
+      try {
+        await navigator.serviceWorker.register('/studio/export-download-sw.js', { scope: '/studio/' });
+        await navigator.serviceWorker.ready;
+        if (!navigator.serviceWorker.controller) {
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 2500);
+            navigator.serviceWorker.addEventListener('controllerchange', () => { clearTimeout(timer); resolve(); }, { once: true });
+          });
+        }
+        return !!navigator.serviceWorker.controller;
+      } catch { return false; }
+    })();
+    return exportDownloadWorkerReady;
+  }
+  ensureExportDownloadWorker();
+
+  function attachmentHeaders(name, blob) {
+    const ascii = String(name || 'capto-export.mp4').replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+    return {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': String(blob.size),
+      'Content-Disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name || 'capto-export.mp4')}`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    };
+  }
+
+  async function queueBrowserDownload(blob, name) {
     if (window.__captoPendingDownload && window.__captoPendingDownload.url) {
-      try { URL.revokeObjectURL(window.__captoPendingDownload.url); } catch {}
+      if (window.__captoPendingDownload.objectUrl) {
+        try { URL.revokeObjectURL(window.__captoPendingDownload.url); } catch {}
+      }
     }
-    const url = URL.createObjectURL(blob);
-    window.__captoPendingDownload = { blob, name, url };
+    let url = null, objectUrl = false, forcedAttachment = false;
+    if (await ensureExportDownloadWorker()) {
+      try {
+        const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        url = `/studio/export-download/${id}/${encodeURIComponent(name)}`;
+        const cache = await caches.open(EXPORT_DOWNLOAD_CACHE);
+        const old = await cache.keys();
+        await Promise.all(old.map((request) => cache.delete(request)));
+        await cache.put(url, new Response(blob, { status: 200, headers: attachmentHeaders(name, blob) }));
+        forcedAttachment = true;
+      } catch { url = null; }
+    }
+    if (!url) { url = URL.createObjectURL(blob); objectUrl = true; }
+    window.__captoPendingDownload = { blob, name, url, objectUrl, forcedAttachment };
     const download = document.getElementById('exDownload');
-    if (download) { download.href = url; download.download = name; }
-    const open = document.getElementById('exOpenVideo');
-    if (open) open.href = url;
+    if (download) {
+      download.href = url;
+      // The service-worker response supplies Content-Disposition: attachment.
+      // Do not add the HTML download attribute for that route: some embedded
+      // browsers suppress it, while a normal navigation downloads correctly.
+      if (forcedAttachment) download.removeAttribute('download');
+      else download.download = name;
+    }
+    // A same-origin response with Content-Disposition: attachment is not treated
+    // as playable media, so browsers download it instead of opening a video tab.
+    if (download && forcedAttachment) setTimeout(() => download.click(), 0);
   }
   // The editor is mounted in a same-origin iframe on /editor. Prefer the local
   // picker, but use the top-level window when the embedded context does not
@@ -948,16 +1003,16 @@
         window.__captoSaveHandle = null;
         // Do not discard a completed encode if the selected file becomes
         // unwritable. Offer the same explicit-download recovery path instead.
-        queueBrowserDownload(blob, name);
+        await queueBrowserDownload(blob, name);
         job.downloadReady = true;
         job.downloadName = name;
         return null;
       }
     }
-    // Downloads triggered after a long async encode can be blocked by the
-    // browser. Keep the finished Blob and require one explicit user click,
-    // which makes the download reliable in Safari, Firefox and embedded views.
-    queueBrowserDownload(blob, name);
+    // Cache the finished Blob behind a same-origin attachment response. This
+    // starts automatically and remains available for a manual retry without
+    // ever navigating to a playable blob-video tab.
+    await queueBrowserDownload(blob, name);
     job.downloadReady = true;
     job.downloadName = name;
     return null;
@@ -2362,12 +2417,10 @@
     if (downloadBtn) downloadBtn.onclick = () => {
       const pending = window.__captoPendingDownload;
       if (!pending || !pending.url) return false;
-      // This is a real <a download> navigation—not a synthetic hidden click.
-      // Keep it available so the user can retry if the browser suppressed it.
+      // Keep the real attachment link available so the user can retry without
+      // encoding again if their browser suppressed the automatic navigation.
       setTimeout(() => {
         downloadBtn.innerHTML = `<svg class="ic"><use href="#i-download"/></svg> Download again`;
-        const title = document.getElementById('exTitle'); if (title) title.textContent = 'Download requested';
-        const sub = document.getElementById('exSub'); if (sub) sub.textContent = `If no save dialog appeared, click Download again or Open exported video.`;
       }, 0);
     };
     // When a reopened project's video can't load (no local file), offer relink.

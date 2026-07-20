@@ -86,7 +86,7 @@ const el = {};
  'uploadEngine','uploadLang','uploadModel','uploadModelField','uploadHint','homeEngine','homeLang','homeModel','homeModelField','scriptPara','scriptSegs','scriptClear',
  'scriptRewrite','scriptCopy','scriptRowSel','scriptRow','tlAddCueBtn','linkChk','exportModal','tiers','exBar','exBarWrap','exTitle','exSub','exMainActions',
  'exDoneActions','exStart','exCancel','exClose','exError','toast','exDest',
- 'homeView','homeGrid','homeCount','homeEmpty','homeFilter','homeSettings','brandHome','exDownload','exOpenVideo',
+ 'homeView','homeGrid','homeCount','homeEmpty','homeFilter','homeSettings','brandHome','exDownload',
  'setTheme','setGroqKey','setOpenaiKey','setCustomKey','setCustomUrl','setCustomModel','saveKeys','setPreviewClick','undoBtn','redoBtn','backHome','projectName'].forEach((id) => el[id] = document.getElementById(id));
 
 // SAFETY NET: if any cached id is missing from the HTML, back it with a detached
@@ -2300,7 +2300,6 @@ function openExport() {
   el.exportModal.hidden = false; el.exError.hidden = true; el.exBarWrap.hidden = true;
   el.exMainActions.hidden = false; el.exDoneActions.hidden = true; el.exDest.hidden = false;
   if (el.exDownload) el.exDownload.hidden = true;
-  if (el.exOpenVideo) el.exOpenVideo.hidden = true;
   el.exTitle.textContent = 'Export video';
   el.exSub.textContent = 'Captions are burned in; audio is kept untouched (except the share preset).';
 }
@@ -2325,9 +2324,8 @@ async function pollJob(jobId) {
       el.exBar.style.width = '100%'; el.exBarWrap.hidden = true;
       lastSavedPath = j.savedPath || null;
       el.exTitle.textContent = j.downloadReady ? 'Export ready ✓' : 'Exported ✓';
-      el.exSub.textContent = j.downloadReady ? 'Your video is ready. Click Download video and choose where to save it.' : `Saved to ${j.savedPath}.`;
+      el.exSub.textContent = j.downloadReady ? 'The download starts automatically. If your browser does not show it, click Download video.' : `Saved to ${j.savedPath}.`;
       if (el.exDownload) el.exDownload.hidden = !j.downloadReady;
-      if (el.exOpenVideo) el.exOpenVideo.hidden = !j.downloadReady;
       el.exDoneActions.hidden = false;
       toast(j.downloadReady ? 'Export ready to download' : `Saved to ${j.savedPath}`);
     }
