@@ -670,6 +670,102 @@
     });
   }
 
+  // AAC inside MP4/MOV is normally handled by WebAudio, but some browser/file
+  // combinations reject the whole container. Demux the compressed AAC track and
+  // decode it with WebCodecs so a large video is never uploaded as one raw file.
+  async function decodeIsoAacMono(file) {
+    if (typeof AudioDecoder === 'undefined' || typeof EncodedAudioChunk === 'undefined') return null;
+    const name = String(file && file.name || '').toLowerCase();
+    const type = String(file && file.type || '').toLowerCase();
+    if (!/\.(mov|mp4|m4v)$/.test(name) && !/(quicktime|mp4)/.test(type)) return null;
+    const MP4Box = await loadMp4Box();
+    const mp4 = MP4Box.createFile();
+    const rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+
+    return await new Promise((resolve, reject) => {
+      let track = null, decoder = null, expected = Infinity, received = 0, finalizing = false, settled = false;
+      const pieces = []; let total = 0;
+      const finish = (value, error) => {
+        if (settled) return;
+        settled = true; clearTimeout(timeout);
+        try { mp4.stop(); } catch {}
+        try { if (decoder && decoder.state !== 'closed') decoder.close(); } catch {}
+        if (error) reject(error); else resolve(value);
+      };
+      const timeout = setTimeout(() => finish(null, new Error('AAC audio preparation timed out')), 45000);
+      const complete = async () => {
+        if (finalizing || settled) return;
+        finalizing = true;
+        try {
+          await withTimeout(decoder.flush(), 20000, 'AAC decoding stalled.');
+          const out = new Float32Array(total); let at = 0;
+          for (const piece of pieces) { out.set(piece, at); at += piece.length; }
+          finish(out.length ? out : null);
+        } catch (e) { finish(null, e); }
+      };
+      mp4.onError = (e) => finish(null, new Error('AAC demux: ' + e));
+      mp4.onReady = (info) => {
+        track = [...(info.audioTracks || []), ...(info.tracks || [])].find((t) => /^mp4a(?:\.|$)/i.test(String(t.codec || '')));
+        if (!track) { finish(null, new Error('no AAC audio track')); return; }
+        const sampleRate = Number(track.audio && track.audio.sample_rate) || Number(track.timescale) || 48000;
+        const channels = Math.max(1, Math.min(8, Number(track.audio && track.audio.channel_count) || 2));
+        const freqIndex = rates.indexOf(sampleRate);
+        if (freqIndex < 0) { finish(null, new Error('unsupported AAC sample rate')); return; }
+        const description = new Uint8Array([(2 << 3) | (freqIndex >> 1), ((freqIndex & 1) << 7) | (channels << 3)]);
+        const config = { codec: String(track.codec || 'mp4a.40.2'), sampleRate, numberOfChannels: channels, description };
+        expected = Math.max(1, Number(track.nb_samples) || 1);
+        (async () => {
+          const support = typeof AudioDecoder.isConfigSupported === 'function' ? await AudioDecoder.isConfigSupported(config) : { supported: true };
+          if (!support || !support.supported || settled) throw new Error('AAC decoder unsupported');
+          decoder = new AudioDecoder({
+            output: (data) => {
+              try {
+                const mono = new Float32Array(data.numberOfFrames);
+                for (let c = 0; c < data.numberOfChannels; c++) {
+                  const plane = new Float32Array(data.numberOfFrames);
+                  data.copyTo(plane, { planeIndex: c, format: 'f32-planar' });
+                  for (let i = 0; i < mono.length; i++) mono[i] += plane[i] / data.numberOfChannels;
+                }
+                const part = resampleMono(mono, data.sampleRate);
+                if (part && part.length) { pieces.push(part); total += part.length; }
+              } catch (e) { finish(null, e); }
+              finally { data.close(); }
+            },
+            error: (e) => finish(null, e),
+          });
+          decoder.configure(config);
+          mp4.setExtractionOptions(track.id, null, { nbSamples: 500 });
+          mp4.start();
+        })().catch((e) => finish(null, e));
+      };
+      mp4.onSamples = (id, user, samples) => {
+        if (!decoder || !track || id !== track.id || settled) return;
+        try {
+          for (const sample of samples) {
+            received++;
+            decoder.decode(new EncodedAudioChunk({
+              type: 'key',
+              timestamp: Math.round((sample.cts / sample.timescale) * 1e6),
+              duration: Math.max(1, Math.round((sample.duration / sample.timescale) * 1e6)),
+              data: sample.data,
+            }));
+          }
+          if (received >= expected) void complete();
+        } catch (e) { finish(null, e); }
+      };
+      (async () => {
+        const step = 8 * 1024 * 1024;
+        for (let offset = 0; offset < file.size && !settled; offset += step) {
+          const end = Math.min(file.size, offset + step);
+          const ab = await file.slice(offset, end).arrayBuffer(); ab.fileStart = offset;
+          mp4.appendBuffer(ab);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        if (!settled) mp4.flush();
+      })().catch((e) => finish(null, e));
+    });
+  }
+
   // Decode any media file → mono Float32 PCM @16kHz (what both Whisper and the
   // WAV chunker want). Returns a fresh copy so it can be transferred zero-copy.
   async function decodeMono16k(file) {
@@ -693,7 +789,8 @@
       }
     }
     setTranscribeStatus('Preparing MOV audio…');
-    try { return await decodeIsoPcmMono(file); }
+    try { const pcm = await decodeIsoPcmMono(file); if (pcm && pcm.length) return pcm; } catch {}
+    try { return await decodeIsoAacMono(file); }
     catch { return null; }
   }
   // Split already-decoded mono PCM into locally-aligned WAV chunks (we decode
@@ -767,28 +864,41 @@
   }
 
   async function postOneChunk(file, body, durationSec) {
-    const fd = new FormData();
-    fd.append('file', file, file.name || 'audio.wav');
-    fd.append('language', body.language || 'auto');
     // Default EVERYONE to the best Whisper model (Large v3) — that's Capto's one
     // engine for all. Only an explicit, non-auto choice (the admin engine picker)
     // overrides it. The server still falls back to the user's own-key Whisper if
     // it can't run this exact id, so this is always safe.
     let eng = body.model || body.engine || '';
     if (!eng || eng === 'auto') eng = 'groq-whisper-large-v3';
-    fd.append('model', eng);
-    if (durationSec) fd.append('durationSec', String(Math.round(durationSec)));
     let last = null;
     // Transient worker/network failures should not throw away a 20-minute job.
     // Retry the same idempotent audio chunk twice; never retry auth, quota, bad
     // media, or no-speech responses because those need user action.
     for (let attempt = 0; attempt < 3; attempt++) {
+      const fd = new FormData();
+      fd.append('file', file, file.name || 'audio.wav');
+      fd.append('language', body.language || 'auto');
+      fd.append('model', eng);
+      if (durationSec) fd.append('durationSec', String(Math.round(durationSec)));
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 70000);
       let res;
-      try { res = await realFetch('/api/transcribe', { method: 'POST', body: fd }); }
-      catch {
-        last = { __error: true, error: 'Network error reaching the caption engine.', code: 'network', status: 502 };
+      try { res = await realFetch('/api/transcribe', { method: 'POST', body: fd, credentials: 'same-origin', cache: 'no-store', signal: controller.signal }); }
+      catch (error) {
+        const offline = navigator.onLine === false;
+        const timedOut = error && (error.name === 'AbortError' || error.name === 'TimeoutError');
+        const reason = String(error && error.message || '').slice(0, 120);
+        last = {
+          __error: true,
+          error: offline ? 'You appear to be offline. Reconnect and retry captions.' : timedOut ? 'The caption engine timed out. Retrying did not recover.' : `Could not connect to the caption engine${reason ? ` (${reason})` : ''}.`,
+          detail: reason,
+          code: timedOut ? 'network_timeout' : 'network',
+          status: 502,
+        };
         if (attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1))); continue; }
         return last;
+      } finally {
+        clearTimeout(timeout);
       }
       const data = await res.json().catch(() => ({}));
       if (res.ok) return data;
@@ -901,6 +1011,15 @@
     // Fallback: upload the original file as one request (server may route large
     // paid-tier files to Deepgram). No decoded audio here → no silence map, so
     // captions fall back to Whisper's own gap timing (still hides on big pauses).
+    // Never attempt this for a large video: Cloudflare/browser upload limits can
+    // terminate the connection before an HTTP response, which used to surface as
+    // the useless "Network error reaching the caption engine" message.
+    if (file && file.size > 18 * 1024 * 1024) {
+      return json({
+        error: 'Capto could not read this video audio in your browser. Convert the audio to AAC or PCM and retry; the original video was not uploaded.',
+        code: 'audio_decode_failed',
+      }, 422);
+    }
     const dur = window.__captoMedia && window.__captoMedia.meta && window.__captoMedia.meta.duration;
     const data = await postOneChunk(file, body, dur || 0);
     if (data.__error) return json({ error: data.error, code: data.code, detail: data.detail }, data.status || 502);
@@ -1076,72 +1195,55 @@
     return pickExportMime();
   }
   function extFor(mime) { return mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm'; }
-  const EXPORT_DOWNLOAD_CACHE = 'capto-export-download-v1';
-  let exportDownloadWorkerReady = null;
-  function ensureExportDownloadWorker() {
-    if (exportDownloadWorkerReady) return exportDownloadWorkerReady;
-    exportDownloadWorkerReady = (async () => {
-      if (!('serviceWorker' in navigator) || !('caches' in window) || !window.isSecureContext) return false;
-      try {
-        await navigator.serviceWorker.register('/studio/export-download-sw.js', { scope: '/studio/' });
-        await navigator.serviceWorker.ready;
-        if (!navigator.serviceWorker.controller) {
-          await new Promise((resolve) => {
-            const timer = setTimeout(resolve, 2500);
-            navigator.serviceWorker.addEventListener('controllerchange', () => { clearTimeout(timer); resolve(); }, { once: true });
-          });
-        }
-        return !!navigator.serviceWorker.controller;
-      } catch { return false; }
-    })();
-    return exportDownloadWorkerReady;
+  function withTimeout(promise, ms, message) {
+    let timer;
+    return Promise.race([
+      promise,
+      new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); }),
+    ]).finally(() => clearTimeout(timer));
   }
-  ensureExportDownloadWorker();
-
-  function attachmentHeaders(name, blob) {
-    const ascii = String(name || 'capto-export.mp4').replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
-    return {
-      'Content-Type': 'application/octet-stream',
-      'Content-Length': String(blob.size),
-      'Content-Disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name || 'capto-export.mp4')}`,
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff',
-    };
+  function triggerBrowserDownload(pending) {
+    if (!pending || !pending.url) return false;
+    const a = document.createElement('a');
+    a.href = pending.url;
+    a.download = pending.name || 'capto-export.mp4';
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return true;
   }
 
-  async function queueBrowserDownload(blob, name) {
+  function queueBrowserDownload(blob, name) {
     if (window.__captoPendingDownload && window.__captoPendingDownload.url) {
-      if (window.__captoPendingDownload.objectUrl) {
-        try { URL.revokeObjectURL(window.__captoPendingDownload.url); } catch {}
-      }
+      try { URL.revokeObjectURL(window.__captoPendingDownload.url); } catch {}
     }
-    let url = null, objectUrl = false, forcedAttachment = false;
-    if (await ensureExportDownloadWorker()) {
-      try {
-        const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-        url = `/studio/export-download/${id}/${encodeURIComponent(name)}`;
-        const cache = await caches.open(EXPORT_DOWNLOAD_CACHE);
-        const old = await cache.keys();
-        await Promise.all(old.map((request) => cache.delete(request)));
-        await cache.put(url, new Response(blob, { status: 200, headers: attachmentHeaders(name, blob) }));
-        forcedAttachment = true;
-      } catch { url = null; }
-    }
-    if (!url) { url = URL.createObjectURL(blob); objectUrl = true; }
-    window.__captoPendingDownload = { blob, name, url, objectUrl, forcedAttachment };
+    const pending = { blob, name, url: URL.createObjectURL(blob) };
+    window.__captoPendingDownload = pending;
     const download = document.getElementById('exDownload');
     if (download) {
-      download.href = url;
-      // The service-worker response supplies Content-Disposition: attachment.
-      // Do not add the HTML download attribute for that route: some embedded
-      // browsers suppress it, while a normal navigation downloads correctly.
-      if (forcedAttachment) download.removeAttribute('download');
-      else download.download = name;
+      download.href = pending.url;
+      download.download = name;
     }
-    // A same-origin response with Content-Disposition: attachment is not treated
-    // as playable media, so browsers download it instead of opening a video tab.
-    if (download && forcedAttachment) setTimeout(() => download.click(), 0);
+    // Try immediately. If a browser suppresses async downloads, the visible
+    // Download video button calls this same function inside a real user gesture.
+    triggerBrowserDownload(pending);
   }
+  // Retire the previous cache/service-worker download experiment. It is no
+  // longer part of exporting and clearing it prevents stale controlled tabs
+  // from retaining large finished videos or old download behavior.
+  try {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          const url = String((registration.active || registration.waiting || registration.installing || {}).scriptURL || '');
+          if (url.includes('/studio/export-download-sw.js')) registration.unregister().catch(() => {});
+        }
+      }).catch(() => {});
+    }
+    if ('caches' in window) caches.delete('capto-export-download-v1').catch(() => {});
+  } catch {}
   // The editor is mounted in a same-origin iframe on /editor. Prefer the local
   // picker, but use the top-level window when the embedded context does not
   // expose it even though the browser supports File System Access.
@@ -1168,16 +1270,15 @@
         window.__captoSaveHandle = null;
         // Do not discard a completed encode if the selected file becomes
         // unwritable. Offer the same explicit-download recovery path instead.
-        await queueBrowserDownload(blob, name);
+        queueBrowserDownload(blob, name);
         job.downloadReady = true;
         job.downloadName = name;
         return null;
       }
     }
-    // Cache the finished Blob behind a same-origin attachment response. This
-    // starts automatically and remains available for a manual retry without
-    // ever navigating to a playable blob-video tab.
-    await queueBrowserDownload(blob, name);
+    // Start a direct Blob download and retain the same Blob URL for a manual
+    // retry from the visible Download video button.
+    queueBrowserDownload(blob, name);
     job.downloadReady = true;
     job.downloadName = name;
     return null;
@@ -1628,7 +1729,8 @@
       if (onProg) onProg(Math.min(1, off / total));
       if (aenc.encodeQueueSize > 24) await new Promise((r) => setTimeout(r, 0));
     }
-    await aenc.flush(); aenc.close();
+    try { await withTimeout(aenc.flush(), 20000, 'Audio encoding stalled.'); }
+    finally { try { aenc.close(); } catch {} }
     if (firstError) throw firstError;
   }
   // Lazily load the mp4box UMD demuxer (only when an MP4/MOV export runs).
@@ -1647,7 +1749,7 @@
   }
   // Demux an ISO-BMFF (MP4/MOV) file → { track, description, samples[] }. Rejects
   // for non-MP4 / no-video-track so the caller can fall back to MediaRecorder.
-  async function demuxMp4(file) {
+  async function demuxMp4(file, onProgress) {
     const MP4Box = await loadMp4Box();
     const mp4 = MP4Box.createFile();
     const DataStream = window.DataStream;
@@ -1661,7 +1763,7 @@
     };
     return await new Promise((resolve, reject) => {
       const samples = []; let track = null, description = null, expected = Infinity;
-      const to = setTimeout(() => reject(new Error('demux timeout')), 30000);
+      const to = setTimeout(() => reject(new Error('Video preparation timed out.')), 45000);
       mp4.onError = (e) => { clearTimeout(to); reject(new Error('demux: ' + e)); };
       mp4.onReady = (info) => {
         track = (info.videoTracks && info.videoTracks[0]) || null;
@@ -1676,7 +1778,18 @@
         for (const s of sm) samples.push({ cts: s.cts, dts: s.dts, ts: s.timescale, key: s.is_sync, dur: s.duration, data: s.data });
         if (samples.length >= expected) { clearTimeout(to); resolve({ track, description, samples }); }
       };
-      file.arrayBuffer().then((ab) => { ab.fileStart = 0; mp4.appendBuffer(ab); mp4.flush(); }).catch((e) => { clearTimeout(to); reject(e); });
+      (async () => {
+        const step = 8 * 1024 * 1024;
+        for (let offset = 0; offset < file.size; offset += step) {
+          const end = Math.min(file.size, offset + step);
+          const ab = await file.slice(offset, end).arrayBuffer();
+          ab.fileStart = offset;
+          mp4.appendBuffer(ab);
+          if (onProgress) onProgress(end / Math.max(1, file.size));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        mp4.flush();
+      })().catch((e) => { clearTimeout(to); reject(e); });
     });
   }
   // PRIMARY export: demux the real encoded frames, decode them with VideoDecoder,
@@ -1689,7 +1802,8 @@
     const { canvas, ctx, W, H, fps, cues, drawStyle, watermark, settings, file, codec } = o;
     if (typeof VideoDecoder === 'undefined') throw new Error('no VideoDecoder');
 
-    const demux = await demuxMp4(file); // throws → MediaRecorder fallback (non-MP4 etc.)
+    job.stage = 'Preparing video frames…';
+    const demux = await demuxMp4(file, (p) => { job.progress = 0.03 + p * 0.14; }); // throws → MediaRecorder fallback
     const samples = demux.samples;
     if (!samples.length) throw new Error('no video samples');
     diag.sourceFrames = samples.length;
@@ -1736,19 +1850,22 @@
     const dec = new VideoDecoder({ output: onDecoded, error: (e) => { decErr = decErr || e; } });
     dec.configure({ codec: demux.track.codec, description: demux.description, codedWidth: demux.track.video.width, codedHeight: demux.track.video.height });
 
+    job.stage = 'Encoding video…';
     for (const s of samples) {
       if (encErr || decErr) break;
       dec.decode(new EncodedVideoChunk({ type: s.key ? 'key' : 'delta', timestamp: Math.round((s.cts / s.ts) * 1e6), duration: Math.round((s.dur / s.ts) * 1e6), data: s.data }));
       // Bound the decode + encode pipelines so memory stays flat on long clips.
       while (dec.decodeQueueSize > 8 || venc.encodeQueueSize > 8) { if (encErr || decErr) break; await new Promise((r) => setTimeout(r, 0)); }
     }
-    await dec.flush(); dec.close();
+    try { await withTimeout(dec.flush(), 20000, 'Video decoding stalled.'); }
+    finally { try { dec.close(); } catch {} }
     if (decErr) throw decErr;
-    await venc.flush(); venc.close();
+    try { await withTimeout(venc.flush(), 20000, 'Video encoding stalled.'); }
+    finally { try { venc.close(); } catch {} }
     if (encErr) throw encErr;
     if (!frames) throw new Error('no frames encoded');
 
-    if (hasAudio) { job.progress = 0.84; await encodeAudioTrack(audioBuffer, muxer, (p) => { job.progress = 0.82 + p * 0.15; }); }
+    if (hasAudio) { job.stage = 'Adding audio…'; job.progress = 0.84; await encodeAudioTrack(audioBuffer, muxer, (p) => { job.progress = 0.82 + p * 0.15; }); }
     muxer.finalize();
     diag.hasAudio = hasAudio;
     job.progress = 0.99;
@@ -1973,11 +2090,18 @@
     const k = outH / nH;
     const W = Math.max(2, Math.round(nW * k / 2) * 2), H = Math.max(2, Math.round(outH / 2) * 2);
 
+    job.stage = 'Preparing video…';
+    job.progress = 0.01;
     const v = document.createElement('video');
     v.src = media.url; v.playsInline = true; v.preload = 'auto';
     v.style.cssText = 'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
     document.body.appendChild(v);
-    await new Promise((res, rej) => { v.onloadedmetadata = () => res(); v.onerror = () => rej(new Error('Could not load the video for export.')); });
+    await new Promise((res, rej) => {
+      const timer = setTimeout(() => { try { v.remove(); } catch {} rej(new Error('The source video did not load for export. Re-open it and try again.')); }, 12000);
+      v.onloadedmetadata = () => { clearTimeout(timer); job.progress = 0.03; res(); };
+      v.onerror = () => { clearTimeout(timer); try { v.remove(); } catch {} rej(new Error('Could not load the video for export.')); };
+      v.load();
+    });
     try {
       await document.fonts.load(`${style.italic ? 'italic ' : ''}${style.weight || 700} 64px '${style.fontFamily}'`);
       await document.fonts.ready;
@@ -2024,6 +2148,8 @@
       if (msg && msg !== 'webcodecs-skip') { console.warn('[Capto export] WebCodecs path failed → MediaRecorder fallback:', e); diag.webCodecsError = msg; }
       // Reset the element for a clean real-time pass.
       try { v.pause(); v.currentTime = 0; } catch {}
+      job.stage = 'Recording video…';
+      job.progress = Math.max(job.progress || 0, 0.03);
       diag.encoder = 'mediarecorder';
       const r = await exportMediaRecorder(job, o, diag);
       blob = r.blob; mime = r.mime;
@@ -2039,12 +2165,13 @@
     try { console.log('[Capto export]', JSON.stringify(diag)); } catch {}
 
     const base = (media.file.name || 'video').replace(/\.[^.]+$/, '');
+    job.stage = 'Starting download…';
     job.dest = await saveBlob(blob, `${base}-captioned.${extFor(mime)}`, job);
     return blob;
   }
   function startExportJob(id, body) {
     const jobId = 'j_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const job = { status: 'running', progress: 0, error: null };
+    const job = { status: 'running', progress: 0, error: null, stage: 'Preparing video…' };
     jobs[jobId] = job;
     runExport(job, id, body)
       .then(() => { job.status = 'done'; })
@@ -2173,7 +2300,7 @@
     if (jm) {
       const job = jobs[jm[1]];
       if (!job) return Promise.resolve(json({ status: 'error', error: 'Job expired.' }));
-      return Promise.resolve(json({ status: job.status, progress: job.progress, error: job.error, savedPath: job.dest || null, downloadReady: !!job.downloadReady, downloadName: job.downloadName || null }));
+      return Promise.resolve(json({ status: job.status, progress: job.progress, stage: job.stage || null, error: job.error, savedPath: job.dest || null, downloadReady: !!job.downloadReady, downloadName: job.downloadName || null }));
     }
 
     // desktop-only endpoints (download/folder pickers) — not on web.
@@ -2579,14 +2706,15 @@
       }
     }
     const downloadBtn = document.getElementById('exDownload');
-    if (downloadBtn) downloadBtn.onclick = () => {
+    if (downloadBtn) downloadBtn.onclick = (event) => {
+      event.preventDefault();
       const pending = window.__captoPendingDownload;
       if (!pending || !pending.url) return false;
-      // Keep the real attachment link available so the user can retry without
-      // encoding again if their browser suppressed the automatic navigation.
+      triggerBrowserDownload(pending);
       setTimeout(() => {
         downloadBtn.innerHTML = `<svg class="ic"><use href="#i-download"/></svg> Download again`;
       }, 0);
+      return false;
     };
     // When a reopened project's video can't load (no local file), offer relink.
     const vid = document.getElementById('video');

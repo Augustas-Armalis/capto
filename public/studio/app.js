@@ -2321,7 +2321,11 @@ el.exStart.onclick = async () => {
 async function pollJob(jobId) {
   try {
     const j = await (await fetch(`/api/jobs/${jobId}`)).json();
-    if (j.status === 'running') { el.exBar.style.width = `${Math.round((j.progress || 0) * 100)}%`; setTimeout(() => pollJob(jobId), 400); }
+    if (j.status === 'running') {
+      el.exBar.style.width = `${Math.max(1, Math.round((j.progress || 0) * 100))}%`;
+      if (j.stage) el.exSub.textContent = j.stage;
+      setTimeout(() => pollJob(jobId), 400);
+    }
     else if (j.status === 'done') {
       el.exBar.style.width = '100%'; el.exBarWrap.hidden = true;
       lastSavedPath = j.savedPath || null;
