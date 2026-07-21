@@ -399,7 +399,9 @@ async function transcribeProject(opts) {
     state.rows = 1;
     state.capRow = 0; state.scriptRow = 0;
     fixOverlaps();
-    setStatus(`Done — ${data.cues.length} captions${data.language ? ` (${data.language})` : ''}.`);
+    setStatus(data.partial
+      ? `Added ${data.cues.length} captions, but ${data.failedParts || 1} section${(data.failedParts || 1) === 1 ? '' : 's'} could not be reached. Retry if anything is missing.`
+      : `Done — ${data.cues.length} captions${data.language ? ` (${data.language})` : ''}.`, !!data.partial);
     renderAll(); renderScript();
     saveSoon();   // PERSIST freshly-generated captions immediately (don't wait for an edit)
   } catch (err) {

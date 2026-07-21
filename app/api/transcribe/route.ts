@@ -28,7 +28,10 @@ const houseGroq = (): ResolvedEngine | null => {
  * caption. The video never touches our storage.
  */
 export async function POST(req: Request) {
-  const rl = await rateLimit(`transcribe:${clientIp(req)}`, 40, 60 * 10);
+  // A long client-side transcription is intentionally split into as many as 28
+  // short requests. Leave room for retries and two concurrent tabs without
+  // rate-limiting a legitimate job halfway through.
+  const rl = await rateLimit(`transcribe:${clientIp(req)}`, 240, 60 * 10);
   if (!rl.ok) return tooMany(rl.retryAfter);
 
   const inForm = await req.formData().catch(() => null);
@@ -221,16 +224,21 @@ async function transcribeAndRespond(
         return NextResponse.json(
           {
             error: paid
-              ? "This file is too large for the selected engine. Try the Deepgram engine for long videos."
+              ? "This video's audio format could not be prepared for captions. Export it as an H.264/AAC MP4 and try again."
               : "This clip is too large for Groq Whisper (~25MB cap). Keep it under ~12 minutes, or upgrade for long videos.",
             code: "file_too_large",
           },
           { status: 413 },
         );
       }
+      const retryable = e.status === 408 || e.status === 429 || e.status >= 500;
       return NextResponse.json(
-        { error: `Transcription failed (${e.status}).`, detail: e.detail },
-        { status: 502 },
+        {
+          error: e.status === 429 ? "The caption engine is busy. Retrying…" : `Transcription failed (${e.status}).`,
+          detail: e.detail,
+          code: e.status === 429 ? "provider_rate_limit" : retryable ? "provider_temporary" : "provider_error",
+        },
+        { status: e.status === 429 ? 429 : retryable ? 502 : Math.max(400, Math.min(499, e.status || 400)) },
       );
     }
     return NextResponse.json({ error: "Transcription failed." }, { status: 502 });

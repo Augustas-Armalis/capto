@@ -550,26 +550,152 @@
     return buffer;
   }
 
+  function resampleMono(samples, sourceRate) {
+    if (!samples || !samples.length || !sourceRate) return null;
+    if (Math.round(sourceRate) === AUDIO_SR) return Float32Array.from(samples);
+    const out = new Float32Array(Math.max(1, Math.ceil(samples.length * AUDIO_SR / sourceRate)));
+    const ratio = sourceRate / AUDIO_SR;
+    for (let i = 0; i < out.length; i++) {
+      const at = Math.min(samples.length - 1, i * ratio);
+      const a = Math.floor(at), b = Math.min(samples.length - 1, a + 1), mix = at - a;
+      out[i] = samples[a] + (samples[b] - samples[a]) * mix;
+    }
+    return out;
+  }
+
+  // WebAudio cannot decode a number of perfectly valid QuickTime audio tracks
+  // (notably the LPCM tracks produced by iPhones, cameras and editing apps).
+  // Read those tracks directly with mp4box instead of uploading the entire MOV
+  // to Whisper, where it would exceed the provider's file-size limit.
+  async function decodeIsoPcmMono(file) {
+    const name = String(file && file.name || '').toLowerCase();
+    const type = String(file && file.type || '').toLowerCase();
+    if (!/\.(mov|mp4|m4v)$/.test(name) && !/(quicktime|mp4)/.test(type)) return null;
+    const MP4Box = await loadMp4Box();
+    const mp4 = MP4Box.createFile();
+    const pcmCodecs = /^(lpcm|sowt|twos|fl32|fl64|in24|in32|raw\s*)$/i;
+
+    return await new Promise((resolve, reject) => {
+      let track = null, cfg = null, mono = null, written = 0, received = 0, expected = Infinity;
+      let settled = false;
+      const finish = (value, error) => {
+        if (settled) return;
+        settled = true; clearTimeout(timeout);
+        try { mp4.stop(); } catch {}
+        if (error) reject(error); else resolve(value);
+      };
+      const timeout = setTimeout(() => finish(null, new Error('audio demux timeout')), 45000);
+
+      const parseConfig = (audioTrack) => {
+        const trak = mp4.getTrackById(audioTrack.id);
+        const entry = trak && trak.mdia && trak.mdia.minf && trak.mdia.minf.stbl && trak.mdia.minf.stbl.stsd && trak.mdia.minf.stbl.stsd.entries && trak.mdia.minf.stbl.stsd.entries[0];
+        const raw = entry && entry.data instanceof Uint8Array ? entry.data : new Uint8Array(entry && entry.data || 0);
+        const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+        const version = raw.length >= 2 ? dv.getUint16(0, false) : 0;
+        let sampleRate = Number(audioTrack.audio && audioTrack.audio.sample_rate) || Number(audioTrack.timescale) || 0;
+        let channels = Number(audioTrack.audio && audioTrack.audio.channel_count) || 1;
+        let bits = Number(audioTrack.audio && audioTrack.audio.sample_size) || 16;
+        let flags = 0, bytesPerFrame = 0;
+        if (version === 2 && raw.length >= 56) {
+          sampleRate = dv.getFloat64(24, false) || sampleRate;
+          channels = dv.getUint32(32, false) || channels;
+          bits = dv.getUint32(40, false) || bits;
+          flags = dv.getUint32(44, false);
+          bytesPerFrame = dv.getUint32(48, false);
+        } else if (raw.length >= 20) {
+          channels = dv.getUint16(8, false) || channels;
+          bits = dv.getUint16(10, false) || bits;
+          sampleRate = dv.getUint32(16, false) / 65536 || sampleRate;
+          if (/^sowt$/i.test(audioTrack.codec)) flags = 4; // signed, little-endian
+          else if (/^(twos|in24|in32)$/i.test(audioTrack.codec)) flags = 4 | 2;
+          else if (/^(fl32|fl64)$/i.test(audioTrack.codec)) flags = 1 | 2;
+        }
+        channels = Math.max(1, Math.min(32, Math.round(channels)));
+        bits = [8, 16, 24, 32, 64].includes(bits) ? bits : 16;
+        bytesPerFrame = bytesPerFrame || channels * Math.ceil(bits / 8);
+        if (!Number.isFinite(sampleRate) || sampleRate < 4000 || sampleRate > 384000 || bytesPerFrame < channels) throw new Error('unsupported PCM description');
+        return { sampleRate, channels, bits, flags, bytesPerFrame };
+      };
+
+      const readSample = (dv, offset) => {
+        const little = !(cfg.flags & 2), isFloat = !!(cfg.flags & 1), isSigned = !!(cfg.flags & 4);
+        if (isFloat && cfg.bits === 32) return dv.getFloat32(offset, little);
+        if (isFloat && cfg.bits === 64) return dv.getFloat64(offset, little);
+        if (cfg.bits === 8) return isSigned ? dv.getInt8(offset) / 128 : (dv.getUint8(offset) - 128) / 128;
+        if (cfg.bits === 16) return dv.getInt16(offset, little) / 32768;
+        if (cfg.bits === 24) {
+          let n = little
+            ? dv.getUint8(offset) | (dv.getUint8(offset + 1) << 8) | (dv.getUint8(offset + 2) << 16)
+            : (dv.getUint8(offset) << 16) | (dv.getUint8(offset + 1) << 8) | dv.getUint8(offset + 2);
+          if (n & 0x800000) n |= 0xff000000;
+          return n / 8388608;
+        }
+        return dv.getInt32(offset, little) / 2147483648;
+      };
+
+      mp4.onError = (e) => finish(null, new Error('audio demux: ' + e));
+      mp4.onReady = (info) => {
+        track = [...(info.audioTracks || []), ...(info.tracks || [])].find((t) => pcmCodecs.test(String(t.codec || '').trim()));
+        if (!track || !pcmCodecs.test(String(track.codec || '').trim())) { finish(null, new Error('no supported PCM audio track')); return; }
+        try { cfg = parseConfig(track); }
+        catch (e) { finish(null, e); return; }
+        expected = Math.max(1, Number(track.nb_samples) || 1);
+        const estimatedFrames = Math.max(expected, Math.ceil((Number(track.duration) || 0) / Math.max(1, Number(track.timescale) || cfg.sampleRate) * cfg.sampleRate));
+        mono = new Float32Array(estimatedFrames + 8);
+        mp4.setExtractionOptions(track.id, null, { nbSamples: 10000 });
+        mp4.start();
+      };
+      mp4.onSamples = (id, user, samples) => {
+        if (!track || id !== track.id || settled) return;
+        for (const sample of samples) {
+          received++;
+          const bytes = sample.data instanceof Uint8Array ? sample.data : new Uint8Array(sample.data || 0);
+          const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+          const frames = Math.floor(bytes.byteLength / cfg.bytesPerFrame);
+          if (written + frames > mono.length) {
+            const grown = new Float32Array(Math.max(written + frames, mono.length * 2));
+            grown.set(mono); mono = grown;
+          }
+          const bytesPerChannel = Math.ceil(cfg.bits / 8);
+          for (let f = 0; f < frames; f++) {
+            let sum = 0;
+            for (let c = 0; c < cfg.channels; c++) sum += readSample(dv, f * cfg.bytesPerFrame + c * bytesPerChannel);
+            const value = sum / cfg.channels;
+            mono[written++] = Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+          }
+        }
+        if (received >= expected) finish(resampleMono(mono.subarray(0, written), cfg.sampleRate));
+      };
+      file.arrayBuffer().then((ab) => { ab.fileStart = 0; mp4.appendBuffer(ab); mp4.flush(); }).catch((e) => finish(null, e));
+    });
+  }
+
   // Decode any media file → mono Float32 PCM @16kHz (what both Whisper and the
   // WAV chunker want). Returns a fresh copy so it can be transferred zero-copy.
   async function decodeMono16k(file) {
     const AC = window.AudioContext || window.webkitAudioContext;
     const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    if (!AC || !OAC || !file || !file.size) return null;
-    let decoded;
-    const tmp = new AC();
-    try { decoded = await tmp.decodeAudioData(await file.arrayBuffer()); }
-    finally { try { tmp.close(); } catch {} }
-    if (!decoded || !decoded.length) return null;
-    // One offline render resamples to 16k AND downmixes to mono.
-    const frames = Math.ceil(decoded.duration * AUDIO_SR);
-    const off = new OAC(1, frames, AUDIO_SR);
-    const src = off.createBufferSource();
-    src.buffer = decoded; src.connect(off.destination); src.start();
-    const rendered = await off.startRendering();
-    return Float32Array.from(rendered.getChannelData(0));
+    if (!file || !file.size) return null;
+    if (AC && OAC) {
+      let decoded = null;
+      const tmp = new AC();
+      try { decoded = await tmp.decodeAudioData(await file.arrayBuffer()); }
+      catch { decoded = null; }
+      finally { try { tmp.close(); } catch {} }
+      if (decoded && decoded.length) {
+        // One offline render resamples to 16k AND downmixes to mono.
+        const frames = Math.ceil(decoded.duration * AUDIO_SR);
+        const off = new OAC(1, frames, AUDIO_SR);
+        const src = off.createBufferSource();
+        src.buffer = decoded; src.connect(off.destination); src.start();
+        const rendered = await off.startRendering();
+        return Float32Array.from(rendered.getChannelData(0));
+      }
+    }
+    setTranscribeStatus('Preparing MOV audio…');
+    try { return await decodeIsoPcmMono(file); }
+    catch { return null; }
   }
-
   // Split already-decoded mono PCM into locally-aligned WAV chunks (we decode
   // once and reuse the samples for BOTH chunking and silence detection).
   function chunksFromMono(mono) {
@@ -669,7 +795,9 @@
       last = { __error: true, error: data.error || 'Transcription failed.', detail: data.detail, code: data.code, status: res.status };
       const transient = res.status === 408 || res.status === 429 || res.status >= 500;
       if (!transient || attempt === 2) return last;
-      await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1)));
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const waitMs = Math.min(15000, Math.max(700 * (attempt + 1), Number.isFinite(retryAfter) ? retryAfter * 1000 : 0));
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
     return last || { __error: true, error: 'Transcription failed.', status: 502 };
   }
@@ -700,12 +828,9 @@
         const allWords = [];
         let language = body.language, engine = null;
         const qualitySamples = [];
+        const retryQueue = [];
         const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, oneW, silences, language, mono.length / AUDIO_SR) : [], language, engine }); } catch {} };
-        report(0);
-        for (let i = 0; i < chunks.length; i++) {
-          if (chunks.length > 1) setTranscribeStatus(`Transcribing… part ${i + 1} of ${chunks.length}`);
-          const data = await postOneChunk(chunks[i].file, body, chunks[i].durationSec);
-          if (data.__error) return json({ error: data.error, code: data.code, detail: data.detail }, data.status || 502);
+        const acceptChunk = (data, i) => {
           language = data.language || language;
           if (!engine) engine = data.engine || null;
           if (data.quality) qualitySamples.push(data.quality);
@@ -723,13 +848,53 @@
             );
             if (!recent) allWords.push(shifted);
           }
+        };
+        const isNoSpeech = (data) => data && (data.status === 422 || /no speech/i.test(String(data.error || '')));
+        const isTransient = (data) => data && (data.status === 408 || data.status === 429 || data.status >= 500);
+        report(0);
+        for (let i = 0; i < chunks.length; i++) {
+          if (chunks.length > 1) setTranscribeStatus(`Transcribing… part ${i + 1} of ${chunks.length}`);
+          const data = await postOneChunk(chunks[i].file, body, chunks[i].durationSec);
+          if (data.__error) {
+            // Silence-only chunks are normal in long videos. A temporary provider
+            // failure gets one later retry after the remaining chunks have run.
+            if (isNoSpeech(data)) { report(i + 1); continue; }
+            if (isTransient(data)) { retryQueue.push({ i, data }); report(i + 1); continue; }
+            return json({ error: data.error, code: data.code, detail: data.detail }, data.status || 502);
+          }
+          acceptChunk(data, i);
           // Stream progress + the captions-so-far to the editor → live timeline fill.
           report(i + 1);
         }
+        const failed = [];
+        for (let r = 0; r < retryQueue.length; r++) {
+          const { i } = retryQueue[r];
+          setTranscribeStatus(`Recovering… part ${r + 1} of ${retryQueue.length}`);
+          const data = await postOneChunk(chunks[i].file, body, chunks[i].durationSec);
+          if (data.__error) {
+            if (!isNoSpeech(data)) failed.push(data);
+          } else {
+            acceptChunk(data, i);
+          }
+          report(chunks.length);
+        }
+        if (!allWords.length && failed.length) {
+          const failure = failed[0];
+          return json({ error: failure.error, code: failure.code, detail: failure.detail }, failure.status || 502);
+        }
         if (!allWords.length) return json({ error: 'No speech detected in this clip.' }, 422);
-        return json({ cues: wordsToCues(allWords, oneW, silences, language, mono.length / AUDIO_SR), language, engine, quality: combineQuality(qualitySamples), captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
-      } catch {
-        /* extraction worked but transcription threw — fall through to raw upload */
+        allWords.sort((a, b) => a.start - b.start);
+        const cleanWords = [];
+        for (const word of allWords) {
+          const duplicate = cleanWords.slice(-8).some((old) =>
+            String(old.word || '').toLocaleLowerCase() === String(word.word || '').toLocaleLowerCase() &&
+            Math.abs(old.start - word.start) < 0.7
+          );
+          if (!duplicate) cleanWords.push(word);
+        }
+        return json({ cues: wordsToCues(cleanWords, oneW, silences, language, mono.length / AUDIO_SR), language, engine, quality: combineQuality(qualitySamples), partial: failed.length > 0, failedParts: failed.length, captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
+      } catch (error) {
+        return json({ error: 'Captioning stopped unexpectedly. Please retry.', code: 'caption_pipeline', detail: String(error && error.message || '') }, 502);
       }
     }
 
