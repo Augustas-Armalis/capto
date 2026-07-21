@@ -140,7 +140,7 @@ export default async function LearningPage() {
         Quality = 1 − correction signals / words. Signals include text, timing, deletion, split, and merge corrections.
       </p>
 
-      <h2 className="heading mt-10 mb-3 text-lg">Caption Engine v4 signals</h2>
+      <h2 className="heading mt-10 mb-3 text-lg">Caption Engine v5 signals</h2>
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-5">
           <div className="text-xs uppercase tracking-wide text-[var(--color-fg-subtle)]">Edits captured</div>

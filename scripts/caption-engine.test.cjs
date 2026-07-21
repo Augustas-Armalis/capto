@@ -18,13 +18,13 @@ function assertValid(cues) {
     assert.ok(cues[i].start >= 0);
     assert.ok(cues[i].end > cues[i].start);
     assert.equal(cues[i].text, cues[i].words.map((w) => w.word).join(' '));
-    assert.equal(cues[i]._engineVersion, 4);
+    assert.equal(cues[i]._engineVersion, 5);
     if (i) assert.ok(cues[i].start >= cues[i - 1].end - 1e-9, 'cues must not overlap');
   }
 }
 
-test('reports Caption Engine v4', () => {
-  assert.equal(engine.VERSION, 4);
+test('reports Caption Engine v5', () => {
+  assert.equal(engine.VERSION, 5);
 });
 
 test('defaults to one or two words and avoids dangling English connectors', () => {
@@ -48,17 +48,39 @@ test('allows a three-word card only for an exceptionally short quick phrase', ()
   assert.ok(normal.every((c) => c.words.length <= 2));
 });
 
-test('strict word-by-word mode changes on every real word onset', () => {
+test('strict word-by-word mode changes on every latency-corrected onset', () => {
   const words = timed('one word at a time');
   const cues = engine.wordsToCues(words, { language: 'en', oneWord: true });
   assert.equal(cues.length, words.length);
   assert.ok(cues.every((c) => c.words.length === 1));
   for (let i = 0; i < cues.length; i++) {
-    assert.ok(Math.abs(cues[i].start - words[i].start) < 1e-9);
+    assert.ok(Math.abs(cues[i].start - (words[i].start - 0.075)) < 1e-9);
   }
   for (let i = 1; i < cues.length; i++) {
     assert.ok(Math.abs(cues[i - 1].end - cues[i].start) < 1e-9);
   }
+  assertValid(cues);
+});
+
+test('audio silence calibrates late provider onsets without anticipating speech', () => {
+  const cues = engine.wordsToCues([
+    { word: 'Now', start: 0.54, end: 0.76 },
+    { word: 'listen.', start: 0.82, end: 1.1 },
+  ], {
+    language: 'en',
+    oneWord: true,
+    silences: [{ start: 0, end: 0.46 }],
+  });
+  assert.ok(cues[0].start >= 0.46, 'must not enter detected silence');
+  assert.ok(cues[0].start < 0.49, 'must remove the provider onset delay');
+  assert.ok(cues[0].start < 0.54, 'must be earlier than the raw provider timestamp');
+  assertValid(cues);
+});
+
+test('latency compensation can be explicitly disabled for diagnostics', () => {
+  const words = timed('exact provider timing');
+  const cues = engine.wordsToCues(words, { language: 'en', oneWord: true, latencyCompensation: 0 });
+  assert.equal(cues[0].start, words[0].start);
   assertValid(cues);
 });
 

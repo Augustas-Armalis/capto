@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * Capto Caption Engine v4
+ * Capto Caption Engine v5
  *
  * Turns provider word timestamps into deterministic, non-overlapping caption
  * cues. The engine is intentionally dependency-free so the exact same code can
@@ -12,7 +12,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.CaptoCaptionEngine = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  const VERSION = 4;
+  const VERSION = 5;
   const MIN_WORD = 0.045;
   const EPS = 0.001;
 
@@ -108,6 +108,54 @@
         if (s.start <= w.start && s.end > w.start + MIN_WORD && s.end < w.end) w.start = s.end;
       }
       if (w.end < w.start + MIN_WORD) w.end = w.start + MIN_WORD;
+    }
+    return words;
+  }
+
+  /**
+   * Speech providers mark word onsets a little late. That delay is especially
+   * obvious in word-by-word/highlight styles because the renderer switches on
+   * the word's own start timestamp. Move the complete word timeline earlier,
+   * then let snapWordsToSilence clamp phrase starts back to the real audio onset
+   * so compensation can never paint text during a detected pause.
+   */
+  function compensateProviderLatency(words, silences, requested) {
+    let offset;
+    if (Number.isFinite(Number(requested))) {
+      offset = clamp(Number(requested), 0, 0.18);
+    } else {
+      const candidates = [];
+      for (let wi = 0; wi < words.length; wi++) {
+        const w = words[wi];
+        let nearest = null;
+        for (let i = 0; i < (silences || []).length; i++) {
+          const silence = silences[i];
+          if (silence.end > w.start + EPS) break;
+          nearest = silence;
+        }
+        if (!nearest) continue;
+        const previous = words[wi - 1];
+        if (previous && nearest.start < previous.end - 0.03) continue;
+        const delta = w.start - nearest.end;
+        // Only the first word after a pause is useful for calibration. The audio
+        // threshold ends just before speech, so keep a small 15ms safety margin.
+        if (delta >= 0 && delta <= 0.24 && nearest.end - nearest.start >= 0.10) candidates.push(delta);
+      }
+      if (candidates.length) {
+        candidates.sort((a, b) => a - b);
+        const mid = Math.floor(candidates.length / 2);
+        const median = candidates.length % 2 ? candidates[mid] : (candidates[mid - 1] + candidates[mid]) / 2;
+        offset = clamp(median - 0.015, 0, 0.14);
+      } else {
+        // Calibrated perceptual fallback for clips without a measurable leading
+        // pause. This is deliberately small enough to avoid anticipation.
+        offset = 0.075;
+      }
+    }
+    if (offset <= EPS) return words;
+    for (const w of words) {
+      w.start = Math.max(0, w.start - offset);
+      w.end = Math.max(w.start + MIN_WORD, w.end - offset);
     }
     return words;
   }
@@ -214,9 +262,8 @@
       if (next) {
         const gap = Math.max(0, next.start - last.end);
         if (gap <= opts.hideGap) {
-          // Continuous captions switch on the next provider word onset. Never
-          // anticipate the next card: word-by-word mode now changes on the exact
-          // same timestamps returned by the speech model.
+          // Continuous captions switch on the next corrected word onset. This
+          // keeps card changes and active-word highlighting on one timeline.
           end = Math.max(last.end, next.start);
         } else {
           end = last.end + Math.min(opts.leadOut, gap * 0.25);
@@ -260,10 +307,9 @@
       allowShortTriple: options.allowShortTriple !== false,
       tripleMaxDuration: clamp(finite(options.tripleMaxDuration, 0.82), 0.45, 1.2),
     };
-    const words = snapWordsToSilence(
-      normalizeWords(input, { duration: opts.duration }),
-      options.silences || [],
-    );
+    const words = normalizeWords(input, { duration: opts.duration });
+    compensateProviderLatency(words, options.silences || [], options.latencyCompensation);
+    snapWordsToSilence(words, options.silences || []);
     if (!words.length) return [];
     const groups = strictOneWord ? words.map((w) => [w]) : phraseGroups(words, opts);
     return cueTiming(groups, opts);
@@ -272,6 +318,7 @@
   return {
     VERSION,
     normalizeWords,
+    compensateProviderLatency,
     snapWordsToSilence,
     wordsToCues,
     _test: { phraseGroups, lexical, terminal, clause },
