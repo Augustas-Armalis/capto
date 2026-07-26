@@ -1689,7 +1689,7 @@
   function clampNum(v, lo, hi) { v = parseFloat(v); if (isNaN(v)) v = lo; return Math.max(lo, Math.min(hi, v)); }
 
   // Encoding settings per export tier, read live from the modal controls.
-  function readExportSettings(quality, meta) {
+  function readExportSettings(quality, meta, file) {
     const nH = meta.height || 1080;
     const dur = Math.max(1, meta.duration || 10);
     if (quality === 'friend') {
@@ -1697,7 +1697,13 @@
       const totalBps = (mb * 8 * 1024 * 1024) / dur;
       return { maxH: Math.min(nH, 720), fps: 30, videoBitrate: Math.max(350000, Math.round(totalBps - 128000)) };
     }
-    if (quality === 'lossless') return { maxH: nH, fps: 30, videoBitrate: 16000000 };
+    if (quality === 'lossless') {
+      const policy = window.CaptoExportPolicy;
+      const videoBitrate = policy && typeof policy.losslessBitrate === 'function'
+        ? policy.losslessBitrate(file && file.size, dur)
+        : 16000000;
+      return { maxH: nH, fps: 30, videoBitrate };
+    }
     const res = parseInt(getVal('capto-res', '1080'), 10) || 1080; // "custom" (middle tier)
     const fps = parseInt(getVal('capto-fps', '30'), 10) || 30;
     const bsel = getVal('capto-bitrate-sel', '10');
@@ -2150,7 +2156,7 @@
   // independent of requestAnimationFrame and keeps working in a background tab.
   // Older browsers use requestVideoFrameCallback with a timer safety net.
   async function exportMediaRecorder(job, o, diag) {
-    const { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, quality, file } = o;
+    const { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, quality, file, memorySafe } = o;
     let sourceStream = null, sourceAudioTrack = null, audioTrack = null, sourceVideoTrack = null, audioContext = null;
     try {
       sourceStream = v.captureStream ? v.captureStream() : (v.mozCaptureStream ? v.mozCaptureStream() : null);
@@ -2161,7 +2167,7 @@
     } catch { /* no source stream */ }
     let mime = resolveExportMime(quality);
     let aacAudioBuffer = null, remuxAac = false;
-    if (sourceAudioTrack && mime.indexOf('mp4') >= 0) {
+    if (sourceAudioTrack && mime.indexOf('mp4') >= 0 && !memorySafe) {
       try { aacAudioBuffer = await decodeFullAudio(file); } catch {}
       remuxAac = await supportsAac(aacAudioBuffer);
       if (remuxAac) {
@@ -2175,6 +2181,11 @@
         const webmMime = mimeForFormat('webm');
         if (webmMime) { mime = webmMime; diag.containerFallback = 'webm-no-aac'; }
       }
+    } else if (sourceAudioTrack && mime.indexOf('mp4') >= 0 && memorySafe) {
+      // Do not create another full-file ArrayBuffer for large 4K sources.
+      // MediaRecorder receives decoded PCM through Web Audio and encodes a
+      // standards-compliant AAC track alongside the canvas video.
+      diag.audioCapture = 'stream-aac';
     }
     // Route audio through Web Audio instead of attaching the source's encoded
     // track directly. Direct WebM/Opus tracks were being pass-through muxed into
@@ -2226,7 +2237,7 @@
       painted++;
       diag.framesEncoded = painted;
       lastPaintAt = Date.now(); lastPaintTime = t;
-      job.progress = dur ? Math.min(0.999, t / dur) : 0;
+      job.progress = dur ? Math.min(0.97, 0.03 + (t / dur) * 0.94) : 0.03;
     }
     function clearCapture() {
       if (vfcb && typeof v.cancelVideoFrameCallback === 'function') { try { v.cancelVideoFrameCallback(vfcb); } catch {} }
@@ -2300,6 +2311,7 @@
       try { rec.start(500); } catch (e) { fail(e); return; }
       startFramePump(fail);
       (async () => {
+        job.stage = memorySafe ? 'Exporting full-quality video…' : 'Recording video…';
         if (audioContext && audioContext.state === 'suspended') await audioContext.resume();
         await v.play();
       })().catch(fail);
@@ -2316,7 +2328,7 @@
     const style = body.style || {};
     const meta = media.meta || { width: 1080, height: 1920, duration: 0 };
     const nH = meta.height || 1080, nW = meta.width || 1080;
-    const settings = readExportSettings(body.quality, meta);
+    const settings = readExportSettings(body.quality, meta, media.file);
     const outH = Math.min(nH, settings.maxH);
     const k = outH / nH;
     const W = Math.max(2, Math.round(nW * k / 2) * 2), H = Math.max(2, Math.round(outH / 2) * 2);
@@ -2358,7 +2370,20 @@
       startedAt: Date.now(),
     };
 
-    const o = { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, file: media.file, quality: body.quality };
+    const exportPolicy = window.CaptoExportPolicy;
+    const memorySafe = !!(
+      exportPolicy &&
+      typeof exportPolicy.shouldUseMemorySafeExport === 'function' &&
+      exportPolicy.shouldUseMemorySafeExport({
+        fileSize: media.file.size,
+        duration: dur,
+        width: nW,
+        height: nH,
+        outputBitrate: settings.videoBitrate,
+      })
+    );
+    const o = { v, canvas, ctx, W, H, fps, dur, cues, drawStyle, watermark, settings, file: media.file, quality: body.quality, memorySafe };
+    diag.pipelineReason = memorySafe ? 'large-source-memory-safe' : 'deterministic-webcodecs';
 
     // Prefer the WebCodecs MP4 path (demux → decode → re-encode the real frames).
     // Skip it only when the user explicitly asked for WebM, or H.264 encode/decode
@@ -2366,9 +2391,10 @@
     // non-MP4/MOV source throws inside demux and also falls back.)
     const wantWebm = body.quality !== 'friend' && getVal('capto-format', '') === 'webm';
     const isoSource = /^(video\/mp4|video\/quicktime|video\/x-m4v)$/i.test(media.file.type || '') || /\.(mp4|mov|m4v)$/i.test(media.file.name || '');
-    const avc = (wantWebm || !isoSource) ? null : await pickAvcCodec(W, H);
+    const avc = (wantWebm || !isoSource || memorySafe) ? null : await pickAvcCodec(W, H);
     let blob = null, mime = 'video/mp4';
     try {
+      if (memorySafe) throw new Error('memory-safe-realtime');
       if (!avc || !isoSource || typeof VideoDecoder === 'undefined') throw new Error('webcodecs-skip');
       o.codec = avc;
       diag.encoder = 'webcodecs-mp4'; diag.mime = 'video/mp4'; diag.codec = avc;
@@ -2376,10 +2402,10 @@
       mime = 'video/mp4';
     } catch (e) {
       const msg = e && e.message;
-      if (msg && msg !== 'webcodecs-skip') { console.warn('[Capto export] WebCodecs path failed → MediaRecorder fallback:', e); diag.webCodecsError = msg; }
+      if (msg && msg !== 'webcodecs-skip' && msg !== 'memory-safe-realtime') { console.warn('[Capto export] WebCodecs path failed → MediaRecorder fallback:', e); diag.webCodecsError = msg; }
       // Reset the element for a clean real-time pass.
       try { v.pause(); v.currentTime = 0; } catch {}
-      job.stage = 'Recording video…';
+      job.stage = memorySafe ? 'Starting full-quality export…' : 'Recording video…';
       job.progress = Math.max(job.progress || 0, 0.03);
       diag.encoder = 'mediarecorder';
       const r = await exportMediaRecorder(job, o, diag);

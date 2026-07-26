@@ -13,6 +13,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:captions": "node --test scripts/caption-engine.test.cjs scripts/transcription-coverage.test.cjs",
+    "test:export": "node --test scripts/export-policy.test.cjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
