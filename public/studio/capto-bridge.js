@@ -591,6 +591,110 @@
     return samples.length / AUDIO_SR >= expectedDuration * 0.85;
   }
 
+  /**
+   * Extract AAC packets from MP4/MOV and remux them into small audio-only M4A
+   * files. This path does not decode audio at all, so it works even when a
+   * browser lacks WebCodecs or decodeAudioData silently returns a partial clip.
+   */
+  async function chunksFromIsoAac(file) {
+    if (!isIsoMedia(file)) return null;
+    const MP4Box = await loadMp4Box();
+    const mp4 = MP4Box.createFile();
+    const samples = [];
+    let track = null, expected = Infinity, received = 0, settled = false;
+    const demux = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => finish(null, new Error('AAC extraction timed out')), 60000);
+      const finish = (value, error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        try { mp4.stop(); } catch {}
+        if (error) reject(error); else resolve(value);
+      };
+      mp4.onError = (e) => finish(null, new Error('AAC extraction: ' + e));
+      mp4.onReady = (info) => {
+        track = longestTrack(
+          [...(info.audioTracks || []), ...(info.tracks || [])],
+          (t) => /^mp4a(?:\.|$)/i.test(String(t.codec || '')),
+        );
+        if (!track) { finish(null, new Error('no AAC audio track')); return; }
+        expected = Math.max(1, Number(track.nb_samples) || 1);
+        mp4.setExtractionOptions(track.id, null, { nbSamples: 500 });
+        mp4.start();
+      };
+      mp4.onSamples = (id, user, batch) => {
+        if (!track || id !== track.id || settled) return;
+        for (const sample of batch) {
+          received++;
+          samples.push({
+            cts: Number(sample.cts) || 0,
+            duration: Number(sample.duration) || 0,
+            timescale: Number(sample.timescale) || Number(track.timescale) || 1,
+            data: sample.data instanceof Uint8Array ? sample.data : new Uint8Array(sample.data || 0),
+          });
+        }
+        try { mp4.releaseUsedSamples(track.id, received); } catch {}
+        if (received >= expected) finish({ track, samples });
+      };
+      (async () => {
+        const step = 8 * 1024 * 1024;
+        for (let offset = 0; offset < file.size && !settled; offset += step) {
+          const end = Math.min(file.size, offset + step);
+          const ab = await file.slice(offset, end).arrayBuffer(); ab.fileStart = offset;
+          mp4.appendBuffer(ab);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        if (!settled) mp4.flush();
+      })().catch((e) => finish(null, e));
+    });
+    if (!demux || !demux.samples || !demux.samples.length) return null;
+
+    const { Muxer, ArrayBufferTarget } = await import('/studio/vendor/mp4-muxer.mjs');
+    const duration = trackDurationSec(demux.track);
+    const sampleRate = Number(demux.track.audio && demux.track.audio.sample_rate) || Number(demux.track.timescale) || 48000;
+    const channels = Math.max(1, Math.min(8, Number(demux.track.audio && demux.track.audio.channel_count) || 2));
+    const stepSec = Math.max(
+      MIN_CHUNK_SEC - CHUNK_OVERLAP_SEC,
+      Math.max(0, duration - CHUNK_OVERLAP_SEC) / MAX_CHUNKS,
+    );
+    const windowSec = stepSec + CHUNK_OVERLAP_SEC;
+    const chunks = [];
+    for (let windowStart = 0; windowStart < duration; windowStart += stepSec) {
+      const windowEnd = Math.min(duration + 0.001, windowStart + windowSec);
+      const selected = demux.samples.filter((sample) => {
+        const at = sample.cts / sample.timescale;
+        return at + 0.001 >= windowStart && at < windowEnd;
+      });
+      if (!selected.length) continue;
+      const base = selected[0].cts / selected[0].timescale;
+      const target = new ArrayBufferTarget();
+      const muxer = new Muxer({
+        target,
+        fastStart: 'in-memory',
+        firstTimestampBehavior: 'offset',
+        audio: { codec: 'aac', numberOfChannels: channels, sampleRate },
+      });
+      for (const sample of selected) {
+        muxer.addAudioChunkRaw(
+          sample.data,
+          'key',
+          Math.max(0, Math.round((sample.cts / sample.timescale - base) * 1e6)),
+          Math.max(1, Math.round((sample.duration / sample.timescale) * 1e6)),
+        );
+      }
+      muxer.finalize();
+      const last = selected[selected.length - 1];
+      const end = (last.cts + last.duration) / last.timescale;
+      chunks.push({
+        file: new File([target.buffer], `audio_${chunks.length}.m4a`, { type: 'audio/mp4' }),
+        startSec: base,
+        durationSec: Math.max(1, Math.round(end - base)),
+      });
+      if (end >= duration - 0.01) break;
+    }
+    return chunks.length ? { chunks, duration } : null;
+  }
+
   async function decodeIsoPcmMono(file) {
     if (!isIsoMedia(file)) return null;
     const MP4Box = await loadMp4Box();
@@ -1006,13 +1110,28 @@
 
   async function transcribe(file, body) {
     const oneW = body.oneWord ? 1 : 0;
-    // Decode the audio ONCE, up front — the same mono PCM feeds both the chunker
-    // (long-video splitting) and the silence detector (pause-accurate timing).
-    let mono = null;
+    // Large AAC MP4/MOV files are remuxed directly into audio-only M4A chunks.
+    // This is the cross-browser path: no AudioDecoder/decodeAudioData dependency.
+    // Other formats still decode once to mono PCM for chunking + silence timing.
     const expectedDuration = Number(window.__captoMedia && window.__captoMedia.meta && window.__captoMedia.meta.duration) || 0;
-    try { setTranscribeStatus('Preparing audio…'); mono = await decodeMono16k(file, expectedDuration); } catch { mono = null; }
+    let mono = null;
+    let encoded = null;
+    const preferEncoded = isIsoMedia(file) && (
+      file.size >= 48 * 1024 * 1024 ||
+      expectedDuration >= 75
+    );
+    if (preferEncoded) {
+      try {
+        setTranscribeStatus('Preparing complete video audio…');
+        encoded = await chunksFromIsoAac(file);
+      } catch { encoded = null; }
+    }
+    if (!encoded) {
+      try { setTranscribeStatus('Preparing audio…'); mono = await decodeMono16k(file, expectedDuration); } catch { mono = null; }
+    }
     const silences = mono ? detectSilences(mono, AUDIO_SR) : [];
-    const chunks = mono ? chunksFromMono(mono) : null;
+    const chunks = encoded ? encoded.chunks : (mono ? chunksFromMono(mono) : null);
+    const audioDuration = encoded ? encoded.duration : (mono ? mono.length / AUDIO_SR : expectedDuration);
 
     if (chunks && chunks.length) {
       try {
@@ -1020,7 +1139,7 @@
         let language = body.language, engine = null;
         const qualitySamples = [];
         const retryQueue = [];
-        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, oneW, silences, language, mono.length / AUDIO_SR) : [], language, engine }); } catch {} };
+        const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, oneW, silences, language, audioDuration) : [], language, engine }); } catch {} };
         const acceptChunk = (data, i) => {
           language = data.language || language;
           if (!engine) engine = data.engine || null;
@@ -1083,7 +1202,7 @@
           );
           if (!duplicate) cleanWords.push(word);
         }
-        return json({ cues: wordsToCues(cleanWords, oneW, silences, language, mono.length / AUDIO_SR), language, engine, quality: combineQuality(qualitySamples), partial: failed.length > 0, failedParts: failed.length, captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
+        return json({ cues: wordsToCues(cleanWords, oneW, silences, language, audioDuration), language, engine, quality: combineQuality(qualitySamples), partial: failed.length > 0, failedParts: failed.length, captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
       } catch (error) {
         return json({ error: 'Captioning stopped unexpectedly. Please retry.', code: 'caption_pipeline', detail: String(error && error.message || '') }, 502);
       }
