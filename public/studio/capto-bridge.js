@@ -567,10 +567,32 @@
   // (notably the LPCM tracks produced by iPhones, cameras and editing apps).
   // Read those tracks directly with mp4box instead of uploading the entire MOV
   // to Whisper, where it would exceed the provider's file-size limit.
-  async function decodeIsoPcmMono(file) {
+  function isIsoMedia(file) {
     const name = String(file && file.name || '').toLowerCase();
     const type = String(file && file.type || '').toLowerCase();
-    if (!/\.(mov|mp4|m4v)$/.test(name) && !/(quicktime|mp4)/.test(type)) return null;
+    return /\.(mov|mp4|m4v)$/.test(name) || /(quicktime|mp4)/.test(type);
+  }
+
+  function trackDurationSec(track) {
+    return Number(track && track.duration) / Math.max(1, Number(track && track.timescale) || 1);
+  }
+
+  function longestTrack(tracks, predicate) {
+    return (tracks || [])
+      .filter(predicate)
+      .sort((a, b) => trackDurationSec(b) - trackDurationSec(a))[0] || null;
+  }
+
+  function hasExpectedAudioLength(samples, expectedDuration) {
+    if (!samples || !samples.length) return false;
+    if (!Number.isFinite(expectedDuration) || expectedDuration < 30) return true;
+    // Containers commonly differ from the video element by a few hundred ms.
+    // Anything below 85% is a real partial decode, not metadata rounding.
+    return samples.length / AUDIO_SR >= expectedDuration * 0.85;
+  }
+
+  async function decodeIsoPcmMono(file) {
+    if (!isIsoMedia(file)) return null;
     const MP4Box = await loadMp4Box();
     const mp4 = MP4Box.createFile();
     const pcmCodecs = /^(lpcm|sowt|twos|fl32|fl64|in24|in32|raw\s*)$/i;
@@ -635,7 +657,10 @@
 
       mp4.onError = (e) => finish(null, new Error('audio demux: ' + e));
       mp4.onReady = (info) => {
-        track = [...(info.audioTracks || []), ...(info.tracks || [])].find((t) => pcmCodecs.test(String(t.codec || '').trim()));
+        track = longestTrack(
+          [...(info.audioTracks || []), ...(info.tracks || [])],
+          (t) => pcmCodecs.test(String(t.codec || '').trim()),
+        );
         if (!track || !pcmCodecs.test(String(track.codec || '').trim())) { finish(null, new Error('no supported PCM audio track')); return; }
         try { cfg = parseConfig(track); }
         catch (e) { finish(null, e); return; }
@@ -666,7 +691,16 @@
         }
         if (received >= expected) finish(resampleMono(mono.subarray(0, written), cfg.sampleRate));
       };
-      file.arrayBuffer().then((ab) => { ab.fileStart = 0; mp4.appendBuffer(ab); mp4.flush(); }).catch((e) => finish(null, e));
+      (async () => {
+        const step = 8 * 1024 * 1024;
+        for (let offset = 0; offset < file.size && !settled; offset += step) {
+          const end = Math.min(file.size, offset + step);
+          const ab = await file.slice(offset, end).arrayBuffer(); ab.fileStart = offset;
+          mp4.appendBuffer(ab);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        if (!settled) mp4.flush();
+      })().catch((e) => finish(null, e));
     });
   }
 
@@ -675,9 +709,7 @@
   // decode it with WebCodecs so a large video is never uploaded as one raw file.
   async function decodeIsoAacMono(file) {
     if (typeof AudioDecoder === 'undefined' || typeof EncodedAudioChunk === 'undefined') return null;
-    const name = String(file && file.name || '').toLowerCase();
-    const type = String(file && file.type || '').toLowerCase();
-    if (!/\.(mov|mp4|m4v)$/.test(name) && !/(quicktime|mp4)/.test(type)) return null;
+    if (!isIsoMedia(file)) return null;
     const MP4Box = await loadMp4Box();
     const mp4 = MP4Box.createFile();
     const rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
@@ -705,7 +737,10 @@
       };
       mp4.onError = (e) => finish(null, new Error('AAC demux: ' + e));
       mp4.onReady = (info) => {
-        track = [...(info.audioTracks || []), ...(info.tracks || [])].find((t) => /^mp4a(?:\.|$)/i.test(String(t.codec || '')));
+        track = longestTrack(
+          [...(info.audioTracks || []), ...(info.tracks || [])],
+          (t) => /^mp4a(?:\.|$)/i.test(String(t.codec || '')),
+        );
         if (!track) { finish(null, new Error('no AAC audio track')); return; }
         const sampleRate = Number(track.audio && track.audio.sample_rate) || Number(track.timescale) || 48000;
         const channels = Math.max(1, Math.min(8, Number(track.audio && track.audio.channel_count) || 2));
@@ -750,6 +785,10 @@
               data: sample.data,
             }));
           }
+          // A 4K two-minute source can be hundreds of MB even though its mono
+          // audio is only a few MB. Release demuxed sample buffers as soon as
+          // WebCodecs has copied them so long videos do not exhaust browser RAM.
+          try { mp4.releaseUsedSamples(track.id, received); } catch {}
           if (received >= expected) void complete();
         } catch (e) { finish(null, e); }
       };
@@ -768,11 +807,36 @@
 
   // Decode any media file → mono Float32 PCM @16kHz (what both Whisper and the
   // WAV chunker want). Returns a fresh copy so it can be transferred zero-copy.
-  async function decodeMono16k(file) {
+  async function decodeMono16k(file, expectedDuration) {
     const AC = window.AudioContext || window.webkitAudioContext;
     const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!file || !file.size) return null;
-    if (AC && OAC) {
+    let best = null;
+    const directFirst = isIsoMedia(file) && (
+      file.size >= 48 * 1024 * 1024 ||
+      (Number.isFinite(expectedDuration) && expectedDuration >= 75)
+    );
+
+    // decodeAudioData() silently returned only the first ~20 seconds of the
+    // reported 120-second 4K MP4 in production. Large ISO-BMFF files now bypass
+    // that whole-container decoder and demux their small audio track directly.
+    if (directFirst) {
+      setTranscribeStatus('Preparing complete video audio…');
+      try {
+        const aac = await decodeIsoAacMono(file);
+        if (aac && aac.length) {
+          best = aac;
+          if (hasExpectedAudioLength(aac, expectedDuration)) return aac;
+        }
+      } catch {}
+      try {
+        const pcm = await decodeIsoPcmMono(file);
+        if (pcm && (!best || pcm.length > best.length)) best = pcm;
+        if (hasExpectedAudioLength(pcm, expectedDuration)) return pcm;
+      } catch {}
+    }
+
+    if (AC && OAC && (!directFirst || !hasExpectedAudioLength(best, expectedDuration))) {
       let decoded = null;
       const tmp = new AC();
       try { decoded = await tmp.decodeAudioData(await file.arrayBuffer()); }
@@ -785,13 +849,29 @@
         const src = off.createBufferSource();
         src.buffer = decoded; src.connect(off.destination); src.start();
         const rendered = await off.startRendering();
-        return Float32Array.from(rendered.getChannelData(0));
+        const webAudio = Float32Array.from(rendered.getChannelData(0));
+        best = webAudio;
+        if (hasExpectedAudioLength(webAudio, expectedDuration)) return webAudio;
       }
     }
-    setTranscribeStatus('Preparing MOV audio…');
-    try { const pcm = await decodeIsoPcmMono(file); if (pcm && pcm.length) return pcm; } catch {}
-    try { return await decodeIsoAacMono(file); }
-    catch { return null; }
+
+    // Small MP4/MOV files normally take the WebAudio path above. If its decoded
+    // duration is suspiciously short, retry with container-level PCM/AAC demux
+    // instead of accepting a successful-but-truncated AudioBuffer.
+    if (isIsoMedia(file) && !directFirst) {
+      setTranscribeStatus('Recovering complete video audio…');
+      try {
+        const aac = await decodeIsoAacMono(file);
+        if (aac && (!best || aac.length > best.length)) best = aac;
+        if (hasExpectedAudioLength(aac, expectedDuration)) return aac;
+      } catch {}
+      try {
+        const pcm = await decodeIsoPcmMono(file);
+        if (pcm && (!best || pcm.length > best.length)) best = pcm;
+        if (hasExpectedAudioLength(pcm, expectedDuration)) return pcm;
+      } catch {}
+    }
+    return best;
   }
   // Split already-decoded mono PCM into locally-aligned WAV chunks (we decode
   // once and reuse the samples for BOTH chunking and silence detection).
@@ -929,7 +1009,8 @@
     // Decode the audio ONCE, up front — the same mono PCM feeds both the chunker
     // (long-video splitting) and the silence detector (pause-accurate timing).
     let mono = null;
-    try { setTranscribeStatus('Preparing audio…'); mono = await decodeMono16k(file); } catch { mono = null; }
+    const expectedDuration = Number(window.__captoMedia && window.__captoMedia.meta && window.__captoMedia.meta.duration) || 0;
+    try { setTranscribeStatus('Preparing audio…'); mono = await decodeMono16k(file, expectedDuration); } catch { mono = null; }
     const silences = mono ? detectSilences(mono, AUDIO_SR) : [];
     const chunks = mono ? chunksFromMono(mono) : null;
 
@@ -1733,7 +1814,7 @@
     finally { try { aenc.close(); } catch {} }
     if (firstError) throw firstError;
   }
-  // Lazily load the mp4box UMD demuxer (only when an MP4/MOV export runs).
+  // Lazily load the mp4box UMD demuxer for long-video audio and MP4 export.
   let _mp4boxPromise = null;
   function loadMp4Box() {
     if (window.MP4Box) return Promise.resolve(window.MP4Box);
