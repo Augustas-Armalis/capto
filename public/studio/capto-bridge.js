@@ -1085,7 +1085,32 @@
         clearTimeout(timeout);
       }
       const data = await res.json().catch(() => ({}));
-      if (res.ok) return data;
+      if (res.ok) {
+        const coverage = window.CaptoTranscriptionCoverage;
+        const selectedLanguage = String(body.language || 'auto').toLowerCase();
+        if (
+          coverage &&
+          body._coverageFallback !== true &&
+          selectedLanguage !== 'auto' &&
+          coverage.needsRecovery(data.words || [], durationSec)
+        ) {
+          const recovered = await postOneChunk(
+            file,
+            { ...body, language: 'auto', _coverageFallback: true },
+            durationSec,
+          );
+          if (
+            recovered &&
+            !recovered.__error &&
+            coverage.preferRecovered(data.words || [], recovered.words || [], durationSec)
+          ) {
+            recovered.coverageRecovered = true;
+            recovered.requestedLanguage = selectedLanguage;
+            return recovered;
+          }
+        }
+        return data;
+      }
       last = { __error: true, error: data.error || 'Transcription failed.', detail: data.detail, code: data.code, status: res.status };
       const transient = res.status === 408 || res.status === 429 || res.status >= 500;
       if (!transient || attempt === 2) return last;
@@ -1136,12 +1161,18 @@
     if (chunks && chunks.length) {
       try {
         const allWords = [];
-        let language = body.language, engine = null;
+        let language = body.language, engine = null, languageRecovered = false;
         const qualitySamples = [];
         const retryQueue = [];
         const report = (done) => { try { if (typeof window.__captoOnTranscribeProgress === 'function') window.__captoOnTranscribeProgress({ done, total: chunks.length, cues: allWords.length ? wordsToCues(allWords, oneW, silences, language, audioDuration) : [], language, engine }); } catch {} };
         const acceptChunk = (data, i) => {
           language = data.language || language;
+          if (data.coverageRecovered && data.language) {
+            languageRecovered = true;
+            // The selected language produced an incomplete chunk. Lock later
+            // chunks to the detected language so we recover once, not 4–28 times.
+            body.language = data.language;
+          }
           if (!engine) engine = data.engine || null;
           if (data.quality) qualitySamples.push(data.quality);
           const off = chunks[i].startSec;
@@ -1202,7 +1233,7 @@
           );
           if (!duplicate) cleanWords.push(word);
         }
-        return json({ cues: wordsToCues(cleanWords, oneW, silences, language, audioDuration), language, engine, quality: combineQuality(qualitySamples), partial: failed.length > 0, failedParts: failed.length, captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
+        return json({ cues: wordsToCues(cleanWords, oneW, silences, language, audioDuration), language, languageRecovered, engine, quality: combineQuality(qualitySamples), partial: failed.length > 0, failedParts: failed.length, captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
       } catch (error) {
         return json({ error: 'Captioning stopped unexpectedly. Please retry.', code: 'caption_pipeline', detail: String(error && error.message || '') }, 502);
       }

@@ -389,6 +389,10 @@ async function transcribeProject(opts) {
     state.engineUsed = data.engine || null;   // the model that actually ran (for accuracy attribution)
     state.transcriptionQuality = data.quality || null;
     state.captionEngineVersion = data.captionEngineVersion || 2;
+    if (data.languageRecovered && data.language) {
+      state.language = data.language;
+      syncSelectors();
+    }
     for (const k of Object.keys(fbSent)) delete fbSent[k];           // fresh baseline
     sendFeedback({ kind: 'regenerate', payload: { count: data.cues.length, language: data.language || state.language, captionEngineVersion: state.captionEngineVersion, quality: state.transcriptionQuality } });
     // Keep first-generation captions on a SINGLE row — the chunker produces
