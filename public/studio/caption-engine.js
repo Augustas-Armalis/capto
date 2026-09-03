@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * Capto Caption Engine v5
+ * Capto Caption Engine v6
  *
  * Turns provider word timestamps into deterministic, non-overlapping caption
  * cues. The engine is intentionally dependency-free so the exact same code can
@@ -12,7 +12,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.CaptoCaptionEngine = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  const VERSION = 5;
+  const VERSION = 6;
   const MIN_WORD = 0.045;
   const EPS = 0.001;
 
@@ -258,18 +258,24 @@
       const next = groups[i + 1] && groups[i + 1][0];
       const leadIn = clamp(opts.leadIn, 0, Math.max(0, first.start - previousEnd));
       let start = Math.max(previousEnd, first.start - leadIn, 0);
-      let end;
+      let end = last.end + opts.leadOut;
       if (next) {
-        const gap = Math.max(0, next.start - last.end);
-        if (gap <= opts.hideGap) {
-          // Continuous captions switch on the next corrected word onset. This
-          // keeps card changes and active-word highlighting on one timeline.
-          end = Math.max(last.end, next.start);
-        } else {
-          end = last.end + Math.min(opts.leadOut, gap * 0.25);
+        const gap = next.start - last.end;
+        const sentenceEnds = terminal(last.word);
+        // Track the provider's real spoken span. Only bridge a microscopic
+        // inter-word gap so fluent speech does not flash; never stretch every
+        // caption to the next onset, and never bridge punctuation. The previous
+        // implementation used hideGap (340ms) here, which made unrelated words
+        // look like equal-duration blocks and kept sentence endings onscreen.
+        if (!sentenceEnds && gap >= -EPS && gap <= opts.bridgeGap) {
+          end = next.start;
+        } else if (gap > 0) {
+          const tail = sentenceEnds ? opts.sentenceLeadOut : opts.leadOut;
+          end = last.end + Math.min(tail, gap * 0.25);
         }
-      } else {
-        end = last.end + opts.leadOut;
+        // A cue must never consume the next word's onset. Overlapping provider
+        // words meet at that onset; downstream word timings remain untouched.
+        end = Math.min(end, next.start);
       }
       if (Number.isFinite(opts.duration)) end = Math.min(end, opts.duration);
       end = Math.max(start + opts.minCueDuration, end);
@@ -300,9 +306,10 @@
       maxDuration: clamp(finite(options.maxDuration, 2.15), 0.5, 5),
       softGap: clamp(finite(options.softGap, 0.2), 0.08, 0.8),
       hardGap: clamp(finite(options.hardGap, 0.48), 0.2, 1.5),
-      hideGap: clamp(finite(options.hideGap, 0.34), 0.16, 1.5),
+      bridgeGap: clamp(finite(options.bridgeGap, 0.065), 0.02, 0.12),
       leadIn: clamp(finite(options.leadIn, 0), 0, 0.25),
-      leadOut: clamp(finite(options.leadOut, 0.055), 0, 0.4),
+      leadOut: clamp(finite(options.leadOut, 0.04), 0, 0.2),
+      sentenceLeadOut: clamp(finite(options.sentenceLeadOut, 0.025), 0, 0.12),
       minCueDuration: clamp(finite(options.minCueDuration, strictOneWord ? 0.07 : 0.12), 0.04, 0.5),
       allowShortTriple: options.allowShortTriple !== false,
       tripleMaxDuration: clamp(finite(options.tripleMaxDuration, 0.82), 0.45, 1.2),

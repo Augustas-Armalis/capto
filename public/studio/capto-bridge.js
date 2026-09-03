@@ -414,7 +414,7 @@
   }
 
   function wordsToCues(words, maxWordsOverride, silences, language, duration) {
-    // Caption Engine v5 is the single production segmenter. Keep the older code
+    // Caption Engine v6 is the single production segmenter. Keep the older code
     // below as a last-resort fallback for a stale cached HTML page that failed to
     // load caption-engine.js; new and exported projects always take this path.
     if (window.CaptoCaptionEngine && typeof window.CaptoCaptionEngine.wordsToCues === 'function') {

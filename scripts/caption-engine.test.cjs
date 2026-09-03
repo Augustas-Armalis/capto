@@ -18,13 +18,13 @@ function assertValid(cues) {
     assert.ok(cues[i].start >= 0);
     assert.ok(cues[i].end > cues[i].start);
     assert.equal(cues[i].text, cues[i].words.map((w) => w.word).join(' '));
-    assert.equal(cues[i]._engineVersion, 5);
+    assert.equal(cues[i]._engineVersion, 6);
     if (i) assert.ok(cues[i].start >= cues[i - 1].end - 1e-9, 'cues must not overlap');
   }
 }
 
-test('reports Caption Engine v5', () => {
-  assert.equal(engine.VERSION, 5);
+test('reports Caption Engine v6', () => {
+  assert.equal(engine.VERSION, 6);
 });
 
 test('defaults to one or two words and avoids dangling English connectors', () => {
@@ -59,6 +59,30 @@ test('strict word-by-word mode changes on every latency-corrected onset', () => 
   for (let i = 1; i < cues.length; i++) {
     assert.ok(Math.abs(cues[i - 1].end - cues[i].start) < 1e-9);
   }
+  assertValid(cues);
+});
+
+test('word-by-word duration follows each spoken word instead of equal blocks', () => {
+  const words = [
+    { word: 'Quick', start: 0.5, end: 0.64 },
+    { word: 'longer', start: 0.82, end: 1.31 },
+    { word: 'end.', start: 1.48, end: 1.70 },
+  ];
+  const cues = engine.wordsToCues(words, { language: 'en', oneWord: true, latencyCompensation: 0 });
+  const durations = cues.map((cue) => cue.end - cue.start);
+  assert.ok(durations[1] > durations[0] * 2, 'the longer spoken word must remain visibly longer');
+  assert.ok(cues[0].end < cues[1].start, 'a real inter-word pause must remain visible');
+  assertValid(cues);
+});
+
+test('sentence-ending captions stop on speech instead of hanging until the next phrase', () => {
+  const cues = engine.wordsToCues([
+    { word: 'Done.', start: 0.3, end: 0.62 },
+    { word: 'Next', start: 0.9, end: 1.12 },
+    { word: 'thought', start: 1.15, end: 1.48 },
+  ], { language: 'en', oneWord: true, latencyCompensation: 0 });
+  assert.ok(cues[0].end <= 0.65, 'sentence end should stay close to its spoken word end');
+  assert.ok(cues[1].start - cues[0].end > 0.2, 'the sentence pause should clear the screen');
   assertValid(cues);
 });
 
