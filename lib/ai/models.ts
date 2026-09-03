@@ -19,9 +19,19 @@ export type SttModel = {
   blurb: string;
 };
 
-// Ordered best-first. Whisper-large-v3 on Groq is the free workhorse; Deepgram
-// Nova-3 and OpenAI Whisper are the premium engines unlocked on paid plans.
+// Ordered by product fallback preference. Nova-3 is Capto's primary engine for
+// precise word alignment in English and Lithuanian; Whisper Large v3 remains
+// the reliable multilingual/BYOK fallback.
 export const STT_MODELS: SttModel[] = [
+  {
+    id: "deepgram-nova-3",
+    label: "Deepgram Nova-3",
+    provider: "deepgram",
+    apiModel: "nova-3",
+    quality: 10,
+    minPlan: "pro",
+    blurb: "Best word timing and first-class English and Lithuanian support.",
+  },
   {
     id: "groq-whisper-large-v3",
     label: "Whisper Large v3 · Groq",
@@ -39,15 +49,6 @@ export const STT_MODELS: SttModel[] = [
     quality: 7,
     minPlan: "free",
     blurb: "Faster, slightly lighter accuracy.",
-  },
-  {
-    id: "deepgram-nova-3",
-    label: "Deepgram Nova-3",
-    provider: "deepgram",
-    apiModel: "nova-3",
-    quality: 9,
-    minPlan: "pro",
-    blurb: "Best-in-class word timing, premium engine.",
   },
   {
     id: "openai-whisper-1",

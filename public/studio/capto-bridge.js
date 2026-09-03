@@ -5,7 +5,7 @@
  * Subby was a local Node app: the browser uploaded the video to a server that
  * stored it, ran Whisper/ffmpeg, and streamed it back. Capto's model is the
  * opposite — the video NEVER leaves the device, transcription goes through a
- * Groq proxy, and export happens in the browser. This shim keeps app.js
+ * managed STT proxy, and export happens in the browser. This shim keeps app.js
  * verbatim and only swaps its data layer: it overrides window.fetch for the
  * /api/* routes app.js calls and answers them client-side.
  *
@@ -25,11 +25,11 @@
   // Canonical engine + language catalogue — mirrors lib/ai/models.ts STT_MODELS
   // and the dashboard/settings language list, so the editor's Captions tab shows
   // exactly the same options as the rest of Capto (plan-gated the same way).
-  // Capto runs ONE engine for everyone: Whisper Large v3 (managed, house key).
-  // Regular/free/friend users never see this picker (it's admin-only) and always
-  // get Whisper. The on-device engine was removed — it was unreliable across
-  // machines and Whisper is simply better. Admins can still inspect the model.
+  // Capto exposes ONE automatic engine to users. The server prefers Nova-3 for
+  // its stronger word alignment and falls back to Whisper Large v3 when the
+  // required key is unavailable. The picker stays admin-only.
   window.__captoModels = [
+    { id: 'deepgram-nova-3', label: 'Nova-3', minPlan: 'pro' },
     { id: 'groq-whisper-large-v3', label: 'Whisper Large v3', minPlan: 'free' },
   ];
   // Full Whisper language set (~98 langs, ISO-639-1) — searchable in the editor's
@@ -414,7 +414,7 @@
   }
 
   function wordsToCues(words, maxWordsOverride, silences, language, duration) {
-    // Caption Engine v6 is the single production segmenter. Keep the older code
+    // Caption Engine v7 is the single production segmenter. Keep the older code
     // below as a last-resort fallback for a stale cached HTML page that failed to
     // load caption-engine.js; new and exported projects always take this path.
     if (window.CaptoCaptionEngine && typeof window.CaptoCaptionEngine.wordsToCues === 'function') {
@@ -1048,12 +1048,10 @@
   }
 
   async function postOneChunk(file, body, durationSec) {
-    // Default EVERYONE to the best Whisper model (Large v3) — that's Capto's one
-    // engine for all. Only an explicit, non-auto choice (the admin engine picker)
-    // overrides it. The server still falls back to the user's own-key Whisper if
-    // it can't run this exact id, so this is always safe.
+    // Keep normal requests on Auto so the server can use the strongest available
+    // timing model. An explicit admin-only choice is preserved for diagnostics.
     let eng = body.model || body.engine || '';
-    if (!eng || eng === 'auto') eng = 'groq-whisper-large-v3';
+    if (!eng) eng = 'auto';
     let last = null;
     // Transient worker/network failures should not throw away a 20-minute job.
     // Retry the same idempotent audio chunk twice; never retry auth, quota, bad
@@ -1177,8 +1175,9 @@
           if (data.quality) qualitySamples.push(data.quality);
           const off = chunks[i].startSec;
           const acceptAfter = i === 0 ? -Infinity : off + CHUNK_OVERLAP_SEC * 0.55;
-          for (const w of (data.words || [])) {
-            const shifted = { word: w.word, start: (w.start || 0) + off, end: (w.end || 0) + off };
+          for (let wi = 0; wi < (data.words || []).length; wi++) {
+            const w = data.words[wi];
+            const shifted = { word: w.word, start: (w.start || 0) + off, end: (w.end || 0) + off, _chunkIndex: i, _wordIndex: wi };
             // Overlapping audio prevents words from being cut at chunk edges.
             // Keep the prior chunk's copy in the overlap and only admit the new
             // chunk once it has crossed the stable midpoint.
@@ -1224,14 +1223,22 @@
           return json({ error: failure.error, code: failure.code, detail: failure.detail }, failure.status || 502);
         }
         if (!allWords.length) return json({ error: 'No speech detected in this clip.' }, 422);
-        allWords.sort((a, b) => a.start - b.start);
+        // Keep provider transcript order inside every chunk. Word timestamps
+        // occasionally overlap or move backwards; sorting numerically here can
+        // scramble a correct sentence. Chunk/order metadata also puts delayed
+        // retry results back in their original place.
+        allWords.sort((a, b) => a._chunkIndex - b._chunkIndex || a._wordIndex - b._wordIndex);
         const cleanWords = [];
         for (const word of allWords) {
           const duplicate = cleanWords.slice(-8).some((old) =>
             String(old.word || '').toLocaleLowerCase() === String(word.word || '').toLocaleLowerCase() &&
             Math.abs(old.start - word.start) < 0.7
           );
-          if (!duplicate) cleanWords.push(word);
+          if (!duplicate) {
+            delete word._chunkIndex;
+            delete word._wordIndex;
+            cleanWords.push(word);
+          }
         }
         return json({ cues: wordsToCues(cleanWords, oneW, silences, language, audioDuration), language, languageRecovered, engine, quality: combineQuality(qualitySamples), partial: failed.length > 0, failedParts: failed.length, captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
       } catch (error) {

@@ -60,10 +60,11 @@ export async function POST(req: Request) {
         if (u) {
           plan = u.plan;
           prefs = {
-            // One product engine, no user-facing model roulette. Prefer the
-            // highest-accuracy Whisper and let resolveEngine fall back only when
-            // that provider/key is unavailable.
-            aiProvider: "groq-whisper-large-v3",
+            // One product engine, no user-facing model roulette. Nova-3 has the
+            // strongest word alignment and first-class English + Lithuanian
+            // support. resolveEngine automatically falls back to Whisper Large
+            // v3 when no Deepgram key is configured for this account/plan.
+            aiProvider: "deepgram-nova-3",
             aiUseOwnKey: u.aiUseOwnKey,
           };
         }

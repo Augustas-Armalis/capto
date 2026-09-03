@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * Capto Caption Engine v6
+ * Capto Caption Engine v7
  *
  * Turns provider word timestamps into deterministic, non-overlapping caption
  * cues. The engine is intentionally dependency-free so the exact same code can
@@ -12,7 +12,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.CaptoCaptionEngine = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  const VERSION = 6;
+  const VERSION = 7;
   const MIN_WORD = 0.045;
   const EPS = 0.001;
 
@@ -70,20 +70,22 @@
       if (Number.isFinite(duration)) end = Math.min(end, duration);
       if (end <= start) continue;
       raw.push({ word, start, end, _order: i });
-      fallback = end;
+      fallback = Math.max(fallback, end);
     }
-    raw.sort((a, b) => a.start - b.start || a._order - b._order);
 
     const out = [];
     for (const w of raw) {
       const prev = out[out.length - 1];
       // Provider retries occasionally duplicate the same token/timestamp.
       if (prev && lexical(prev.word) === lexical(w.word) && Math.abs(prev.start - w.start) < 0.025) continue;
-      if (prev && w.start < prev.start + 0.012) w.start = prev.start + 0.012;
+      // Provider timestamps can overlap or even move backwards inside a
+      // perfectly ordered transcript. Keep the provider's TEXT order and
+      // repair the onset; sorting by timestamp changes actual sentences (for
+      // example "as a CMO I" became "CMO as a I").
+      if (prev && w.start < prev.start + MIN_WORD) w.start = prev.start + MIN_WORD;
       if (w.end < w.start + MIN_WORD) w.end = w.start + MIN_WORD;
       if (Number.isFinite(duration) && w.end > duration) w.end = duration;
       if (w.end <= w.start) continue;
-      delete w._order;
       out.push(w);
     }
 
@@ -93,10 +95,19 @@
       const nextStart = out[i + 1].start;
       if (out[i].end > nextStart + 0.08) out[i].end = Math.max(out[i].start + MIN_WORD, nextStart);
     }
+    for (const w of out) delete w._order;
     return out;
   }
 
-  /** Use audio-energy silence intervals to correct STT words stretched into pauses. */
+  /**
+   * Use audio-energy silence intervals to correct STT words stretched into pauses.
+   *
+   * A provider sometimes wraps a leading music/noise bed and the first spoken
+   * word in one timestamp (for example 0.00–0.98 even though speech begins at
+   * 0.64). When a silence sits fully inside that span, keep the larger spoken
+   * side instead of always keeping the left side. The old behaviour could turn
+   * the first caption into a tiny flash entirely before the voice started.
+   */
   function snapWordsToSilence(words, silences) {
     if (!silences || !silences.length) return words;
     let si = 0;
@@ -104,8 +115,20 @@
       while (si < silences.length && silences[si].end <= w.start + EPS) si++;
       for (let k = si; k < silences.length && silences[k].start < w.end - EPS; k++) {
         const s = silences[k];
-        if (s.start > w.start + MIN_WORD && s.start < w.end) w.end = s.start;
-        if (s.start <= w.start && s.end > w.start + MIN_WORD && s.end < w.end) w.start = s.end;
+        const cutsLeft = s.start > w.start + MIN_WORD && s.start < w.end;
+        const cutsRight = s.end > w.start && s.end < w.end - MIN_WORD;
+        if (cutsLeft && cutsRight) {
+          const before = s.start - w.start;
+          const after = w.end - s.end;
+          if (after > before) w.start = s.end;
+          else w.end = s.start;
+        } else if (cutsLeft) {
+          // Speech is before a silence that reaches beyond this word.
+          w.end = s.start;
+        } else if (cutsRight) {
+          // Speech is after a silence that began before this word.
+          w.start = s.end;
+        }
       }
       if (w.end < w.start + MIN_WORD) w.end = w.start + MIN_WORD;
     }
@@ -188,8 +211,11 @@
     else if (count === 3) {
       const lexicalWords = words.slice(from, to + 1).map((w) => lexical(w.word));
       const shortTriple = opts.allowShortTriple
-        && lexicalWords.every((w) => w.length > 0 && w.length <= 3)
-        && lexicalWords.reduce((sum, w) => sum + w.length, 0) <= 8
+        && lexicalWords.every((w) => w.length > 0 && w.length <= 4)
+        && lexicalWords.reduce((sum, w) => sum + w.length, 0) <= 10
+        // Three words are a repair for tiny connector-heavy phrases, not the
+        // default just because an odd number of words remains.
+        && lexicalWords.slice(0, 2).some((w) => dangling.has(w) || leading.has(w))
         && duration <= opts.tripleMaxDuration
         && !terminal(words[from].word)
         && !terminal(words[from + 1].word)
@@ -312,7 +338,7 @@
       sentenceLeadOut: clamp(finite(options.sentenceLeadOut, 0.025), 0, 0.12),
       minCueDuration: clamp(finite(options.minCueDuration, strictOneWord ? 0.07 : 0.12), 0.04, 0.5),
       allowShortTriple: options.allowShortTriple !== false,
-      tripleMaxDuration: clamp(finite(options.tripleMaxDuration, 0.82), 0.45, 1.2),
+      tripleMaxDuration: clamp(finite(options.tripleMaxDuration, 0.95), 0.45, 1.2),
     };
     const words = normalizeWords(input, { duration: opts.duration });
     compensateProviderLatency(words, options.silences || [], options.latencyCompensation);

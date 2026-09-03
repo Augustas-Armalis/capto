@@ -100,6 +100,7 @@ async function deepgram(input: TranscribeInput): Promise<TranscriptResult> {
       "content-type": file.type || "audio/mp4",
     },
     body: buf,
+    signal: AbortSignal.timeout(55_000),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
