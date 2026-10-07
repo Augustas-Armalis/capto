@@ -28,7 +28,7 @@ const wrap = (inner: string) => `
       <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em;color:#fff;margin-bottom:20px;">Capto</div>
       ${inner}
       <div style="margin-top:28px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px;color:#7c7f8c;">
-        Capto, the focused caption tool. Built and powered by Contles.
+        Capto, the focused caption tool.
       </div>
     </div>
   </div>`;

@@ -22,7 +22,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Money } from "@/components/ui/money";
 import { Container } from "@/components/ui/container";
-import { SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
+import { Band, SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
+import { DitherStatic } from "@/components/visual/dither-static";
 import { PLANS } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
@@ -30,10 +31,10 @@ function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) 
   // Two equal-width tabs so the pill centers cleanly; the savings badge floats
   // on the Annual tab's corner (doesn't shift the layout / centering).
   return (
-    <div className="relative inline-flex rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] p-1 backdrop-blur-md">
+    <div className="relative inline-flex rounded-[var(--radius-md)] border border-white/[0.08] bg-white/[0.03] p-1">
       <span
         aria-hidden
-        className="absolute inset-y-1 left-1 w-[96px] rounded-[var(--radius-pill)] bg-white transition-transform duration-300 ease-[var(--ease-out)]"
+        className="absolute inset-y-1 left-1 w-[96px] rounded-[6px] bg-white/[0.1] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-transform duration-300 ease-[var(--ease-out)]"
         style={{ transform: annual ? "translateX(100%)" : "translateX(0)" }}
       />
       {([["Monthly", false], ["Annual", true]] as const).map(([label, val]) => (
@@ -41,8 +42,8 @@ function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) 
           key={label}
           onClick={() => onChange(val)}
           className={cn(
-            "relative z-10 w-[96px] rounded-[var(--radius-pill)] py-1.5 text-center text-sm font-medium transition-colors duration-300",
-            annual === val ? "text-black" : "text-[var(--color-fg-muted)] hover:text-white",
+            "relative z-10 w-[96px] rounded-[6px] py-1.5 text-center text-[13px] font-medium transition-colors duration-300",
+            annual === val ? "text-white" : "text-[var(--color-fg-muted)] hover:text-white",
           )}
         >
           {label}
@@ -65,7 +66,7 @@ function Toggle({ annual, onChange }: { annual: boolean; onChange: (v: boolean) 
 // Pick a lucide icon that fits each feature line (falls back to a check).
 export function FeatureIcon({ text }: { text: string }) {
   const t = text.toLowerCase();
-  const cls = "mt-0.5 size-4 shrink-0 text-[var(--color-brand)]";
+  const cls = "mt-0.5 size-[15px] shrink-0 text-[var(--color-fg-subtle)]";
   if (/everything in/.test(t)) return <Crown className={cls} strokeWidth={2} />;
   if (/translat|language/.test(t)) return <Languages className={cls} strokeWidth={2} />;
   if (/watermark/.test(t)) return <BadgeCheck className={cls} strokeWidth={2} />;
@@ -135,7 +136,7 @@ export function PricingTable({
   }
 
   const grid = (
-    <div className="grid items-stretch gap-5 lg:grid-cols-3">
+    <div data-reveal-stagger className="grid items-stretch gap-4 lg:grid-cols-3">
       {PLANS.map((plan) => {
         const isFree = plan.id === "free";
         const isPro = plan.id === "pro";
@@ -150,20 +151,24 @@ export function PricingTable({
           <div
             key={plan.id}
             className={cn(
-              "relative flex flex-col rounded-[var(--radius-2xl)] border p-7",
-              isPro && "glow-border-always border-white/15 bg-white/[0.04]",
-              isUltra && "glow-border border-white/[0.1] bg-white/[0.02]",
-              !isPro && !isUltra && "border-white/[0.07] bg-white/[0.02]",
+              "relative isolate flex flex-col overflow-hidden rounded-[var(--radius-xl)] border p-7",
+              isPro && "glow-border-always border-[var(--color-violet)]/35 bg-[#0d0c14]",
+              isUltra && "glow-border border-[var(--color-border)] bg-[var(--color-bg-elev)]",
+              !isPro && !isUltra && "border-[var(--color-border)] bg-[var(--color-bg-elev)]",
             )}
           >
+            {isPro && (
+              <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 opacity-60 [mask-image:linear-gradient(180deg,#000,transparent)]">
+                <DitherStatic preset="top" pixel={3} intensity={0.8} />
+              </div>
+            )}
             {plan.badge && (
-              <div className="absolute -top-2.5 left-7">
+              <div className="absolute right-6 top-7">
                 <span
                   className={cn(
-                    "rounded-[var(--radius-pill)] px-2.5 py-1 text-[11px] font-medium",
-                    isPro && "bg-white text-black",
-                    isUltra && "border border-[var(--color-violet)]/50 bg-[oklch(0.21_0.05_286)] text-white",
-                    !isPro && !isUltra && "border border-white/10 bg-[var(--color-bg-elev)] text-[var(--color-fg-muted)]",
+                    "mono rounded-[var(--radius-xs)] px-1.5 py-0.5 text-[10px] uppercase tracking-wider",
+                    isPro && "bg-[var(--color-violet)] text-white",
+                    !isPro && "border border-white/10 text-[var(--color-fg-muted)]",
                   )}
                 >
                   {plan.badge}
@@ -171,20 +176,20 @@ export function PricingTable({
               </div>
             )}
 
-            <h3 className="heading text-xl text-white">{plan.name}</h3>
-            <p className="mt-1 text-sm text-[var(--color-fg-muted)]">{plan.tagline}</p>
+            <h3 className="heading relative text-lg text-white">{plan.name}</h3>
+            <p className="relative mt-1 text-sm text-[var(--color-fg-muted)]">{plan.tagline}</p>
 
             {isFree ? (
               <>
-                <div className="mt-6 flex items-baseline gap-1">
-                  <span className="display text-5xl text-white tnum"><Money eur="0" usd="0" /></span>
+                <div className="relative mt-8 flex items-baseline gap-1">
+                  <span className="display text-[2.75rem] text-white tnum"><Money eur="0" usd="0" /></span>
                 </div>
                 <p className="mt-1 h-5 text-xs text-[var(--color-fg-subtle)]">Free forever</p>
               </>
             ) : annual ? (
               <>
-                <div className="mt-6 flex items-baseline gap-1">
-                  <span className="display text-5xl text-white tnum">
+                <div className="relative mt-8 flex items-baseline gap-1">
+                  <span className="display text-[2.75rem] text-white tnum">
                     <Money eur={plan.priceAnnualTotal.toFixed(2)} usd={plan.priceAnnualTotalUsd.toFixed(2)} />
                   </span>
                   <span className="text-sm text-[var(--color-fg-subtle)]">/yr</span>
@@ -200,8 +205,8 @@ export function PricingTable({
               </>
             ) : (
               <>
-                <div className="mt-6 flex items-baseline gap-1">
-                  <span className="display text-5xl text-white tnum">
+                <div className="relative mt-8 flex items-baseline gap-1">
+                  <span className="display text-[2.75rem] text-white tnum">
                     <Money eur={plan.priceMonthly.toFixed(2)} usd={plan.priceMonthlyUsd.toFixed(2)} />
                   </span>
                   <span className="text-sm text-[var(--color-fg-subtle)]">/mo</span>
@@ -246,11 +251,11 @@ export function PricingTable({
               </Button>
             )}
 
-            <ul className="mt-7 flex-1 space-y-2.5">
+            <ul className="mt-7 flex-1 space-y-2.5 border-t border-[var(--color-border)] pt-6">
               {plan.features.map((f) => (
                 <li key={f} className="flex items-start gap-2.5 text-sm">
                   <FeatureIcon text={f} />
-                  <span className="text-[var(--color-fg-muted)]">{f}</span>
+                  <span className="text-[13.5px] text-[var(--color-fg-muted)]">{f}</span>
                 </li>
               ))}
             </ul>
@@ -272,7 +277,7 @@ export function PricingTable({
   }
 
   return (
-    <section id="pricing" className="py-24 sm:py-32">
+    <Band id="pricing" className="py-24 sm:py-32">
       <Container>
         <div className="mx-auto max-w-xl text-center">
           <div className="flex justify-center">
@@ -290,6 +295,6 @@ export function PricingTable({
         </div>
         <div className="mt-14">{grid}</div>
       </Container>
-    </section>
+    </Band>
   );
 }

@@ -1,7 +1,7 @@
 # Capto — AI captions, web edition
 
-The web SaaS for Capto — AI captions that actually look good. Built on Next.js 15, better-auth,
-Drizzle/Neon Postgres, and Stripe. Powered by [Contles](https://contles.com?ref=subby-readme).
+The web SaaS for Capto — AI captions that actually look good. Built on Next.js, better-auth,
+Drizzle/Neon Postgres, and Stripe.
 
 > The original Capto was a local desktop app. That code is preserved under [`/legacy`](./legacy)
 > if you want the offline build with bundled ffmpeg and local Whisper.

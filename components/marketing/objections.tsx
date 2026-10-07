@@ -1,7 +1,5 @@
-import { ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { Section, SectionTitle } from "@/components/ui/section";
+import { Band, Muted, SectionHead } from "@/components/ui/section";
 
 const ITEMS = [
   {
@@ -18,31 +16,32 @@ const ITEMS = [
   },
   {
     q: "What if Capto disappears?",
-    a: "Built by Contles. Real revenue, real team. And every export is yours, lossless and watermark free. Even if we vanished, your videos stay clean.",
+    a: "Real revenue, real team. And every export is yours, lossless and watermark free. Even if we vanished, your videos stay clean.",
   },
 ];
 
 export function Objections() {
   return (
-    <Section className="py-20 sm:py-28">
-      <Container size="narrow">
-        <SectionTitle className="text-center">Yeah, but.</SectionTitle>
-        <div className="mt-12 grid gap-4 sm:grid-cols-2">
-          {ITEMS.map((it) => (
-            <div key={it.q} className="rounded-[var(--radius-2xl)] border border-white/[0.08] bg-white/[0.02] p-6">
-              <h3 className="heading text-base text-white">{it.q}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--color-fg-muted)]">{it.a}</p>
+    <Band className="py-24 sm:py-32">
+      <Container>
+        <SectionHead
+          label="Objections"
+          title={
+            <>
+              Yeah, but. <Muted>Fair. Here&rsquo;s the answer.</Muted>
+            </>
+          }
+        />
+        <div data-reveal className="hair-grid d-2 mt-14 sm:grid-cols-2 lg:grid-cols-4">
+          {ITEMS.map((it, i) => (
+            <div key={it.q} className="p-6">
+              <span className="mono text-[11px] text-[var(--color-fg-subtle)] tnum">0{i + 1}</span>
+              <h3 className="heading mt-4 text-[15px] text-white sm:mt-8">{it.q}</h3>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--color-fg-muted)]">{it.a}</p>
             </div>
           ))}
         </div>
-
-        <div className="mt-10 flex justify-center">
-          <Button href="/signup" size="lg" variant="primary">
-            Start free
-            <ArrowRight className="size-4" />
-          </Button>
-        </div>
       </Container>
-    </Section>
+    </Band>
   );
 }

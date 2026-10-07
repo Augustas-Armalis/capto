@@ -3000,22 +3000,6 @@
       };
       new MutationObserver(applyThumbs).observe(grid, { childList: true });
     }
-    // "Powered by Contles" chip at the foot of the home — clickable → Contles.
-    const wrap = document.querySelector('.home-wrap');
-    if (wrap && !document.getElementById('capto-contles')) {
-      const c = document.createElement('div');
-      c.id = 'capto-contles';
-      c.style.cssText = 'margin:36px 0 8px;display:flex;justify-content:center';
-      c.innerHTML =
-        `<a href="https://contles.com?ref=capto" target="_blank" rel="noopener noreferrer" ` +
-        `style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:var(--faint);text-decoration:none;` +
-        `border:1px solid var(--line);border-radius:99px;padding:6px 13px;transition:.14s">` +
-        `<span style="width:6px;height:6px;border-radius:50%;background:linear-gradient(120deg,#82a5ff,#62d8ff)"></span>` +
-        `Powered by <b style="color:var(--text);font-weight:600">Contles</b></a>`;
-      const a = c.querySelector('a');
-      if (a) { a.onmouseenter = () => { a.style.borderColor = 'var(--line-2)'; a.style.color = 'var(--muted)'; }; a.onmouseleave = () => { a.style.borderColor = 'var(--line)'; a.style.color = 'var(--faint)'; }; }
-      wrap.appendChild(c);
-    }
     setupSafeZones();
     setupExportOptions();
     setupThumbPicker();

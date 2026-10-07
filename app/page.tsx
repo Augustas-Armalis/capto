@@ -15,7 +15,6 @@ import { PricingTable } from "@/components/marketing/pricing-table";
 import { Objections } from "@/components/marketing/objections";
 import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import { CtaBanner } from "@/components/marketing/cta-banner";
-import { Reveal } from "@/components/marketing/reveal";
 import { JsonLd, softwareAppLd, faqLd, organizationLd } from "@/components/seo/json-ld";
 import { DEFAULT_FAQS } from "@/lib/faqs";
 
@@ -24,21 +23,21 @@ export default function HomePage() {
     <>
       <JsonLd data={[organizationLd(), softwareAppLd(), faqLd(DEFAULT_FAQS)]} />
       <SiteNav />
-      <main className="relative">
+      <main className="rails relative overflow-x-clip">
         <Hero />
         <LogoMarquee />
-        <Reveal variant="up"><Problem /></Reveal>
-        <Reveal variant="up"><FeatureGrid /></Reveal>
-        <Reveal variant="up"><Hours /></Reveal>
-        <Reveal variant="blur"><CaptionStyleStudio /></Reveal>
-        <Reveal variant="up"><Workflow /></Reveal>
-        <Reveal variant="up"><ValueProof /></Reveal>
-        <Reveal variant="up"><Comparison /></Reveal>
+        <Problem />
+        <FeatureGrid />
+        <Hours />
+        <CaptionStyleStudio />
+        <Workflow />
+        <ValueProof />
+        <Comparison />
         <Testimonials />
         <MadeWithCapto />
-        <Reveal variant="up"><PricingTable /></Reveal>
-        <Reveal variant="up"><Objections /></Reveal>
-        <Reveal variant="up"><FaqAccordion /></Reveal>
+        <PricingTable />
+        <Objections />
+        <FaqAccordion />
         <CtaBanner />
       </main>
       <SiteFooter />

@@ -9,19 +9,21 @@ const base =
   "group/btn relative inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] font-medium whitespace-nowrap select-none transition-[background-color,border-color,color,transform,box-shadow,opacity] duration-[var(--dur-fast)] ease-[var(--ease-out)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-white text-black hover:bg-white/90 hover:shadow-[0_6px_24px_-8px_rgba(255,255,255,0.35)]",
+  primary:
+    "bg-[#f7f8f8] text-[#08090a] shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)] hover:bg-white",
   magic:
-    "bg-magic text-white border border-white/15 hover:brightness-110 shadow-[0_8px_30px_-10px_oklch(0.62_0.21_292_/_0.55)] hover:shadow-[0_10px_38px_-8px_oklch(0.62_0.21_292_/_0.7)]",
-  secondary: "glass text-[var(--color-fg)] hover:bg-white/[0.07]",
+    "bg-[var(--color-violet)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_0_0_1px_rgba(142,123,255,0.5)] hover:bg-[#9d8cff]",
+  secondary:
+    "bg-white/[0.05] text-[var(--color-fg)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] hover:bg-white/[0.08]",
   ghost: "text-[var(--color-fg-muted)] hover:text-white hover:bg-white/[0.05]",
-  outline: "border border-white/15 text-[var(--color-fg)] hover:border-white/30 hover:bg-white/[0.04]",
+  outline: "border border-white/[0.12] text-[var(--color-fg)] hover:border-white/25 hover:bg-white/[0.03]",
   destructive: "bg-[var(--color-danger)] text-white hover:brightness-110",
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-8 px-3.5 text-[13px]",
+  sm: "h-8 px-3 text-[13px]",
   md: "h-9 px-4 text-sm",
-  lg: "h-11 px-5 text-[15px]",
+  lg: "h-10 px-5 text-[14px]",
 };
 
 type ButtonOwnProps = { variant?: Variant; size?: Size; loading?: boolean; className?: string; children?: React.ReactNode };

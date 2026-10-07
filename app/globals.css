@@ -5,43 +5,45 @@
    ───────────────────────────────────────────────────────────────────────── */
 
 @theme {
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-heading: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "DM Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-heading: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
-  --color-bg: oklch(0.045 0.003 280);
-  --color-bg-elev: oklch(0.09 0.004 280);
+  /* Near-black, Linear-style neutral ramp. One accent (logo violet). */
+  --color-bg: #08090a;
+  --color-bg-elev: #0e0f11;
+  --color-surface: #141518;
 
-  --color-fg: oklch(0.99 0 0);
-  --color-fg-muted: oklch(0.72 0.01 280);
-  /* 0.62 clears WCAG AA (≈5.7:1 on bg) for small informational text */
-  --color-fg-subtle: oklch(0.62 0.012 280);
+  --color-fg: #f7f8f8;
+  --color-fg-muted: #8a8f98;
+  /* #757a83 clears WCAG AA (≈4.6:1 on bg) for small informational text */
+  --color-fg-subtle: #757a83;
 
-  --color-border: oklch(0.24 0.012 280);
-  --color-border-strong: oklch(0.34 0.014 280);
+  --color-border: oklch(1 0 0 / 0.08);
+  --color-border-strong: oklch(1 0 0 / 0.14);
 
-  /* Brand ramp, violet anchor, cyan + fuchsia companions for glow variety */
-  --color-brand: oklch(0.74 0.15 268);
-  --color-brand-soft: oklch(0.74 0.15 268 / 0.16);
-  --color-brand-ink: oklch(0.99 0 0);
+  /* Brand: the logo's violet. cyan/fuchsia stay defined for the app surfaces. */
+  --color-brand: #9d8cff;
+  --color-brand-soft: oklch(0.7 0.16 285 / 0.14);
+  --color-brand-ink: #ffffff;
   --color-cyan: oklch(0.83 0.12 224);
-  --color-violet: oklch(0.68 0.19 282);
+  --color-violet: #8e7bff;
   --color-fuchsia: oklch(0.7 0.23 324);
 
-  --color-success: oklch(0.74 0.16 152);
+  --color-success: oklch(0.76 0.15 152);
   --color-danger: oklch(0.68 0.2 25);
   --color-warning: oklch(0.82 0.15 80);
 
-  --radius-xs: 6px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-2xl: 26px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
   --radius-pill: 999px;
 
   --shadow-card: 0 1px 0 0 oklch(1 0 0 / 0.04) inset, 0 8px 28px -12px oklch(0 0 0 / 0.6);
-  --shadow-pop: 0 20px 60px -20px oklch(0 0 0 / 0.75);
+  --shadow-pop: 0 0 0 1px oklch(1 0 0 / 0.06), 0 24px 80px -24px oklch(0 0 0 / 0.9);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
@@ -50,17 +52,15 @@
   --dur-slow: 520ms;
 }
 
-@property --capto-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+@font-face { font-family: "Geist"; font-weight: 100 900; font-style: normal; font-display: swap; src: url("/fonts/Geist-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Geist"; font-weight: 100 900; font-style: normal; font-display: swap; src: url("/fonts/Geist-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Geist Mono"; font-weight: 100 900; font-style: normal; font-display: swap; src: url("/fonts/GeistMono-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Geist Mono"; font-weight: 100 900; font-style: normal; font-display: swap; src: url("/fonts/GeistMono-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 @font-face { font-family: "DM Sans"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/DMSans-400.woff2") format("woff2"); }
 @font-face { font-family: "DM Sans"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/DMSans-500.woff2") format("woff2"); }
 @font-face { font-family: "DM Sans"; font-weight: 600; font-style: normal; font-display: swap; src: url("/fonts/DMSans-600.woff2") format("woff2"); }
@@ -72,8 +72,7 @@ html, body {
   background: var(--color-bg);
   color: var(--color-fg);
   font-family: var(--font-sans);
-  letter-spacing: -0.011em;
-  font-feature-settings: "ss01";
+  letter-spacing: -0.006em;
 }
 /* Lenis owns scrolling, don't double up with CSS smooth */
 html.lenis, html.lenis body { height: auto; }
@@ -96,26 +95,33 @@ label[for] {
   border-radius: 2px;
 }
 
-/* ── Typography, DM Sans medium, tight negative tracking ─────────────── */
+/* ── Typography, Geist medium, tight negative tracking ───────────────── */
 .display {
   font-family: var(--font-heading);
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  line-height: 1.0;
+  font-weight: 560;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
 }
 .heading {
   font-family: var(--font-heading);
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1.12;
+  font-weight: 560;
+  letter-spacing: -0.022em;
+  line-height: 1.2;
 }
 .eyebrow {
   font-family: var(--font-mono);
-  font-weight: 500;
+  font-weight: 450;
   font-size: 11px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-fg-subtle);
+}
+/* Linear-style headline sheen: bright top, softened bottom */
+.text-sheen {
+  background: linear-gradient(180deg, #fff 25%, oklch(1 0 0 / 0.62));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .tnum { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
 .mono { font-family: var(--font-mono); }
@@ -141,163 +147,187 @@ label[for] {
 
 /* ── The brand gradient, smooth, no banding, no grain glitches ───────── */
 .bg-magic {
-  background: linear-gradient(
-    130deg,
-    oklch(0.84 0.12 224) 0%,
-    oklch(0.7 0.18 270) 40%,
-    oklch(0.64 0.22 300) 72%,
-    oklch(0.4 0.18 286) 100%
-  );
+  background: linear-gradient(135deg, #b4a8ff 0%, #8e7bff 45%, #6c5ce7 100%);
 }
 .text-magic {
-  background: linear-gradient(100deg, oklch(0.88 0.11 224), oklch(0.78 0.16 268) 52%, oklch(0.76 0.21 318));
+  background: linear-gradient(180deg, #d7d0ff 10%, #9d8cff 90%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-/* ── Subtle static brand veil (sits behind a hero headline) ───────────── */
-.hero-veil {
+/* ── Dither surfaces ────────────────────────────────────────────────────
+   <DitherShader> (WebGL, animated) and <DitherStatic> (2D canvas, drawn once)
+   both render an ordered Bayer-8 dither. These helpers mask them into the page. */
+.dither-canvas {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  background: radial-gradient(60% 60% at 50% 0%, oklch(0.62 0.21 292 / 0.16), transparent 72%);
+  image-rendering: pixelated;
+}
+.fade-y {
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 22%, #000 70%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 22%, #000 70%, transparent);
+}
+.fade-down {
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 35%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 35%, transparent 100%);
+}
+.fade-up-mask {
+  -webkit-mask-image: linear-gradient(0deg, #000 0%, #000 40%, transparent 100%);
+  mask-image: linear-gradient(0deg, #000 0%, #000 40%, transparent 100%);
+}
+.fade-x {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
 }
 
-/* ── Aurora, contained drifting blobs, edge-masked. Small amplitude so
-   they mix in place and never wander off. ─────────────────────────────── */
+/* Legacy aurora wrapper (now hosts a static dither, see <Aurora />) */
 .aurora-wrap {
   position: absolute;
   overflow: hidden;
   pointer-events: none;
 }
-.aurora-fade-down {
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 16%, transparent 58%);
-  mask-image: linear-gradient(180deg, #000 0%, #000 16%, transparent 58%);
-}
-.aurora-fade-both {
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
-  mask-image: linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
-}
-/* One smooth mesh gradient that drifts gently. No discrete orbs. */
-.mesh {
+
+/* ── Structure: page rails + hairline grids ──────────────────────────────
+   The landing hangs off two vertical rails at the container edges; sections
+   are separated by full-bleed hairlines with small crosshair marks. */
+.rails { position: relative; }
+.rails::before,
+.rails::after {
+  content: "";
   position: absolute;
-  inset: -25%;
-  filter: blur(70px);
-  will-change: transform;
-  animation: mesh-drift 26s var(--ease-in-out) infinite alternate;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border);
+  pointer-events: none;
+  z-index: 0;
 }
-.mesh-hero {
-  background:
-    radial-gradient(46% 56% at 26% 2%, oklch(0.66 0.2 285 / 0.72), transparent 70%),
-    radial-gradient(50% 60% at 74% 0%, oklch(0.74 0.16 250 / 0.6), transparent 70%),
-    radial-gradient(42% 52% at 50% 10%, oklch(0.66 0.24 322 / 0.5), transparent 72%);
-}
-.mesh-cta {
-  background:
-    radial-gradient(48% 58% at 26% 90%, oklch(0.62 0.22 296 / 0.85), transparent 70%),
-    radial-gradient(52% 62% at 74% 96%, oklch(0.72 0.18 248 / 0.72), transparent 70%),
-    radial-gradient(44% 54% at 50% 86%, oklch(0.66 0.25 324 / 0.6), transparent 72%);
-  filter: blur(56px);
-}
-@keyframes mesh-drift {
-  0% { transform: translate3d(-2%, 0, 0) scale(1.04); }
-  100% { transform: translate3d(2%, -2%, 0) scale(1.16); }
-}
-/* Mobile: hold the mesh still and lighten the blur — animating a 70px blur is
-   expensive on phone GPUs and is the main culprit behind janky load/scroll. */
+.rails::before { left: max(20px, calc(50% - 36rem)); }
+.rails::after { right: max(20px, calc(50% - 36rem)); }
 @media (max-width: 640px) {
-  .mesh { animation: none; filter: blur(46px); }
+  .rails::before, .rails::after { display: none; }
+}
+.hairline-top { border-top: 1px solid var(--color-border); }
+
+/* gap-px grids: the container's bg shows through as 1px dividers */
+.hair-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+.hair-grid > * { background: var(--color-bg); }
+
+.panel {
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
 }
 
-/* ── Cursor spotlight, radial glow follows the pointer inside a card ─── */
+/* Small "+" marks where hairlines cross */
+.cross {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  pointer-events: none;
+  z-index: 1;
+}
+.cross::before,
+.cross::after {
+  content: "";
+  position: absolute;
+  background: oklch(1 0 0 / 0.32);
+}
+.cross::before { left: 4px; top: 0; width: 1px; height: 9px; }
+.cross::after { top: 4px; left: 0; height: 1px; width: 9px; }
+
+/* ── Cursor spotlight, faint glow follows the pointer inside a card ───── */
 .spotlight { position: relative; }
 .spotlight::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 0%), oklch(0.66 0.22 300 / 0.14), transparent 70%);
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), oklch(1 0 0 / 0.045), transparent 70%);
   opacity: 0;
   transition: opacity var(--dur-base) var(--ease-out);
   pointer-events: none;
 }
 .spotlight:hover::before { opacity: 1; }
 
-/* ── Animated trace border (Supabase-style), runs on hover ──────────── */
-.glow-border { position: relative; }
-.glow-border::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: conic-gradient(
-    from var(--capto-angle),
-    transparent 0deg 70deg,
-    oklch(0.78 0.13 230) 110deg,
-    oklch(0.62 0.21 292) 150deg,
-    oklch(0.66 0.26 330) 185deg,
-    transparent 230deg 360deg
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity var(--dur-base) var(--ease-out);
-}
-.glow-border:hover::before {
-  opacity: 1;
-  animation: trace 3.2s linear infinite;
-}
-@keyframes trace { to { --capto-angle: 360deg; } }
+/* Hover: border brightens (no rainbow trace) */
+.glow-border { position: relative; transition: border-color var(--dur-base) var(--ease-out); }
+.glow-border:hover { border-color: var(--color-border-strong); }
 
-/* Always-on trace border (e.g. the highlighted pricing card) */
+/* Highlighted card: violet hairline along the top edge */
 .glow-border-always { position: relative; }
 .glow-border-always::before {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: conic-gradient(
-    from var(--capto-angle),
-    transparent 0deg 60deg,
-    oklch(0.83 0.12 224) 105deg,
-    oklch(0.74 0.15 268) 150deg,
-    oklch(0.7 0.23 324) 190deg,
-    transparent 235deg 360deg
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: trace 4s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .glow-border-always::before { animation: none; }
+  top: -1px;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-brand), transparent);
+  pointer-events: none;
 }
 
 /* ── Motion ───────────────────────────────────────────────────────────── */
-@keyframes fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.fade-up { animation: fade-up var(--dur-slow) var(--ease-out) both; }
+@keyframes fade-up {
+  from { opacity: 0; transform: translate3d(0, 22px, 0); filter: blur(10px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+.fade-up { animation: fade-up 900ms var(--ease-out) both; }
+
+/* Scroll reveal: fly up + un-blur + fade. Driven by <RevealObserver />. */
+html.js-reveal [data-reveal],
+html.js-reveal [data-reveal-stagger] > * {
+  opacity: 0;
+  transform: translate3d(0, 28px, 0);
+  filter: blur(10px);
+  transition:
+    opacity 900ms var(--ease-out),
+    transform 1000ms var(--ease-out),
+    filter 900ms var(--ease-out);
+  transition-delay: calc(var(--d, 0) * 70ms);
+}
+html.js-reveal [data-reveal][data-in],
+html.js-reveal [data-reveal-stagger][data-in] > * {
+  opacity: 1;
+  transform: none;
+  filter: blur(0);
+}
+.d-1 { --d: 1; }
+.d-2 { --d: 2; }
+.d-3 { --d: 3; }
+.d-4 { --d: 4; }
+[data-reveal-stagger] > :nth-child(2) { --d: 1; }
+[data-reveal-stagger] > :nth-child(3) { --d: 2; }
+[data-reveal-stagger] > :nth-child(4) { --d: 3; }
+[data-reveal-stagger] > :nth-child(5) { --d: 4; }
+[data-reveal-stagger] > :nth-child(6) { --d: 5; }
+[data-reveal-stagger] > :nth-child(7) { --d: 6; }
+[data-reveal-stagger] > :nth-child(8) { --d: 7; }
+[data-reveal-stagger] > :nth-child(n + 9) { --d: 8; }
+/* Mobile GPUs: skip the blur filter, keep the motion. */
+@media (max-width: 640px) {
+  html.js-reveal [data-reveal],
+  html.js-reveal [data-reveal-stagger] > * { filter: none; transform: translate3d(0, 20px, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.js-reveal [data-reveal],
+  html.js-reveal [data-reveal-stagger] > * { opacity: 1; transform: none; filter: none; transition: none; }
+}
 
 /* Gentle caption crossfade used by the hero editor mock */
 @keyframes cap-in { from { opacity: 0; transform: translateY(5px); filter: blur(3px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
 .cap-in { animation: cap-in 440ms var(--ease-out) both; }
-
-/* Scroll-into-view reveals (used via <Reveal />) */
-.reveal {
-  opacity: 0;
-  transition: opacity 620ms var(--ease-out), transform 620ms var(--ease-out), filter 620ms var(--ease-out);
-  will-change: opacity, transform;
-}
-.reveal-up { transform: translateY(24px); }
-.reveal-left { transform: translateX(-28px); }
-.reveal-right { transform: translateX(28px); }
-.reveal-blur { transform: translateY(14px); filter: blur(12px); }
-.reveal-in { opacity: 1; transform: none; filter: none; }
-@media (prefers-reduced-motion: reduce) {
-  .reveal { opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
-}
 
 @keyframes marquee-x { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .marquee-track { animation: marquee-x linear infinite; will-change: transform; }
@@ -306,8 +336,7 @@ label[for] {
 @keyframes playhead { 0% { left: 6%; } 100% { left: 90%; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fade-up, .marquee-track, .mesh, .cap-in { animation: none !important; }
-  .glow-border:hover::before { animation: none; }
+  .fade-up, .marquee-track, .cap-in { animation: none !important; }
 }
 
 .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }

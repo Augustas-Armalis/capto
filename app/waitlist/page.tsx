@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { Aurora } from "@/components/marketing/aurora";
-import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 import { WaitlistForm } from "./waitlist-form";
 
 export const metadata: Metadata = {
@@ -38,8 +37,6 @@ export default function WaitlistPage() {
 
         <div className="mt-6 flex items-center justify-center gap-4 text-sm text-[var(--color-fg-subtle)]">
           <Link href="/" className="hover:text-[var(--color-fg-muted)]">Back home</Link>
-          <span className="opacity-40">·</span>
-          <PoweredByContles variant="inline" />
         </div>
       </div>
     </main>

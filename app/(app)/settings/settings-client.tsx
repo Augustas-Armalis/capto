@@ -28,7 +28,6 @@ import { Combobox } from "@/components/ui/combobox";
 import { TeamSection } from "@/components/app/team-section";
 import { STT_MODELS, PROVIDER_LABEL, PLAN_RANK, type AiProvider } from "@/lib/ai/models";
 import { changeEmail, changePassword } from "@/lib/auth-client";
-import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 import { cn } from "@/lib/utils";
 
 type Provider = AiProvider;
@@ -686,9 +685,6 @@ export function SettingsClient({
         </div>
       </div>
 
-      <div className="mt-12 flex justify-center">
-        <PoweredByContles variant="chip" />
-      </div>
     </div>
   );
 }

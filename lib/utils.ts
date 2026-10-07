@@ -28,4 +28,3 @@ export function formatPrice(amount: number, currency = "EUR", locale = "en-IE") 
   }).format(amount);
 }
 
-export const CONTLES_URL = "https://contles.com?ref=capto";

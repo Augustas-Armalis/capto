@@ -79,7 +79,7 @@ export default async function VsPage({ params }: { params: Promise<{ competitor:
         {/* Trust strip */}
         <Container size="narrow">
           <p className="rounded-[var(--radius-xl)] border border-white/[0.08] bg-white/[0.02] px-5 py-3 text-center text-xs text-[var(--color-fg-muted)]">
-            Powered by Contles · Built by creators, in Europe · No outside investors yet, no growth-at-all-costs pricing
+            Built by creators, in Europe · No outside investors yet, no growth-at-all-costs pricing
           </p>
         </Container>
 

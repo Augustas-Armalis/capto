@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { env } from "@/lib/env";
 import { SmoothScroll } from "@/components/smooth-scroll";
+import { RevealObserver } from "@/components/reveal-observer";
 import { GoogleAnalytics } from "@/components/marketing/google-analytics";
 import "./globals.css";
 
@@ -52,7 +53,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#06070a",
+  themeColor: "#08090a",
   width: "device-width",
   initialScale: 1,
 };
@@ -72,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen bg-[var(--color-bg)] text-[var(--color-fg)] antialiased">
         <SmoothScroll />
+        <RevealObserver />
         {children}
         <GoogleAnalytics />
       </body>

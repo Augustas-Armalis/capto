@@ -18,11 +18,11 @@ export function PageHero({
   children?: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-hidden border-b border-white/[0.06] pb-14 pt-32 sm:pt-36">
+    <section className="relative overflow-hidden border-b border-[var(--color-border)] pb-16 pt-32 sm:pt-40">
       <Aurora preset="hero" />
       <Container className="relative">
         {crumbs && (
-          <nav className="mb-5 flex items-center gap-1.5 text-xs text-[var(--color-fg-subtle)]">
+          <nav className="fade-up mb-5 flex items-center gap-1.5 text-xs text-[var(--color-fg-subtle)]">
             {crumbs.map((c, i) => (
               <React.Fragment key={c.href}>
                 {i > 0 && <ChevronRight className="size-3" />}
@@ -31,9 +31,15 @@ export function PageHero({
             ))}
           </nav>
         )}
-        <p className="eyebrow">{eyebrow}</p>
-        <h1 className="display mt-4 max-w-3xl text-4xl text-white sm:text-5xl">{title}</h1>
-        {lede && <p className="mt-5 max-w-xl text-base leading-relaxed text-[var(--color-fg-muted)]">{lede}</p>}
+        <p className="eyebrow fade-up">{eyebrow}</p>
+        <h1 className="display fade-up mt-4 max-w-3xl text-balance text-4xl text-sheen sm:text-6xl" style={{ animationDelay: "70ms" }}>
+          {title}
+        </h1>
+        {lede && (
+          <p className="fade-up mt-5 max-w-xl text-base leading-relaxed text-[var(--color-fg-muted)]" style={{ animationDelay: "140ms" }}>
+            {lede}
+          </p>
+        )}
         {children}
       </Container>
     </section>

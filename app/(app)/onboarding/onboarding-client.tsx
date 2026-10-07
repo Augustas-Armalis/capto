@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 
 export function OnboardingClient({
   firstName,
@@ -321,9 +320,6 @@ export function OnboardingClient({
           )}
         </div>
 
-        <div className="mt-5 flex items-center justify-center">
-          <PoweredByContles variant="chip" />
-        </div>
       </div>
     </div>
   );
@@ -439,9 +435,6 @@ function EmailVerify({ onDone }: { onDone: () => void }) {
           >
             {cooldown > 0 ? `Resend code in ${cooldown}s` : sending ? "Sending…" : "Resend code"}
           </button>
-        </div>
-        <div className="mt-5 flex items-center justify-center">
-          <PoweredByContles variant="chip" />
         </div>
       </div>
     </div>

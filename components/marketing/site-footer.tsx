@@ -2,7 +2,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Container } from "@/components/ui/container";
 import { FeedbackButton } from "@/components/feedback/feedback-button";
-import { PoweredByContles } from "./powered-by-contles";
 
 const COLS = [
   {
@@ -45,35 +44,29 @@ const COLS = [
 
 export function SiteFooter() {
   return (
-    <footer className="relative border-t border-white/[0.06] py-16">
+    <footer className="relative border-t border-[var(--color-border)] pb-10 pt-16">
       <Container>
-        <div className="grid grid-cols-2 gap-10 md:grid-cols-6">
+        <div data-reveal-stagger className="grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-6">
           <div className="col-span-2">
-            <Link href="/" className="flex items-center">
-              <Image src="/wordmark.png" alt="Capto" width={122} height={36} className="h-8 w-auto" />
+            <Link href="/" className="flex items-center" aria-label="Capto home">
+              <Image src="/wordmark.png" alt="Capto" width={108} height={32} className="h-[26px] w-auto" />
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--color-fg-muted)]">
-              Captions, redesigned. AI subtitles for short-form video.
+              The focused caption tool for short-form video.
             </p>
-            <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-[var(--color-fg-subtle)]">
-              <span className="size-1.5 rounded-full bg-[var(--color-brand)]" />
-              Desktop apps for Mac and Windows coming soon
+            <p className="mono mt-4 inline-flex items-center gap-2 text-[11px] text-[var(--color-fg-subtle)]">
+              <span className="size-1.5 bg-[var(--color-brand)]" />
+              Mac + Windows apps coming soon
             </p>
-            <div className="mt-6">
-              <PoweredByContles />
-            </div>
           </div>
 
           {COLS.map((col) => (
             <div key={col.title}>
-              <h4 className="eyebrow">{col.title}</h4>
+              <h4 className="text-[13px] font-medium text-white">{col.title}</h4>
               <ul className="mt-4 space-y-2.5">
                 {col.links.map((l) => (
                   <li key={l.href + l.label}>
-                    <Link
-                      href={l.href}
-                      className="text-sm text-[var(--color-fg-muted)] transition-colors hover:text-white"
-                    >
+                    <Link href={l.href} className="text-[13px] text-[var(--color-fg-muted)] transition-colors hover:text-white">
                       {l.label}
                     </Link>
                   </li>
@@ -83,15 +76,12 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <div className="mt-14 flex flex-col gap-4 border-t border-white/[0.06] pt-6 md:flex-row md:items-center md:justify-between">
-          <p className="text-xs text-[var(--color-fg-subtle)]">
-            © {new Date().getFullYear()} Capto. Built &amp; powered by Contles.
-          </p>
-          <div className="flex items-center gap-4 text-xs text-[var(--color-fg-subtle)]">
+        <div className="mt-16 flex flex-col gap-4 border-t border-[var(--color-border)] pt-6 md:flex-row md:items-center md:justify-between">
+          <p className="mono text-[11px] text-[var(--color-fg-subtle)]">© {new Date().getFullYear()} Capto</p>
+          <div className="flex items-center gap-5 text-[12px] text-[var(--color-fg-subtle)]">
             <Link href="/privacy" className="hover:text-[var(--color-fg-muted)]">Privacy</Link>
             <Link href="/terms" className="hover:text-[var(--color-fg-muted)]">Terms</Link>
             <FeedbackButton variant="inline" />
-            <PoweredByContles variant="inline" />
           </div>
         </div>
       </Container>

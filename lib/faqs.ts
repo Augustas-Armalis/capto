@@ -2,18 +2,6 @@ import * as React from "react";
 
 export type QA = { q: string; a: React.ReactNode; text: string };
 
-const link = (href: string, label: string) =>
-  React.createElement(
-    "a",
-    {
-      href,
-      target: "_blank",
-      rel: "noopener noreferrer",
-      className: "text-[var(--color-brand)] underline-offset-2 hover:underline",
-    },
-    label,
-  );
-
 export const DEFAULT_FAQS: QA[] = [
   {
     q: "What makes Capto different from Submagic or VEED?",
@@ -61,14 +49,8 @@ export const DEFAULT_FAQS: QA[] = [
     a: "Browser today. Desktop apps coming. Mobile after.",
   },
   {
-    q: "Who's behind Capto?",
-    text: "Built by Contles. We're creators. The tools we paid for kept disappointing us, so we made one.",
-    a: React.createElement(
-      React.Fragment,
-      null,
-      "Built by ",
-      link("https://contles.com?ref=capto-faq", "Contles"),
-      ". We're creators. The tools we paid for kept disappointing us, so we made one.",
-    ),
+    q: "Who makes Capto?",
+    text: "We're creators. The tools we paid for kept disappointing us, so we made one.",
+    a: "We're creators. The tools we paid for kept disappointing us, so we made one.",
   },
 ];
