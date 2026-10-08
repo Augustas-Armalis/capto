@@ -13,6 +13,9 @@
  */
 (function () {
   const realFetch = window.fetch.bind(window);
+  const captionEngineVersion = window.CaptoCaptionEngine && window.CaptoCaptionEngine.VERSION;
+  document.documentElement.dataset.captionEngineVersion = String(captionEngineVersion || 'missing');
+  window.__captoCaptionEngineVersion = captionEngineVersion || null;
 
   // The currently-loaded clip. The <video> plays this object URL directly
   // (see the previewSrc() patch in app.js), and transcription posts this File
@@ -414,9 +417,9 @@
   }
 
   function wordsToCues(words, maxWordsOverride, silences, language, duration) {
-    // Caption Engine v7 is the single production segmenter. Keep the older code
-    // below as a last-resort fallback for a stale cached HTML page that failed to
-    // load caption-engine.js; new and exported projects always take this path.
+    // Caption Engine v13 is the single production segmenter. Never silently send
+    // users through the obsolete splitter: that made a failed asset load look
+    // like a successful but badly-timed transcription.
     if (window.CaptoCaptionEngine && typeof window.CaptoCaptionEngine.wordsToCues === 'function') {
       return window.CaptoCaptionEngine.wordsToCues(words, {
         language: language || 'en',
@@ -426,6 +429,7 @@
         silences: silences || [],
       });
     }
+    throw new Error('The caption timing engine did not load. Reload Capto and try again.');
     // Built from real per-word timing, then grouped into short 1–2 word displays
     // — but ONLY across words spoken back-to-back. A natural pause (> MAXGAP)
     // always ends the caption, so we never stretch a phrase through silence and
@@ -1009,7 +1013,7 @@
   // intervals are then used to trim each word back to where the voice really
   // stops, which makes captions hide exactly on the pause.
   const SIL_FRAME_SEC = 0.02;   // 20ms analysis frames
-  const SIL_MIN = 0.16;         // shortest gap we treat as a real pause (s)
+  const SIL_MIN = 0.10;         // shortest gap we treat as a real pause (s)
   function detectSilences(samples, sr) {
     if (!samples || samples.length < sr * 0.2) return [];
     const frame = Math.max(1, Math.round(sr * SIL_FRAME_SEC));
@@ -1059,7 +1063,12 @@
     for (let attempt = 0; attempt < 3; attempt++) {
       const fd = new FormData();
       fd.append('file', file, file.name || 'audio.wav');
-      fd.append('language', body.language || 'auto');
+      const selectedLanguage = String(body.language || 'auto').toLowerCase();
+      // Let Whisper detect the acoustic language while still giving it the
+      // user's English/Lithuanian hint in the prompt. Forced language decoding
+      // dropped words on the same English sample that auto-detection retained.
+      fd.append('language', selectedLanguage === 'en' || selectedLanguage === 'lt' ? 'auto' : selectedLanguage);
+      fd.append('languageHint', selectedLanguage);
       fd.append('model', eng);
       if (durationSec) fd.append('durationSec', String(Math.round(durationSec)));
       const controller = new AbortController();
@@ -1182,7 +1191,8 @@
             // Keep the prior chunk's copy in the overlap and only admit the new
             // chunk once it has crossed the stable midpoint.
             if (shifted.end <= acceptAfter) continue;
-            const recent = allWords.slice(-8).some((old) =>
+            const recent = allWords.slice(-12).some((old) =>
+              old._chunkIndex !== i &&
               String(old.word || '').toLocaleLowerCase() === String(shifted.word || '').toLocaleLowerCase() &&
               Math.abs(old.start - shifted.start) < 0.7
             );
@@ -1228,18 +1238,14 @@
         // scramble a correct sentence. Chunk/order metadata also puts delayed
         // retry results back in their original place.
         allWords.sort((a, b) => a._chunkIndex - b._chunkIndex || a._wordIndex - b._wordIndex);
-        const cleanWords = [];
-        for (const word of allWords) {
-          const duplicate = cleanWords.slice(-8).some((old) =>
-            String(old.word || '').toLocaleLowerCase() === String(word.word || '').toLocaleLowerCase() &&
-            Math.abs(old.start - word.start) < 0.7
-          );
-          if (!duplicate) {
-            delete word._chunkIndex;
-            delete word._wordIndex;
-            cleanWords.push(word);
-          }
-        }
+        // Overlap duplicates were already removed above with chunk identity.
+        // Never run a second text-only dedupe here: legitimate repeated words
+        // ("I, I", "the the") were being silently deleted.
+        const cleanWords = allWords.map((word) => {
+          delete word._chunkIndex;
+          delete word._wordIndex;
+          return word;
+        });
         return json({ cues: wordsToCues(cleanWords, oneW, silences, language, audioDuration), language, languageRecovered, engine, quality: combineQuality(qualitySamples), partial: failed.length > 0, failedParts: failed.length, captionEngineVersion: window.CaptoCaptionEngine ? window.CaptoCaptionEngine.VERSION : 2 });
       } catch (error) {
         return json({ error: 'Captioning stopped unexpectedly. Please retry.', code: 'caption_pipeline', detail: String(error && error.message || '') }, 502);
@@ -2531,7 +2537,7 @@
             if (pendingRelinkId === null && autoLinked && (window.__captoMedia && window.__captoMedia.handle)) {
               setTimeout(() => showRelinkRevert(id, st.originalName), 600);
             }
-            return json({ meta: st.meta, originalName: st.originalName, style: st.style, cues: st.cues || [], language: st.language });
+            return json({ meta: st.meta, originalName: st.originalName, style: st.style, cues: st.cues || [], language: st.language, captionEngineVersion: st.captionEngineVersion });
           } catch { return json({ error: 'Project not found.' }, 404); }
         })();
       }
@@ -2541,6 +2547,7 @@
           if (!captoProject) captoProject = {};
           if (body.cues) captoProject.cues = body.cues;
           if (body.style) captoProject.style = body.style;
+          if (body.captionEngineVersion) captoProject.captionEngineVersion = body.captionEngineVersion;
           if (body.name) captoProject.originalName = body.name;
           const fields = { name: captoProject.originalName || 'Untitled project' };
           if (method === 'PUT') {

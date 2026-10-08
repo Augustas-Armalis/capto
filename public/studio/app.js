@@ -251,7 +251,7 @@ async function openExistingProject(id) {
   try {
     const p = await (await fetch('/api/projects/' + id)).json();
     if (p.error) throw new Error(p.error);
-    openProject({ id, meta: p.meta, originalName: p.originalName, style: p.style, cues: p.cues, language: p.language });
+    openProject({ id, meta: p.meta, originalName: p.originalName, style: p.style, cues: p.cues, language: p.language, captionEngineVersion: p.captionEngineVersion });
     hideHome();
   } catch (err) { toast(err.message || 'Could not open project', true); }
 }
@@ -310,6 +310,8 @@ function openProject(data) {
   state.style = isNewProject && stored ? { ...data.style, ...stored } : data.style;
   normalizeStyle(state.style);
   state.cues = (data.cues || []).map((c) => ({ row: 0, ...c })); state.originalName = data.originalName;
+  const cueVersions = state.cues.map((cue) => Number(cue._engineVersion)).filter(Number.isFinite);
+  state.captionEngineVersion = Number(data.captionEngineVersion) || (cueVersions.length ? Math.min(...cueVersions) : 2);
   // Self-heal: if the saved project has cues that overlap on the same row
   // (older transcriptions / engine glitches), redistribute them across rows now.
   if (state.cues.some((a, i) => state.cues.some((b, j) => j !== i && (a.row || 0) === (b.row || 0) && a.start < b.end && b.start < a.end))) {
@@ -330,6 +332,10 @@ function openProject(data) {
   el.video.onloadedmetadata = () => { state.duration = el.video.duration || state.duration; fitFrame(); applyView(); renderAll(); };
   el.editLang.value = state.language; el.editEngine.value = state.engine; el.editModel.value = state.model;
   renderStylePanel(); renderAll();
+  const currentTimingVersion = Number(document.documentElement.dataset.captionEngineVersion) || 0;
+  if (state.cues.length && currentTimingVersion > state.captionEngineVersion) {
+    setStatus(`Timing v${currentTimingVersion} is ready — Regenerate once to replace these older v${state.captionEngineVersion} timings.`);
+  }
 }
 function renderAll() { fitFrame(); renderCues(); renderTimeline(); renderOverlay(); renderRowSelectors(); }
 
@@ -403,9 +409,11 @@ async function transcribeProject(opts) {
     state.rows = 1;
     state.capRow = 0; state.scriptRow = 0;
     fixOverlaps();
+    document.documentElement.dataset.captionEngineVersion = String(state.captionEngineVersion);
+    const timingLabel = state.captionEngineVersion ? ` · Timing v${state.captionEngineVersion}` : '';
     setStatus(data.partial
       ? `Added ${data.cues.length} captions, but ${data.failedParts || 1} section${(data.failedParts || 1) === 1 ? '' : 's'} could not be reached. Retry if anything is missing.`
-      : `Done — ${data.cues.length} captions${data.language ? ` (${data.language})` : ''}.`, !!data.partial);
+      : `Done — ${data.cues.length} captions${data.language ? ` (${data.language})` : ''}${timingLabel}.`, !!data.partial);
     renderAll(); renderScript();
     saveSoon();   // PERSIST freshly-generated captions immediately (don't wait for an edit)
   } catch (err) {
@@ -1150,7 +1158,9 @@ el.canvasArea.addEventListener('pointerdown', (e) => {
 
 /* ============================ overlay (multi-row, ghost+clip) ============================ */
 function rowOffsetFrac(row) { const lh = (state.style.fontSize * 2.4) / (state.meta.height || 1920); return row * lh; }
-function activeCueInRow(r, t) { const list = cuesInRow(r); for (const { c, i } of list) if (t >= c.start && t <= c.end) return i; return -1; }
+// End-exclusive ranges make an edge-to-edge handoff switch to the NEW caption
+// on the exact shared frame instead of showing the previous caption once more.
+function activeCueInRow(r, t) { const list = cuesInRow(r); for (const { c, i } of list) if (t >= c.start && t < c.end) return i; return -1; }
 
 // Build a caption block's static parts (everything that doesn't change between frames).
 // Returns the DOM element. Each word is a span we toggle classes on for the highlight,
@@ -1297,10 +1307,16 @@ function paintActiveWord(block, cue, t) {
   }
 }
 
-var overlayRAF = 0;
-function renderOverlay() {
+var overlayRAF = 0, pendingOverlayTime = null;
+function renderOverlay(frameTime) {
+  if (Number.isFinite(frameTime)) pendingOverlayTime = frameTime;
   if (overlayRAF) return;
-  overlayRAF = requestAnimationFrame(() => { overlayRAF = 0; doRenderOverlay(); });
+  overlayRAF = requestAnimationFrame(() => {
+    overlayRAF = 0;
+    const frameTime = pendingOverlayTime;
+    pendingOverlayTime = null;
+    doRenderOverlay(frameTime);
+  });
 }
 function fitBlockToFrame(block) {
   if (!block || !el.frame) return;
@@ -1318,13 +1334,13 @@ function fitBlockToFrame(block) {
   const scale = Math.max(0.5, (fw * 0.92) / bw);
   block.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
 }
-function doRenderOverlay() {
+function doRenderOverlay(frameTime) {
   // Self-heal a stuck "editing" flag (an inline edit that never committed) —
   // otherwise editingCaption stays true and EVERY canvas click is ignored, so
   // you can't select/move/resize captions on the video anymore.
   if (state.editingCaption && !document.querySelector('.cap-block.editing')) state.editingCaption = false;
   if (!state.meta || state.editingCaption) return;
-  const t = el.video.currentTime;
+  const t = Number.isFinite(frameTime) ? frameTime : el.video.currentTime;
 
   // Existing blocks indexed by row → element
   const existingSolid = new Map(), existingGhost = new Map();
@@ -1967,8 +1983,56 @@ el.playBtn.onclick = () => {
 const PLAY_SVG  = '<svg class="ic"><use href="#i-play"/></svg>';
 const PAUSE_SVG = '<svg class="ic"><use href="#i-pause"/></svg>';
 el.playBtn.innerHTML = PLAY_SVG;
-el.video.addEventListener('play',  () => el.playBtn.innerHTML = PAUSE_SVG);
-el.video.addEventListener('pause', () => el.playBtn.innerHTML = PLAY_SVG);
+// `timeupdate` is intentionally low-frequency in browsers (often only ~4Hz),
+// which made otherwise-correct cues appear up to 250ms late. Paint on every
+// decoded video frame so caption entrance, word highlight, handoff and hiding
+// all follow the frame actually being shown.
+let playbackFrameHandle = 0, playbackFrameMode = '';
+function stopPlaybackFrames() {
+  if (!playbackFrameHandle) return;
+  if (playbackFrameMode === 'video' && typeof el.video.cancelVideoFrameCallback === 'function') el.video.cancelVideoFrameCallback(playbackFrameHandle);
+  else cancelAnimationFrame(playbackFrameHandle);
+  playbackFrameHandle = 0; playbackFrameMode = '';
+}
+function clearCaptionDisplay() {
+  // The media element can stop before one final video-frame callback arrives.
+  // Clear synchronously so a caption can never remain painted on the ended
+  // frame, even when the tab is throttled or the final cue ends at duration.
+  if (overlayRAF) cancelAnimationFrame(overlayRAF);
+  overlayRAF = 0; pendingOverlayTime = null;
+  el.capLayer.replaceChildren();
+  el.capGhost.replaceChildren();
+  el.capSel.classList.remove('on');
+  state.activeCue = -1;
+  $$('.cue', el.cues).forEach((c) => c.classList.remove('active'));
+  $$('.tl-block', el.tlInner).forEach((b) => b.classList.remove('active'));
+}
+function schedulePlaybackFrame() {
+  if (el.video.paused || el.video.ended || playbackFrameHandle) return;
+  if (typeof el.video.requestVideoFrameCallback === 'function') {
+    playbackFrameMode = 'video';
+    playbackFrameHandle = el.video.requestVideoFrameCallback((_now, frame) => {
+      playbackFrameHandle = 0;
+      renderOverlay(Number.isFinite(frame && frame.mediaTime) ? frame.mediaTime : undefined);
+      updatePlayhead();
+      schedulePlaybackFrame();
+    });
+  } else {
+    playbackFrameMode = 'raf';
+    playbackFrameHandle = requestAnimationFrame(() => {
+      playbackFrameHandle = 0;
+      renderOverlay(); updatePlayhead(); schedulePlaybackFrame();
+    });
+  }
+}
+el.video.addEventListener('play',  () => { el.playBtn.innerHTML = PAUSE_SVG; schedulePlaybackFrame(); });
+el.video.addEventListener('pause', () => { el.playBtn.innerHTML = PLAY_SVG; stopPlaybackFrames(); renderOverlay(); updatePlayhead(); });
+el.video.addEventListener('ended', () => {
+  stopPlaybackFrames();
+  clearCaptionDisplay();
+  el.playBtn.innerHTML = PLAY_SVG;
+  updatePlayhead();
+});
 el.video.addEventListener('timeupdate', () => {
   el.timeLabel.textContent = `${fmtClock(el.video.currentTime)} / ${fmtClock(state.duration)}`;
   // Only loop when the checkbox is actually on right NOW (don't rely on stale loopCue)
@@ -2118,7 +2182,7 @@ var saveTimer = null, savePending = false;
 function doSave() {
   savePending = false;
   if (!state.id) return;
-  fetch(`/api/projects/${state.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues: state.cues, style: state.style, language: state.language }) }).catch(() => {});
+  fetch(`/api/projects/${state.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cues: state.cues, style: state.style, language: state.language, captionEngineVersion: state.captionEngineVersion }) }).catch(() => {});
   sendFeedback();
 }
 function saveSoon() {

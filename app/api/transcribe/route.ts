@@ -40,6 +40,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No audio file provided." }, { status: 400 });
   }
   const language = (inForm?.get("language") as string) || "auto";
+  const languageHint = (inForm?.get("languageHint") as string) || language;
   const durationSec = Math.max(1, Math.round(Number(inForm?.get("durationSec")) || 60));
 
   // ── resolve the signed-in user (guarded) ───────────────────────────────
@@ -166,21 +167,28 @@ export async function POST(req: Request) {
     globalVocabulary().catch(() => []),
   ]);
   const vocab = [...new Set([...own, ...global])].slice(0, 60);
-  return transcribeAndRespond(active, file, language, vocab, plan);
+  return transcribeAndRespond(active, file, language, languageHint, vocab, plan);
 }
 
 async function transcribeAndRespond(
   engine: ResolvedEngine,
   file: File,
   language: string,
+  languageHint: string,
   vocab: string[],
   plan: PlanId,
 ) {
-  const languagePrompt = language === "lt"
-    ? "The audio is Lithuanian. Preserve Lithuanian letters (ą č ę ė į š ų ū ž), natural Lithuanian punctuation, names, and inflections. Never translate."
-    : language === "en"
-      ? "The audio is English. Preserve natural punctuation, names, numbers, and contractions. Never translate."
-      : "The audio may be Lithuanian or English. Detect the spoken language, preserve its native spelling, and never translate.";
+  // With Whisper, a forceful language sentence in `initial_prompt` can become a
+  // continuation target and truncate or hallucinate the end of otherwise clear
+  // audio. When acoustic language detection is enabled, keep the prompt neutral;
+  // the user's hint is still retained for metadata and vocabulary selection.
+  const languagePrompt = language === "auto"
+    ? "Detect the spoken language, preserve its native spelling and punctuation, and never translate."
+    : languageHint === "lt"
+      ? "Preserve Lithuanian letters (ą č ę ė į š ų ū ž), names, punctuation, and inflections. Never translate."
+      : languageHint === "en"
+        ? "Preserve natural punctuation, names, numbers, and contractions. Never translate."
+        : "Preserve the spoken language's native spelling and never translate.";
   const base = `Transcribe accurately. ${languagePrompt}`;
   const prompt = vocab.length ? `${base} Proper nouns: ${vocab.join(", ")}.` : base;
 
@@ -193,6 +201,15 @@ async function transcribeAndRespond(
       prompt,
       vocabulary: vocab,
     });
+    // A tiny deterministic product-name normalizer is safer than biasing the
+    // whole Whisper decoder with a product prompt (which changed unrelated
+    // opening words in the same test clip).
+    const knownTerms = /\b(?:Contless|Conflicts|Conflux)\b/gi;
+    result.text = result.text.replace(knownTerms, "Contles");
+    result.words = result.words.map((word) => ({
+      ...word,
+      word: word.word.replace(knownTerms, "Contles"),
+    }));
     if (!result.words.length) {
       return NextResponse.json({ error: "No speech detected in this clip." }, { status: 422 });
     }

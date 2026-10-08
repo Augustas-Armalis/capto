@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default function EditorRoute() {
   return (
     <iframe
-      src="/studio/?v=20260903b"
+      src="/studio/index.html?v=20260904b"
       title="Capto editor"
       className="block h-[100dvh] w-full border-0"
       allow="clipboard-write; fullscreen"
