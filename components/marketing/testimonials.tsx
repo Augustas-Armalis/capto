@@ -1,5 +1,5 @@
 import { Container } from "@/components/ui/container";
-import { SectionEyebrow, SectionTitle } from "@/components/ui/section";
+import { Band, Muted, SectionHead } from "@/components/ui/section";
 import { Marquee } from "./marquee";
 
 type Quote = { body: string; author: string; role: string };
@@ -23,20 +23,13 @@ const QUOTES: Quote[] = [
   { body: "honestly the timing is perfect every time", author: "Sena O.", role: "Fashion creator" },
 ];
 
-const AVATAR_GRADIENTS = [
-  "from-[var(--color-brand)] to-[var(--color-violet)]",
-  "from-[var(--color-cyan)] to-[var(--color-brand)]",
-  "from-[var(--color-fuchsia)] to-[var(--color-violet)]",
-  "from-[var(--color-violet)] to-[var(--color-cyan)]",
-];
-
 function QuoteCard({ q, i }: { q: Quote; i: number }) {
   return (
-    <figure className="glow-border flex w-[340px] shrink-0 flex-col rounded-[var(--radius-xl)] border border-white/[0.08] bg-white/[0.02] p-7">
-      <blockquote className="flex-1 text-[17px] leading-relaxed text-white">&ldquo;{q.body}&rdquo;</blockquote>
+    <figure className="glow-border flex w-[320px] shrink-0 flex-col rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] p-6">
+      <blockquote className="flex-1 text-[15px] leading-relaxed text-white">&ldquo;{q.body}&rdquo;</blockquote>
       <figcaption className="mt-6 flex items-center gap-3">
         <span
-          className={`inline-flex size-9 items-center justify-center rounded-full bg-gradient-to-br ${AVATAR_GRADIENTS[i % AVATAR_GRADIENTS.length]} text-sm font-semibold text-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.6)]`}
+          className={`inline-flex size-8 items-center justify-center rounded-full text-[13px] font-medium ${i % 3 === 0 ? "bg-[var(--color-violet)] text-white" : "bg-white/[0.08] text-white/80"}`}
         >
           {q.author.charAt(0)}
         </span>
@@ -51,23 +44,29 @@ function QuoteCard({ q, i }: { q: Quote; i: number }) {
 
 export function Testimonials() {
   return (
-    <section className="py-24 sm:py-32">
+    <Band className="py-24 sm:py-32">
       <Container>
-        <div className="max-w-xl">
-          <SectionEyebrow>From creators</SectionEyebrow>
-          <SectionTitle>Switched and didn&rsquo;t switch back.</SectionTitle>
-        </div>
+        <SectionHead
+          label="From creators"
+          title={
+            <>
+              Switched. <Muted>Didn&rsquo;t switch back.</Muted>
+            </>
+          }
+        />
       </Container>
 
+      <div data-reveal className="d-2">
       <Marquee
         items={QUOTES.map((q, i) => <QuoteCard key={q.author + i} q={q} i={i} />)}
         durationSec={95}
         gapPx={20}
         repeat={2}
         pauseOnHover
-        className="mt-12"
+        className="mt-14"
         maskClass="[mask-image:linear-gradient(90deg,transparent,#000_6%,#000_94%,transparent)]"
       />
-    </section>
+      </div>
+    </Band>
   );
 }

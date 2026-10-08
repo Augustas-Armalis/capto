@@ -1,36 +1,34 @@
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { Aurora } from "./aurora";
+import { Band } from "@/components/ui/section";
+import { DitherShader } from "@/components/visual/dither-shader";
 
 export function CtaBanner() {
   return (
-    <section className="relative py-24 sm:py-32">
-      <Container>
-        <div className="relative overflow-hidden rounded-[var(--radius-2xl)] border border-white/[0.08] bg-[var(--color-bg-elev)] px-6 py-20 sm:py-28">
-          <Aurora preset="cta" />
-          <div className="relative mx-auto max-w-xl text-center">
-            <h3 className="display text-4xl text-white sm:text-5xl">
-              Stop losing views to bad captions.
-            </h3>
-            <p className="mt-5 text-lg text-[var(--color-fg-muted)]">
-              Try Capto on one clip. See the difference.
-            </p>
-            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button href="/signup" size="lg" variant="primary">
-                Start free
-                <ArrowRight className="size-4 transition-transform group-hover/btn:translate-x-0.5" />
-              </Button>
-              <Button href="#pricing" size="lg" variant="outline">
-                See pricing
-              </Button>
-            </div>
-            <p className="mt-5 text-sm text-[var(--color-fg-subtle)]">
-              Free to start. Yours forever, even if you cancel.
-            </p>
+    <Band className="overflow-hidden">
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-[58%] fade-up-mask">
+        <DitherShader variant="rise" pixel={4} intensity={1.25} />
+      </div>
+      <Container className="relative pb-52 pt-24 sm:pb-72 sm:pt-36">
+        <h2 data-reveal className="display max-w-[14ch] text-balance text-5xl text-sheen sm:text-7xl">
+          Stop losing views to bad captions.
+        </h2>
+        <div data-reveal className="d-2 mt-8 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="max-w-md text-[17px] text-[var(--color-fg-muted)]">
+            Try Capto on one clip. See the difference. Yours forever, even if you cancel.
+          </p>
+          <div className="flex items-center gap-2.5">
+            <Button href="/signup" size="lg" variant="primary">
+              Start free
+              <ArrowRight className="size-4 transition-transform group-hover/btn:translate-x-0.5" />
+            </Button>
+            <Button href="#pricing" size="lg" variant="secondary">
+              See pricing
+            </Button>
           </div>
         </div>
       </Container>
-    </section>
+    </Band>
   );
 }

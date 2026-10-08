@@ -1,58 +1,69 @@
-import Image from "next/image";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
+import { DitherShader } from "@/components/visual/dither-shader";
 import { EditorMock } from "./editor-mock";
-import { Aurora } from "./aurora";
-import { CONTLES_URL } from "@/lib/utils";
 
-// Server component + CSS entrance (no framer-motion) so the landing ships less
-// JS and hydrates without an animation glitch.
+// Server component + CSS entrance; the only client islands are the dither
+// canvas and the editor mock.
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pb-16 pt-28 sm:pt-40 lg:pt-48">
-      <Aurora preset="hero" />
-
+    <section className="relative overflow-hidden pt-32 sm:pt-44">
       <Container className="relative">
-        <div className="fade-up mx-auto max-w-4xl text-center">
-          <a
-            href={CONTLES_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="eyebrow group inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-white/10 bg-white/[0.04] py-1 pl-2.5 pr-3 backdrop-blur-md transition-colors hover:border-white/20 hover:text-[var(--color-fg-muted)]"
-          >
-            <Image src="/contles.png" alt="" width={12} height={12} className="shrink-0" />
-            Powered by Contles
-            <ArrowUpRight className="size-2.5 opacity-50 transition-all group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          </a>
+        <Link
+          href="/signup"
+          className="fade-up group inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-white/[0.08] bg-white/[0.03] py-1 pl-1 pr-3 text-[12px] text-[var(--color-fg-muted)] transition-colors hover:border-white/15 hover:text-white"
+        >
+          <span className="rounded-[var(--radius-pill)] bg-[var(--color-violet)] px-2 py-0.5 text-[11px] font-medium text-white">New</span>
+          Rebuilt timing engine, synced to speech
+          <ArrowRight className="size-3 opacity-50 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
+        </Link>
 
-          <h1 className="display mx-auto mt-7 max-w-4xl text-balance text-5xl text-white sm:text-7xl">
-            Your captions are losing you <span className="text-magic">views.</span>
-          </h1>
+        <h1
+          className="display fade-up mt-7 max-w-[13ch] text-balance text-[2.9rem] text-sheen sm:text-7xl lg:text-[5.25rem]"
+          style={{ animationDelay: "60ms" }}
+        >
+          Your captions are losing you views.
+        </h1>
 
-          <p className="mx-auto mt-6 max-w-xl text-lg text-[var(--color-fg-muted)]">
-            Capto fixes the one thing on your video that decides whether it gets watched.
+        <div
+          className="fade-up mt-8 flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between"
+          style={{ animationDelay: "120ms" }}
+        >
+          <p className="max-w-[34rem] text-[17px] leading-relaxed text-[var(--color-fg-muted)] sm:text-lg">
+            Capto fixes the one thing on your video that decides whether it gets watched.{" "}
+            <span className="text-[var(--color-fg)]">Word-level timing, lossless export, no watermark.</span>
           </p>
-
-          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button href="/signup" size="lg" variant="primary">
-              Start free
-              <ArrowRight className="size-4 transition-transform group-hover/btn:translate-x-0.5" />
-            </Button>
-            <Button href="#pricing" size="lg" variant="outline">
-              See pricing
-            </Button>
+          <div className="flex flex-col gap-3 sm:items-end">
+            <div className="flex items-center gap-2.5">
+              <Button href="/signup" size="lg" variant="primary">
+                Start free
+                <ArrowRight className="size-4 transition-transform group-hover/btn:translate-x-0.5" />
+              </Button>
+              <Button href="#pricing" size="lg" variant="secondary">
+                See pricing
+              </Button>
+            </div>
+            <p className="mono text-[11px] text-[var(--color-fg-subtle)]">90 sec per clip · No watermark · From €6.99</p>
           </div>
-
-          <p className="mt-5 text-sm text-[var(--color-fg-subtle)]">
-            90 seconds per clip. No watermark. €6.99 when you want more.
-          </p>
-        </div>
-
-        <div className="fade-up mx-auto mt-12 max-w-4xl" style={{ animationDelay: "120ms" }}>
-          <EditorMock />
         </div>
       </Container>
+
+      <div className="relative mt-16 sm:mt-24">
+        {/* the dither horizon rises behind the product shot */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-[160px] h-[720px] fade-y">
+          <DitherShader variant="horizon" pixel={3} />
+        </div>
+        <Container size="wide" className="relative">
+          <div
+            className="fade-up mx-auto max-w-[1120px] [mask-image:linear-gradient(180deg,#000_82%,transparent)]"
+            style={{ animationDelay: "200ms" }}
+          >
+            <EditorMock />
+          </div>
+        </Container>
+      </div>
     </section>
   );
 }

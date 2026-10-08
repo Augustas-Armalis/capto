@@ -1,8 +1,7 @@
-import { ArrowRight, Check, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check, Minus } from "lucide-react";
 import { Container } from "@/components/ui/container";
 import { Money } from "@/components/ui/money";
-import { Section, SectionEyebrow, SectionTitle } from "@/components/ui/section";
+import { Band, Muted, SectionHead } from "@/components/ui/section";
 
 type Cell = boolean | string;
 type Row = { feature: string; capto: Cell; submagic: Cell; captions: Cell; veed: Cell };
@@ -21,48 +20,49 @@ function CellView({ value, hero = false }: { value: Cell; hero?: boolean }) {
     return <span className="mono text-sm font-medium text-white tnum"><Money eur="6.99" usd="7.99" /></span>;
   if (value === true)
     return (
-      <span
-        className={
-          hero
-            ? "inline-flex size-6 items-center justify-center rounded-full bg-magic text-white"
-            : "inline-flex size-6 items-center justify-center rounded-full bg-white/10 text-white"
-        }
-      >
-        <Check className="size-3.5" strokeWidth={2.5} />
-      </span>
+      <Check
+        className={hero ? "mx-auto size-4 text-[var(--color-brand)]" : "mx-auto size-4 text-[var(--color-fg-muted)]"}
+        strokeWidth={2.25}
+      />
     );
   if (value === false)
-    return <span className="inline-flex size-6 items-center justify-center text-[var(--color-fg-subtle)]"><X className="size-3.5" /></span>;
+    return <Minus className="mx-auto size-4 text-white/20" />;
   return <span className={hero ? "mono text-sm font-medium text-white tnum" : "mono text-sm text-[var(--color-fg-muted)] tnum"}>{value}</span>;
 }
 
 export function Comparison() {
   return (
-    <Section>
+    <Band className="py-24 sm:py-32">
       <Container>
-        <div className="max-w-xl">
-          <SectionEyebrow>The honest math</SectionEyebrow>
-          <SectionTitle>What the others charge extra for.</SectionTitle>
-        </div>
+        <SectionHead
+          index="07"
+          label="The honest math"
+          title={
+            <>
+              What the others charge extra for. <Muted>Included, at a third of the price.</Muted>
+            </>
+          }
+        />
 
-        <div className="relative mt-12 overflow-hidden rounded-[var(--radius-2xl)] border border-white/[0.07]">
+        <div data-reveal className="d-2 mt-14 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)]">
           <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-white/[0.07]">
-                  <th className="px-6 py-4 text-left eyebrow">Feature</th>
-                  <th className="relative px-6 py-4 text-center">
-                    <span className="text-magic font-semibold">Capto</span>
+                <tr className="border-b border-[var(--color-border)]">
+                  <th className="eyebrow px-6 py-4 text-left font-normal">Feature</th>
+                  <th className="relative w-[18%] bg-[var(--color-brand-soft)] px-6 py-4 text-center font-medium text-white">
+                    <span className="absolute inset-x-0 top-0 h-px bg-[var(--color-brand)]" />
+                    Capto
                   </th>
-                  <th className="px-6 py-4 text-center font-medium text-[var(--color-fg-muted)]">Submagic</th>
-                  <th className="px-6 py-4 text-center font-medium text-[var(--color-fg-muted)]">Captions</th>
-                  <th className="px-6 py-4 text-center font-medium text-[var(--color-fg-muted)]">VEED</th>
+                  <th className="w-[16%] px-6 py-4 text-center font-normal text-[var(--color-fg-muted)]">Submagic</th>
+                  <th className="w-[16%] px-6 py-4 text-center font-normal text-[var(--color-fg-muted)]">Captions</th>
+                  <th className="w-[16%] px-6 py-4 text-center font-normal text-[var(--color-fg-muted)]">VEED</th>
                 </tr>
               </thead>
               <tbody>
                 {ROWS.map((row) => (
-                  <tr key={row.feature} className="border-b border-white/[0.06] last:border-0">
-                    <td className="px-6 py-3.5 font-medium text-white">{row.feature}</td>
+                  <tr key={row.feature} className="border-b border-[var(--color-border)] last:border-0">
+                    <td className="px-6 py-3.5 text-[var(--color-fg)]">{row.feature}</td>
                     <td className="bg-[var(--color-brand-soft)] px-6 py-3.5 text-center"><CellView value={row.capto} hero /></td>
                     <td className="px-6 py-3.5 text-center"><CellView value={row.submagic} /></td>
                     <td className="px-6 py-3.5 text-center"><CellView value={row.captions} /></td>
@@ -72,16 +72,8 @@ export function Comparison() {
               </tbody>
             </table>
           </div>
-          {/* gradient edge highlighting the Capto column on wide screens */}
-          <div className="pointer-events-none absolute inset-y-0 left-[calc(33%)] hidden w-px bg-gradient-to-b from-transparent via-[var(--color-violet)]/40 to-transparent lg:block" />
-        </div>
-
-        <div className="mt-10 flex justify-center">
-          <Button href="#pricing" size="lg" variant="outline">
-            See pricing
-          </Button>
         </div>
       </Container>
-    </Section>
+    </Band>
   );
 }

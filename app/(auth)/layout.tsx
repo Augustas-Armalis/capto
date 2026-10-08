@@ -2,7 +2,6 @@ import * as React from "react";
 import Link from "next/link";
 import { Aurora } from "@/components/marketing/aurora";
 import { StyleRotator } from "@/components/auth/style-rotator";
-import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -17,7 +16,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               Capto
             </Link>
           </span>
-          <PoweredByContles variant="inline" />
         </footer>
       </div>
 

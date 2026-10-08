@@ -4,7 +4,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Users, Check, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 
 export function JoinClient({ token }: { token: string }) {
   const router = useRouter();
@@ -90,9 +89,6 @@ export function JoinClient({ token }: { token: string }) {
               </Button>
             </>
           )}
-        </div>
-        <div className="mt-5 flex items-center justify-center">
-          <PoweredByContles variant="chip" />
         </div>
       </div>
     </div>

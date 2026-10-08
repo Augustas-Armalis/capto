@@ -4,7 +4,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PoweredByContles } from "@/components/marketing/powered-by-contles";
 
 type State =
   | { kind: "loading" }
@@ -106,9 +105,6 @@ export function WelcomeClient({ cs }: { cs: string | null }) {
               </Button>
             </>
           )}
-        </div>
-        <div className="mt-5 flex items-center justify-center">
-          <PoweredByContles variant="chip" />
         </div>
       </div>
     </div>

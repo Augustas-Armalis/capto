@@ -1,57 +1,68 @@
 import Link from "next/link";
 import { ArrowUpRight, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { Section, SectionEyebrow, SectionTitle, SectionLede } from "@/components/ui/section";
+import { Band, Muted, SectionHead } from "@/components/ui/section";
 import { LiveCaption } from "./live-caption";
 import { STYLES } from "@/lib/styles";
 
 export function CaptionStyleStudio() {
   const tiles = STYLES.slice(0, 4);
   return (
-    <Section id="styles">
+    <Band id="styles" className="py-24 sm:py-32">
       <Container>
-        <div className="max-w-xl">
-          <SectionEyebrow>Style studio</SectionEyebrow>
-          <SectionTitle>Captions that look like yours.</SectionTitle>
-          <SectionLede>Submagic looks like Submagic. CapCut looks like CapCut. Capto looks like you.</SectionLede>
-        </div>
+        <SectionHead
+          index="04"
+          label="Style studio"
+          title={
+            <>
+              Captions that look like yours. <Muted>Not like the tool&rsquo;s.</Muted>
+            </>
+          }
+          lede={
+            <>
+              Submagic looks like Submagic. CapCut looks like CapCut. Capto looks like you.
+              <Link
+                href="/styles"
+                className="group mt-4 flex w-fit items-center gap-1.5 text-sm text-white transition-colors hover:text-[var(--color-brand)]"
+              >
+                Browse all styles
+                <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </>
+          }
+        />
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div data-reveal-stagger className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {tiles.map((s, idx) => (
             <Link
               key={s.slug}
               href={`/styles/${s.slug}`}
-              className="group relative block aspect-[16/10] sm:aspect-[4/5] overflow-hidden rounded-[var(--radius-lg)] border border-white/[0.08] transition-colors hover:border-white/20"
+              className="group relative flex flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-bg-elev)] transition-colors duration-300 hover:border-white/20"
             >
-              <div className={`absolute inset-0 bg-gradient-to-b ${s.bg}`} />
-              <div className="absolute inset-0 flex items-center justify-center p-6">
-                <LiveCaption
-                  words={s.words}
-                  wordClass={`${s.wordClass} text-xl sm:text-2xl`}
-                  highlightClass={s.highlightClass}
-                  interval={760 + idx * 80}
-                  single={s.single}
-                />
+              <div className="relative aspect-[16/11] overflow-hidden sm:aspect-[4/5]">
+                <div className={`absolute inset-0 bg-gradient-to-b ${s.bg} opacity-80 transition-opacity duration-300 group-hover:opacity-100`} />
+                <div className="absolute inset-0 bg-[radial-gradient(oklch(1_0_0/0.07)_1px,transparent_1px)] [background-size:12px_12px]" />
+                <div className="absolute inset-0 flex items-center justify-center p-6">
+                  <LiveCaption
+                    words={s.words}
+                    wordClass={`${s.wordClass} text-xl sm:text-2xl`}
+                    highlightClass={s.highlightClass}
+                    interval={760 + idx * 80}
+                    single={s.single}
+                  />
+                </div>
               </div>
-              <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-white/10 bg-black/40 px-4 py-2.5 backdrop-blur-md">
-                <span className="mono text-xs text-white/80">
+              <div className="flex items-center justify-between border-t border-[var(--color-border)] px-4 py-3">
+                <span className="text-[13px] text-white">
                   {s.name}
-                  {s.popular ? <span className="ml-2 text-[var(--color-cyan)]">popular</span> : null}
+                  {s.popular ? <span className="mono ml-2 text-[10px] uppercase tracking-wider text-[var(--color-brand)]">popular</span> : null}
                 </span>
-                <ArrowUpRight className="size-4 text-white/40 transition-all group-hover:text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                <ArrowUpRight className="size-3.5 text-[var(--color-fg-subtle)] transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white" />
               </div>
             </Link>
           ))}
         </div>
-
-        <div className="mt-8 flex justify-center">
-          <Button href="/styles" variant="secondary" size="md">
-            View all styles
-            <ArrowRight className="size-4" />
-          </Button>
-        </div>
       </Container>
-    </Section>
+    </Band>
   );
 }

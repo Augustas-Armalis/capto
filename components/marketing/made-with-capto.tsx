@@ -1,5 +1,5 @@
 import { Container } from "@/components/ui/container";
-import { SectionEyebrow, SectionTitle } from "@/components/ui/section";
+import { Band, Muted, SectionHead } from "@/components/ui/section";
 import { Marquee } from "./marquee";
 import { VideoReel } from "./video-reel";
 import { CAROUSEL_VIDEOS } from "./carousel-manifest";
@@ -42,14 +42,19 @@ export function MadeWithCapto() {
     : REELS.map((r, i) => <Reel key={i} {...r} />);
 
   return (
-    <section className="py-24 sm:py-32">
+    <Band className="py-24 sm:py-32">
       <Container>
-        <div className="max-w-xl">
-          <SectionEyebrow>Made with Capto</SectionEyebrow>
-          <SectionTitle>No watermark to hide behind.</SectionTitle>
-        </div>
+        <SectionHead
+          label="Made with Capto"
+          title={
+            <>
+              No watermark to hide behind. <Muted>Just the captions.</Muted>
+            </>
+          }
+        />
       </Container>
 
+      <div data-reveal className="d-2">
       <Marquee
         items={items}
         durationSec={hasVideos ? 150 : 80}
@@ -61,9 +66,10 @@ export function MadeWithCapto() {
         // handful actually decode at once).
         repeat={hasVideos ? 3 : 3}
         pauseOnHover
-        className="mt-12"
+        className="mt-14"
         maskClass="[mask-image:linear-gradient(90deg,transparent,#000_5%,#000_95%,transparent)]"
       />
-    </section>
+      </div>
+    </Band>
   );
 }
